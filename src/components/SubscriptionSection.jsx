@@ -13,21 +13,11 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
     setLoadingPlan(planId);
 
     try {
-      // 1. Pregătim datele de facturare (momentan hardcoded, le vom lua dintr-un modal ulterior)
-      const billingMetadata = {
-        firebaseUID: user.uid,
-        tip_client: 'pj', // pf = persoana fizica, pj = firma
-        nume_firma: 'Client Test SRL',
-        cui: 'RO12345678',
-        adresa: 'Str. Exemplu, Nr. 1, Bucuresti'
-      };
-
       const url = await billingService.startCheckout({
         uid: user.uid,
         planId,
         successUrl: window.location.origin + '/dashboard?payment=success',
         cancelUrl: window.location.origin + '/dashboard?payment=cancel',
-        billingMetadata,
       });
 
       if (url) {

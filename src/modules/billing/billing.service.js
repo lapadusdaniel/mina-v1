@@ -46,7 +46,6 @@ export function createBillingModule({ db }) {
       planId,
       successUrl,
       cancelUrl,
-      billingMetadata = {},
       allowPromotionCodes = true,
     }) {
       if (!uid) throw new Error('billing.startCheckout: uid este obligatoriu')
@@ -56,11 +55,12 @@ export function createBillingModule({ db }) {
       if (!price) throw new Error(`Plan invalid: ${planId}`)
 
       const sessionRef = await addDoc(collection(db, 'customers', uid, 'checkout_sessions'), {
+        mode: 'subscription',
         price,
         success_url: successUrl,
         cancel_url: cancelUrl,
         allow_promotion_codes: allowPromotionCodes,
-        metadata: billingMetadata,
+        createdAt: new Date(),
       })
 
       return new Promise((resolve, reject) => {
