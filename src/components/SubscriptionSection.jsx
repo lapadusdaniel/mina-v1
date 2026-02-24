@@ -28,7 +28,9 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
     } catch (err) {
       console.error("Eroare checkout:", err);
       setLoadingPlan(null);
-      alert("Nu s-a putut iniția sesiunea de plată.");
+      const raw = String(err?.message || '').trim()
+      const details = raw ? `\nDetalii: ${raw}` : ''
+      alert(`Nu s-a putut iniția sesiunea de plată.${details}`)
     }
   };
 
