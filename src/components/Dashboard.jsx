@@ -22,6 +22,7 @@ import GalleryDetailView from './GalleryDetailView'
 import Settings from '../pages/Settings'
 import SubscriptionSection from './SubscriptionSection'
 import SiteEditor from './SiteEditor'
+import LaunchChecklist from './LaunchChecklist'
 
 const {
   auth: authService,
@@ -35,6 +36,7 @@ const SIDEBAR_TABS = [
   { key: 'card', label: 'Card', icon: Contact },
   { key: 'trash', label: 'Coș de gunoi', icon: Trash2 },
   { key: 'site', label: 'Site-ul meu (Beta)', icon: Layout },
+  { key: 'lansare', label: 'Lansare', icon: Check },
   { key: 'statistici', label: 'Statistici', icon: BarChart3 },
   { key: 'contracte', label: 'Contracte', icon: FileText },
   { key: 'abonament', label: 'Abonament', icon: CreditCard },
@@ -572,6 +574,9 @@ function Dashboard({ user, onLogout, initialTab }) {
         {activeTab === 'site' && (
           <SiteEditor user={user} userGalleries={galerii} />
         )}
+
+        {/* Tab Lansare */}
+        {activeTab === 'lansare' && <LaunchChecklist />}
 
         {/* Tab Setări Generale */}
         {activeTab === 'setari' && <Settings user={user} />}
