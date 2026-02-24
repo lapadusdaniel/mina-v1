@@ -11,6 +11,10 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
   const handleCheckout = async (planId) => {
     if (planId === 'free') return;
     setLoadingPlan(planId);
+    const uiFallbackTimeout = setTimeout(() => {
+      setLoadingPlan(null)
+      alert('Checkout durează prea mult. Verifică extensia Stripe în Firebase și încearcă din nou.')
+    }, 22000)
 
     try {
       const url = await billingService.startCheckout({
@@ -31,6 +35,8 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
       const raw = String(err?.message || '').trim()
       const details = raw ? `\nDetalii: ${raw}` : ''
       alert(`Nu s-a putut iniția sesiunea de plată.${details}`)
+    } finally {
+      clearTimeout(uiFallbackTimeout)
     }
   };
 
@@ -89,7 +95,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
             <button 
               className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
               onClick={() => handleCheckout(plan.id)}
-              disabled={plan.isCurrent || (loadingPlan && loadingPlan !== plan.id)}
+              disabled={plan.isCurrent || Boolean(loadingPlan)}
             >
               {loadingPlan === plan.id ? 'Se încarcă...' : plan.isCurrent ? 'Planul tău' : plan.cta}
             </button>

@@ -18,6 +18,8 @@ export const STORAGE_LIMITS = {
 }
 
 const VALID_STATUSES = ['active', 'trialing']
+const CHECKOUT_CREATE_TIMEOUT_MS = 12000
+const CHECKOUT_SESSION_TIMEOUT_MS = 15000
 
 function priceIdToPlan(priceId) {
   if (!priceId) return 'Free'
@@ -35,6 +37,16 @@ function getPriceIdFromSubscription(docData) {
   }
   if (docData.price?.id) return docData.price.id
   return null
+}
+
+async function addCheckoutSessionWithTimeout({ db, uid, payload }) {
+  const createPromise = addDoc(collection(db, 'customers', uid, 'checkout_sessions'), payload)
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Timeout Stripe checkout: scrierea sesiunii in Firestore a durat prea mult.'))
+    }, CHECKOUT_CREATE_TIMEOUT_MS)
+  })
+  return Promise.race([createPromise, timeoutPromise])
 }
 
 export function createBillingModule({ db }) {
@@ -59,13 +71,17 @@ export function createBillingModule({ db }) {
         )
       }
 
-      const sessionRef = await addDoc(collection(db, 'customers', uid, 'checkout_sessions'), {
+      const sessionRef = await addCheckoutSessionWithTimeout({
+        db,
+        uid,
+        payload: {
         mode: 'subscription',
         price,
         success_url: successUrl,
         cancel_url: cancelUrl,
         allow_promotion_codes: allowPromotionCodes,
         createdAt: new Date(),
+        },
       })
 
       return new Promise((resolve, reject) => {
@@ -81,7 +97,7 @@ export function createBillingModule({ db }) {
               'Timeout Stripe checkout: nu am primit URL de sesiune. Verifica Firebase Stripe extension (checkout_sessions -> url/error).'
             )
           )
-        }, 15000)
+        }, CHECKOUT_SESSION_TIMEOUT_MS)
 
         unsubscribe = onSnapshot(
           sessionRef,
