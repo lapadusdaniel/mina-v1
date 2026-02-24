@@ -18,6 +18,14 @@ Rezultat asteptat:
 1. `.env` valid (fara `MISSING` la required).
 2. `vite build` finalizat fara erori.
 
+## 2.1) Preflight live (obligatoriu pentru Stripe live)
+```bash
+npm run preflight:live
+```
+Rezultat asteptat:
+1. `VITE_STRIPE_PUBLISHABLE_KEY`, `VITE_STRIPE_PRICE_PRO`, `VITE_STRIPE_PRICE_UNLIMITED` sunt `OK`.
+2. Testele + build trec fara erori.
+
 ## 3) Smoke test rapid
 In terminalul 1:
 ```bash
