@@ -69,22 +69,45 @@ export function createBillingModule({ db }) {
       })
 
       return new Promise((resolve, reject) => {
-        const unsubscribe = onSnapshot(
+        let settled = false
+        let unsubscribe = () => {}
+
+        const failTimeout = setTimeout(() => {
+          if (settled) return
+          settled = true
+          unsubscribe()
+          reject(
+            new Error(
+              'Timeout Stripe checkout: nu am primit URL de sesiune. Verifica Firebase Stripe extension (checkout_sessions -> url/error).'
+            )
+          )
+        }, 15000)
+
+        unsubscribe = onSnapshot(
           sessionRef,
           (snap) => {
             const data = snap.data()
             if (!data) return
             if (data.error) {
+              if (settled) return
+              settled = true
+              clearTimeout(failTimeout)
               unsubscribe()
               reject(new Error(data.error.message || 'Eroare Stripe'))
               return
             }
             if (data.url) {
+              if (settled) return
+              settled = true
+              clearTimeout(failTimeout)
               unsubscribe()
               resolve(data.url)
             }
           },
           (err) => {
+            if (settled) return
+            settled = true
+            clearTimeout(failTimeout)
             unsubscribe()
             reject(err)
           }
