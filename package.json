@@ -1,0 +1,47 @@
+{
+  "name": "mina-v1",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "node --test $(find tests -type f -name '*.test.mjs' | sort)",
+    "test:unit": "node --test $(find tests/unit -type f -name '*.test.mjs' | sort)",
+    "test:integration": "node --test $(find tests/integration -type f -name '*.test.mjs' | sort)",
+    "check:env": "node scripts/check-env.mjs",
+    "smoke": "node scripts/smoke-check.mjs",
+    "qa:public": "node scripts/qa-public.mjs",
+    "qa:auth": "node scripts/qa-auth.mjs",
+    "qa:worker": "node scripts/qa-worker-e2e.mjs",
+    "preflight": "npm run check:env && npm run build",
+    "worker:whoami": "npx --yes wrangler whoami",
+    "deploy:worker": "npx --yes wrangler deploy --config worker/wrangler.toml --keep-vars",
+    "deploy:rules": "test -n \"$FIREBASE_PROJECT_ID\" || (echo \"ERROR: seteaza FIREBASE_PROJECT_ID\" && exit 1); npx --yes firebase-tools deploy --only firestore:rules --project \"$FIREBASE_PROJECT_ID\"",
+    "deploy:hosting": "test -n \"$FIREBASE_PROJECT_ID\" || (echo \"ERROR: seteaza FIREBASE_PROJECT_ID\" && exit 1); npx --yes firebase-tools deploy --only hosting --project \"$FIREBASE_PROJECT_ID\""
+  },
+  "dependencies": {
+    "browser-image-compression": "^2.0.2",
+    "firebase": "^12.9.0",
+    "lucide-react": "^0.574.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-masonry-css": "^1.0.16",
+    "react-router-dom": "^7.13.0",
+    "yet-another-react-lightbox": "^3.29.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "playwright": "^1.58.2",
+    "vite": "^7.3.1"
+  }
+}

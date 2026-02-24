@@ -1,0 +1,320 @@
+/* ============================================
+   FOTOLIO — App.css
+   Variabile globale actualizate: auriu în loc de albastru
+   ============================================ */
+
+   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+
+   /* ── Variabile globale ── */
+   :root {
+     --white:       #ffffff;
+     --off-white:   #f5f5f7;
+     --gray-1:      #e8e8ed;
+     --gray-2:      #d2d2d7;
+     --gray-3:      #a1a1a6;
+     --gray-4:      #6e6e73;
+     --gray-5:      #3a3a3c;
+     --black:       #1d1d1f;
+     --black-pure:  #000000;
+     --gold:        #b8965a;
+     --gold-light:  #d4b07a;
+     --gold-subtle: rgba(184, 150, 90, 0.12);
+   
+     --font-display: 'DM Serif Display', Georgia, serif;
+     --font-ui:      'DM Sans', -apple-system, sans-serif;
+   
+     --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+     --transition-med:  0.4s cubic-bezier(0.4, 0, 0.2, 1);
+   }
+   
+   /* ── Animații fade-in pentru pagini ── */
+   @keyframes fadeIn {
+     from { opacity: 0; transform: translateY(20px); }
+     to   { opacity: 1; transform: translateY(0); }
+   }
+   
+   .page-content {
+     animation: fadeIn 0.5s ease-in-out;
+   }
+   
+   /* ── Butoane primare ── */
+   .btn-primary {
+     font-family: var(--font-ui);
+     background-color: var(--black);
+     color: var(--white);
+     border: none;
+     padding: 14px 36px;
+     border-radius: 100px;
+     cursor: pointer;
+     font-size: 0.95rem;
+     font-weight: 500;
+     letter-spacing: 0.01em;
+     transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+   }
+   
+   .btn-primary:hover {
+     background-color: var(--gray-5);
+     transform: scale(1.02);
+     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+   }
+   
+   .btn-primary:active {
+     transform: scale(0.99);
+   }
+   
+   .btn-primary:disabled {
+     opacity: 0.5;
+     cursor: not-allowed;
+     transform: none;
+   }
+   
+   /* ── Butoane secundare ── */
+   .btn-secondary {
+     font-family: var(--font-ui);
+     background-color: transparent;
+     color: var(--black);
+     border: 1.5px solid var(--gray-2);
+     padding: 14px 36px;
+     border-radius: 100px;
+     cursor: pointer;
+     font-size: 0.95rem;
+     font-weight: 500;
+     letter-spacing: 0.01em;
+     transition: all var(--transition-fast);
+   }
+   
+   .btn-secondary:hover {
+     border-color: var(--black);
+     background-color: var(--off-white);
+   }
+   
+   /* ── Carduri features (Dashboard) ── */
+   .feature-card {
+     text-align: center;
+     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+     padding: 20px;
+     border-radius: 16px;
+   }
+   
+   .feature-card:hover {
+     transform: translateY(-4px);
+     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+   }
+   
+   .feature-icon {
+     width: 72px;
+     height: 72px;
+     background-color: var(--gold-subtle);
+     border-radius: 50%;
+     margin: 0 auto 20px;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     font-size: 32px;
+     transition: transform var(--transition-fast);
+   }
+   
+   .feature-card:hover .feature-icon {
+     transform: rotate(8deg) scale(1.08);
+   }
+   
+   /* ── Carduri pricing ── */
+   .pricing-card {
+     background-color: var(--white);
+     padding: 40px 30px;
+     border-radius: 20px;
+     text-align: center;
+     border: 1.5px solid var(--gray-1);
+     transition: all var(--transition-fast);
+   }
+   
+   .pricing-card:hover {
+     transform: translateY(-8px);
+     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+     border-color: var(--gold);
+   }
+   
+   .pricing-card-pro {
+     background-color: var(--black);
+     color: var(--white);
+     padding: 40px 30px;
+     border-radius: 20px;
+     text-align: center;
+     transform: scale(1.04);
+     border: 1px solid rgba(184, 150, 90, 0.4);
+     box-shadow: 0 0 60px rgba(184, 150, 90, 0.1);
+     transition: all var(--transition-fast);
+   }
+   
+   .pricing-card-pro:hover {
+     transform: scale(1.06);
+     box-shadow: 0 20px 60px rgba(184, 150, 90, 0.15);
+   }
+   
+   /* ── Link-uri navigare ── */
+   .nav-link {
+     color: rgba(255, 255, 255, 0.85);
+     text-decoration: none;
+     font-family: var(--font-ui);
+     font-size: 0.78rem;
+     transition: opacity var(--transition-fast);
+     padding: 5px 0;
+     position: relative;
+   }
+   
+   .nav-link::after {
+     content: '';
+     position: absolute;
+     bottom: 0;
+     left: 0;
+     width: 0;
+     height: 1.5px;
+     background-color: var(--gold);
+     transition: width var(--transition-fast);
+   }
+   
+   .nav-link:hover { opacity: 1; }
+   .nav-link:hover::after { width: 100%; }
+   
+   .nav-link-active {
+     opacity: 1;
+     font-weight: 500;
+   }
+   
+   /* ── Logo ── */
+   .logo {
+     margin: 0;
+     font-family: var(--font-display);
+     font-size: 1.3rem;
+     font-style: italic;
+     font-weight: 400;
+     cursor: pointer;
+     transition: opacity var(--transition-fast);
+     color: var(--white);
+     letter-spacing: 0.01em;
+   }
+   
+   .logo:hover { opacity: 0.8; }
+   
+   /* ── Inputs globali (folosiți în Login/Register/Contact) ── */
+   input, textarea, select {
+     font-family: var(--font-ui);
+     width: 100%;
+     padding: 14px 18px;
+     margin-bottom: 16px;
+     border: 1.5px solid var(--gray-1);
+     border-radius: 12px;
+     font-size: 0.95rem;
+     font-weight: 300;
+     color: var(--black);
+     background: var(--white);
+     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+     -webkit-appearance: none;
+   }
+   
+   input:focus, textarea:focus, select:focus {
+     outline: none;
+     border-color: var(--gold);
+     box-shadow: 0 0 0 3px var(--gold-subtle);
+   }
+   
+   input::placeholder, textarea::placeholder { color: var(--gray-3); }
+   
+   /* ── Responsive ── */
+   @media (max-width: 1024px) {
+     .grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
+   }
+   
+   @media (max-width: 768px) {
+     .grid-3, .grid-4 { grid-template-columns: 1fr !important; }
+   
+     header {
+       flex-direction: column !important;
+       gap: 16px;
+       padding: 16px 20px !important;
+     }
+   
+     nav {
+       flex-direction: column !important;
+       gap: 12px !important;
+       width: 100%;
+       text-align: center;
+     }
+   
+     h2 { font-size: 28px !important; }
+   
+     section { padding: 40px 20px !important; }
+   
+     .pricing-card-pro { transform: scale(1) !important; }
+     .pricing-card-pro:hover { transform: scale(1.02) !important; }
+   
+     footer { padding: 40px 20px 20px !important; }
+   }
+   
+   @media (max-width: 480px) {
+     h1 { font-size: 22px !important; }
+     h2 { font-size: 24px !important; }
+   
+     .btn-primary {
+       padding: 12px 20px !important;
+       font-size: 0.9rem !important;
+     }
+   }
+   
+   /* ── Smooth scroll ── */
+   html { scroll-behavior: smooth; }
+   
+   /* ── Masonry (Dashboard galerie poze) ── */
+   .masonry-grid {
+     display: flex;
+     margin-left: -15px;
+     width: auto;
+   }
+   
+   .masonry-grid_column {
+     padding-left: 15px;
+     background-clip: padding-box;
+   }
+   
+   .masonry-grid_column > div {
+     margin-bottom: 15px;
+   }
+   
+   /* ── Animații keyframes ── */
+   @keyframes slideUp {
+     from { opacity: 0; transform: translateY(30px); }
+     to   { opacity: 1; transform: translateY(0); }
+   }
+   
+   .animate-slide-up { animation: slideUp 0.6s ease-out; }
+   
+   .stagger-item {
+     opacity: 0;
+     animation: slideUp 0.5s ease-out forwards;
+   }
+   
+   .stagger-item:nth-child(1) { animation-delay: 0.1s; }
+   .stagger-item:nth-child(2) { animation-delay: 0.2s; }
+   .stagger-item:nth-child(3) { animation-delay: 0.3s; }
+   .stagger-item:nth-child(4) { animation-delay: 0.4s; }
+   
+   /* ── Skeleton loading ── */
+   @keyframes shimmer {
+     0%   { background-position: -1000px 0; }
+     100% { background-position:  1000px 0; }
+   }
+   
+   .skeleton {
+     background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+     background-size: 1000px 100%;
+     animation: shimmer 2s infinite;
+     border-radius: 8px;
+   }
+   
+   /* ── Loading pulse ── */
+   @keyframes pulse {
+     0%, 100% { opacity: 1; }
+     50%       { opacity: 0.6; }
+   }
+   
+   .loading { animation: pulse 1.5s ease-in-out infinite; }

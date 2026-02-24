@@ -1,0 +1,149 @@
+.sub-wrapper {
+    padding: 0 10px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0;
+    box-sizing: border-box;
+    animation: subFadeIn 0.5s ease-out;
+  }
+  
+  .sub-header {
+    margin-bottom: 30px;
+  }
+  
+  .sub-display-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2.2rem;
+    font-style: italic;
+    color: #1d1d1f;
+    line-height: 1.1;
+    margin: 0;
+  }
+  
+  .sub-display-title em {
+    color: #b8965a;
+    font-style: italic;
+  }
+  
+  .sub-display-sub {
+    font-family: 'DM Sans', sans-serif;
+    color: #86868b;
+    font-size: 0.95rem;
+    margin-top: 8px;
+  }
+  
+  .sub-pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    align-items: stretch;
+    width: 100%;
+  }
+  
+  .sub-plan-card {
+    background: #ffffff;
+    border: 1px solid #e8e8ed;
+    border-radius: 20px;
+    padding: 30px 24px; /* Padding redus pentru a scădea înălțimea */
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  
+  .pro-featured {
+    background: #1d1d1f;
+    color: #ffffff;
+    border-color: #b8965a;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    transform: translateY(-5px);
+  }
+  
+  .sub-plan-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #b8965a;
+    color: #000;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 100px;
+    text-transform: uppercase;
+  }
+  
+  .sub-plan-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  
+  .sub-plan-price {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 2.2rem;
+    font-weight: 500;
+    margin-bottom: 20px;
+  }
+  
+  .sub-period {
+    font-size: 0.8rem;
+    color: #86868b;
+    font-weight: 400;
+  }
+  
+  .sub-plan-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 24px 0;
+    flex-grow: 1;
+  }
+  
+  .sub-plan-features li {
+    margin-bottom: 10px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: inherit;
+    line-height: 1.3;
+  }
+  
+  .sub-plan-features li::before {
+    content: '—';
+    color: #b8965a;
+    flex-shrink: 0;
+  }
+  
+  .sub-plan-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 100px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+  
+  .btn-outline {
+    background: transparent;
+    border: 1px solid #d2d2d7;
+    color: #1d1d1f;
+  }
+  
+  .btn-gold-filled {
+    background: #b8965a;
+    color: #000;
+  }
+  
+  @keyframes subFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  /* Ajustări pentru ecrane mici */
+  @media (max-width: 1000px) {
+    .sub-pricing-grid { grid-template-columns: 1fr; }
+    .pro-featured { transform: none; }
+  }

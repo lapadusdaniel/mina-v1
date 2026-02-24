@@ -1,0 +1,244 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrapAdminEmail() {
+      return signedIn()
+        && request.auth.token.email == 'lapadusdaniel@gmail.com';
+    }
+
+    function hasAdminProfileRole() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
+        );
+    }
+
+    function isAdmin() {
+      return hasAdminProfileRole() || isBootstrapAdminEmail();
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isGalleryPublic(data) {
+      return data.status != 'trash'
+        && data.status != 'archived'
+        && (!('statusActiv' in data) || data.statusActiv == true);
+    }
+
+    function galleryExists(galleryId) {
+      return exists(/databases/$(database)/documents/galerii/$(galleryId));
+    }
+
+    function galleryData(galleryId) {
+      return get(/databases/$(database)/documents/galerii/$(galleryId)).data;
+    }
+
+    function isGalleryOwnerById(galleryId) {
+      return signedIn()
+        && galleryExists(galleryId)
+        && galleryData(galleryId).userId == request.auth.uid;
+    }
+
+    function isGalleryPublicById(galleryId) {
+      return galleryExists(galleryId)
+        && isGalleryPublic(galleryData(galleryId));
+    }
+
+    function validGallerySelectionWrite(clientId) {
+      return request.resource.data.keys().hasOnly([
+          'clientId',
+          'clientName',
+          'keys',
+          'count',
+          'selectionTitle',
+          'updatedAt',
+        ])
+        && request.resource.data.clientId == clientId
+        && request.resource.data.clientName is string
+        && request.resource.data.clientName.size() > 0
+        && request.resource.data.clientName.size() <= 120
+        && request.resource.data.keys is list
+        && request.resource.data.keys.size() <= 3000
+        && request.resource.data.count is int
+        && request.resource.data.count == request.resource.data.keys.size()
+        && (
+          !('selectionTitle' in request.resource.data)
+          || request.resource.data.selectionTitle is string
+        )
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validContactCreate() {
+      return request.resource.data.keys().hasOnly([
+          'name',
+          'email',
+          'phone',
+          'message',
+          'photographerUid',
+          'createdAt',
+          'read',
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.email is string
+        && request.resource.data.phone is string
+        && request.resource.data.message is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.email.size() <= 190
+        && request.resource.data.phone.size() <= 40
+        && request.resource.data.message.size() <= 5000
+        && (
+          !('photographerUid' in request.resource.data)
+          || request.resource.data.photographerUid == null
+          || request.resource.data.photographerUid is string
+        )
+        && (
+          !('read' in request.resource.data)
+          || request.resource.data.read == false
+        );
+    }
+
+    // --- Utilizatori ---
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId)
+        && (
+          isBootstrapAdminEmail()
+          || (
+            (
+              !('role' in request.resource.data)
+              || request.resource.data.role == 'user'
+            )
+            && (
+              !('isAdmin' in request.resource.data)
+              || request.resource.data.isAdmin == false
+            )
+            && (
+              !('status' in request.resource.data)
+              || request.resource.data.status == 'active'
+            )
+            && (
+              !('plan' in request.resource.data)
+              || request.resource.data.plan in ['free', 'Free']
+            )
+          )
+        );
+      allow update: if isAdmin() || (
+        isOwner(userId)
+        && !request.resource.data.diff(resource.data).changedKeys().hasAny([
+          'plan',
+          'status',
+          'role',
+          'isAdmin',
+          'planOverride',
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Dashboard card profile: /users/{uid}/settings/profile
+    match /users/{userId}/settings/{settingId} {
+      allow read, create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Legacy settings profile
+    match /setariFotografi/{userId} {
+      allow read, create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Public branding profile used by gallery/site pages
+    match /profiles/{userId} {
+      allow read: if true;
+      allow create, update, delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Public photographer site data (resolved by slug)
+    match /photographerSites/{userId} {
+      allow read: if true;
+      allow create, update, delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Galleries: owner/admin full control, public read for active galleries.
+    match /galerii/{galerieId} {
+      allow read: if isAdmin()
+        || isOwner(resource.data.userId)
+        || isGalleryPublic(resource.data);
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin()
+        || isOwner(resource.data.userId);
+      allow delete: if isAdmin() || isOwner(resource.data.userId);
+    }
+
+    // Client selections per gallery (new scalable structure)
+    match /gallerySelections/{galleryId}/clients/{clientId} {
+      allow read: if isGalleryOwnerById(galleryId) || isAdmin();
+      allow create, update: if (isGalleryOwnerById(galleryId) || isAdmin() || isGalleryPublicById(galleryId))
+        && validGallerySelectionWrite(clientId);
+      allow delete: if isGalleryOwnerById(galleryId) || isAdmin();
+    }
+
+    // Stripe extension collections
+    match /customers/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
+
+      match /subscriptions/{subscriptionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if false;
+      }
+
+      match /checkout_sessions/{sessionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId)
+          && request.resource.data.keys().hasOnly([
+            'mode',
+            'price',
+            'allow_promotion_codes',
+            'success_url',
+            'cancel_url',
+            'createdAt',
+          ])
+          && request.resource.data.mode == 'subscription'
+          && request.resource.data.price is string
+          && request.resource.data.success_url is string
+          && request.resource.data.cancel_url is string
+          && request.resource.data.createdAt is timestamp;
+        allow update, delete: if false;
+      }
+    }
+
+    // Manual plan overrides
+    match /adminOverrides/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Admin settings (maintenance, global message)
+    match /adminSettings/{settingId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Contact form messages
+    match /contactMessages/{messageId} {
+      allow create: if validContactCreate();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

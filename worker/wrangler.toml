@@ -1,0 +1,8 @@
+name = "mina-v1-r2-worker"
+main = "r2-worker.js"
+compatibility_date = "2026-02-24"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "mina-v1-media"
