@@ -2,8 +2,8 @@ import { addDoc, collection, onSnapshot } from 'firebase/firestore'
 import { doc } from 'firebase/firestore'
 
 export const STRIPE_PRICES = {
-  pro: 'price_1T2HFN1pBe1FB1ICkWaITkCD',
-  unlimited: 'price_1T2ao81pBe1FB1ICFjI0SVUb',
+  pro: import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T2HFN1pBe1FB1ICkWaITkCD',
+  unlimited: import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || 'price_1T2ao81pBe1FB1ICFjI0SVUb',
 }
 
 export const PLAN_PRICES = {

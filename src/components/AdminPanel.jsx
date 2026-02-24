@@ -19,9 +19,12 @@ function hasAdminAccess(user) {
 }
 
 const PLAN_PRICES = {
-  'price_1T2HFN1pBe1FB1ICkWaITkCD': 'Pro',
-  'price_1T2ao81pBe1FB1ICFjI0SVUb': 'Unlimited',
+  [import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T2HFN1pBe1FB1ICkWaITkCD']: 'Pro',
+  [import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || 'price_1T2ao81pBe1FB1ICFjI0SVUb']: 'Unlimited',
 }
+
+const STRIPE_PRICE_PRO = import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T2HFN1pBe1FB1ICkWaITkCD'
+const STRIPE_PRICE_UNLIMITED = import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || 'price_1T2ao81pBe1FB1ICFjI0SVUb'
 
 // ── Helpers ───────────────────────────────────
 const formatDate = (val) => {
@@ -738,8 +741,8 @@ export default function AdminPanel({ user }) {
               subscriptionsForUser.forEach((d) => {
                 if (!['active', 'trialing'].includes(d.status)) return
                 const priceId = d.items?.data?.[0]?.price?.id || d.price?.id
-                if (priceId === 'price_1T2ao81pBe1FB1ICFjI0SVUb') plan = 'Unlimited'
-                else if (priceId === 'price_1T2HFN1pBe1FB1ICkWaITkCD' && plan !== 'Unlimited') plan = 'Pro'
+                if (priceId === STRIPE_PRICE_UNLIMITED) plan = 'Unlimited'
+                else if (priceId === STRIPE_PRICE_PRO && plan !== 'Unlimited') plan = 'Pro'
               })
             } catch { /* no subscription */ }
           }

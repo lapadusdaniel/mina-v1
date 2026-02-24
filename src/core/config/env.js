@@ -20,6 +20,8 @@ export function getPublicEnv() {
     firebaseAppId: import.meta.env.VITE_FIREBASE_APP_ID || '',
     r2WorkerUrl: import.meta.env.VITE_R2_WORKER_URL || '',
     stripePublishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '',
+    stripePricePro: import.meta.env.VITE_STRIPE_PRICE_PRO || '',
+    stripePriceUnlimited: import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '',
   }
 }
 
