@@ -2,8 +2,8 @@ import { addDoc, collection, onSnapshot } from 'firebase/firestore'
 import { doc } from 'firebase/firestore'
 
 export const STRIPE_PRICES = {
-  pro: import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T2HFN1pBe1FB1ICkWaITkCD',
-  unlimited: import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || 'price_1T2ao81pBe1FB1ICFjI0SVUb',
+  pro: (import.meta.env.VITE_STRIPE_PRICE_PRO || '').trim(),
+  unlimited: (import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
 }
 
 export const PLAN_PRICES = {
@@ -52,7 +52,12 @@ export function createBillingModule({ db }) {
       if (!planId || planId === 'free') return null
 
       const price = STRIPE_PRICES[planId]
-      if (!price) throw new Error(`Plan invalid: ${planId}`)
+      if (!price) {
+        throw new Error(
+          `Config Stripe lipsa pentru planul "${planId}". ` +
+          'Seteaza in .env: VITE_STRIPE_PRICE_PRO si VITE_STRIPE_PRICE_UNLIMITED, apoi rebuild + deploy.'
+        )
+      }
 
       const sessionRef = await addDoc(collection(db, 'customers', uid, 'checkout_sessions'), {
         mode: 'subscription',
