@@ -7,7 +7,7 @@
  *   - R2_BUCKET (binding)
  *
  * Reguli:
- *   - GET/LIST public doar pe căi controlate (galerii + branding + legacy read).
+ *   - GET/LIST public doar pe căi controlate (galerii + branding).
  *   - PUT/DELETE necesită Firebase ID token valid.
  *   - PUT/DELETE pe galerii validează ownership în Firestore (galerii/{id}.userId == uid).
  *   - PUT/DELETE pe branding validează `branding/{uid}/...`.
@@ -86,18 +86,6 @@ function parsePathInfo(path) {
     }
   }
 
-  // Legacy path support: {uid}/{galleryId}/{file}
-  match = key.match(/^([^/]+)\/([^/]+)\/(.+)$/)
-  if (match) {
-    return {
-      kind: 'legacy-file',
-      key,
-      ownerUid: match[1],
-      galleryId: match[2],
-      filename: match[3],
-    }
-  }
-
   return null
 }
 
@@ -130,17 +118,6 @@ function parsePrefixInfo(rawPrefix) {
       kind: 'branding-prefix',
       prefix,
       ownerUid: match[1],
-    }
-  }
-
-  // Legacy path support: {uid}/{galleryId}/
-  match = prefix.match(/^([^/]+)\/([^/]+)\/$/)
-  if (match) {
-    return {
-      kind: 'legacy-prefix',
-      prefix,
-      ownerUid: match[1],
-      galleryId: match[2],
     }
   }
 
@@ -407,21 +384,6 @@ async function assertWritablePathAccess(pathInfo, authContext, env) {
     return { ok: true }
   }
 
-  if (pathInfo.kind === 'legacy-file') {
-    if (pathInfo.ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden legacy path' }
-    }
-    const ownerUid = await getGalleryOwnerUid({
-      galleryId: pathInfo.galleryId,
-      idToken: authContext.idToken,
-      projectId: env.FIREBASE_PROJECT_ID,
-    })
-    if (ownerUid && ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden legacy gallery path' }
-    }
-    return { ok: true }
-  }
-
   return { ok: false, status: 403, message: 'Forbidden path' }
 }
 
@@ -450,43 +412,28 @@ async function assertWritablePrefixAccess(prefixInfo, authContext, env) {
     return { ok: true }
   }
 
-  if (prefixInfo.kind === 'legacy-prefix') {
-    if (prefixInfo.ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden legacy prefix' }
-    }
-    const ownerUid = await getGalleryOwnerUid({
-      galleryId: prefixInfo.galleryId,
-      idToken: authContext.idToken,
-      projectId: env.FIREBASE_PROJECT_ID,
-    })
-    if (ownerUid && ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden legacy gallery prefix' }
-    }
-    return { ok: true }
-  }
-
   return { ok: false, status: 403, message: 'Forbidden prefix' }
 }
 
 function canPublicReadKey(pathInfo) {
   if (!pathInfo) return false
-  return pathInfo.kind === 'gallery-file' || pathInfo.kind === 'branding-file' || pathInfo.kind === 'legacy-file'
+  return pathInfo.kind === 'gallery-file' || pathInfo.kind === 'branding-file'
 }
 
 function canPublicListPrefix(prefixInfo) {
   if (!prefixInfo) return false
-  return prefixInfo.kind === 'gallery-read-prefix' || prefixInfo.kind === 'legacy-prefix'
+  return prefixInfo.kind === 'gallery-read-prefix'
 }
 
 function galleryIdFromPublicPath(pathInfo) {
   if (!pathInfo) return ''
-  if (pathInfo.kind === 'gallery-file' || pathInfo.kind === 'legacy-file') return pathInfo.galleryId
+  if (pathInfo.kind === 'gallery-file') return pathInfo.galleryId
   return ''
 }
 
 function galleryIdFromPublicPrefix(prefixInfo) {
   if (!prefixInfo) return ''
-  if (prefixInfo.kind === 'gallery-read-prefix' || prefixInfo.kind === 'legacy-prefix') return prefixInfo.galleryId
+  if (prefixInfo.kind === 'gallery-read-prefix') return prefixInfo.galleryId
   return ''
 }
 

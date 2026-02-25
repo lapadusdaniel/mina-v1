@@ -158,10 +158,6 @@ async function main() {
       ownerUid: userA.uid,
     })
 
-    const ownerUid = userA.uid
-    const ownerLegacyPath = `${ownerUid}/${galleryId}/legacy-test.jpg`
-    const ownerLegacyPrefix = `${ownerUid}/${galleryId}/`
-
     const putOwner = await fetch(`${workerBase}${encodeURIComponent(testPath)}`, {
       method: 'PUT',
       headers: {
@@ -171,8 +167,8 @@ async function main() {
       body: new Uint8Array([1, 2, 3, 4, 5]),
     })
     assert(putOwner.ok, `owner PUT failed (${putOwner.status})`)
-
-    const putOwnerLegacy = await fetch(`${workerBase}${encodeURIComponent(ownerLegacyPath)}`, {
+    const ownerLegacyPath = `${userA.uid}/${galleryId}/legacy-test.jpg`
+    const putOwnerLegacyRejected = await fetch(`${workerBase}${encodeURIComponent(ownerLegacyPath)}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${userA.idToken}`,
@@ -180,7 +176,7 @@ async function main() {
       },
       body: new Uint8Array([4, 5, 6]),
     })
-    assert(putOwnerLegacy.ok, `owner legacy PUT failed (${putOwnerLegacy.status})`)
+    assert(putOwnerLegacyRejected.status === 400, `legacy PUT should be 400, got ${putOwnerLegacyRejected.status}`)
 
     const createShareToken = await fetch(
       `${workerBase}share-token?galleryId=${encodeURIComponent(galleryId)}&ttlHours=24`,
@@ -220,17 +216,9 @@ async function main() {
 
     const getWithToken = await fetch(`${workerBase}${encodeURIComponent(testPath)}?st=${encodeURIComponent(shareToken)}`)
     assert(getWithToken.ok, `public GET with token failed (${getWithToken.status})`)
-
+    const ownerLegacyPrefix = `${userA.uid}/${galleryId}/`
     const listLegacyNoToken = await fetch(`${workerBase}?prefix=${encodeURIComponent(ownerLegacyPrefix)}`)
-    assert(listLegacyNoToken.status === 403, `legacy LIST without token should be 403, got ${listLegacyNoToken.status}`)
-
-    const listLegacy = await fetch(
-      `${workerBase}?prefix=${encodeURIComponent(ownerLegacyPrefix)}&st=${encodeURIComponent(shareToken)}`
-    )
-    assert(listLegacy.ok, `legacy LIST with token failed (${listLegacy.status})`)
-    const listedLegacy = await listLegacy.json().catch(() => [])
-    const foundLegacy = Array.isArray(listedLegacy) && listedLegacy.some((item) => item?.key === ownerLegacyPath)
-    assert(foundLegacy, 'uploaded legacy object not found in list')
+    assert(listLegacyNoToken.status === 403, `legacy LIST should be 403, got ${listLegacyNoToken.status}`)
 
     const deleteOther = await fetch(`${workerBase}?prefix=${encodeURIComponent(`galerii/${galleryId}/`)}`, {
       method: 'DELETE',
@@ -243,12 +231,11 @@ async function main() {
       headers: { Authorization: `Bearer ${userA.idToken}` },
     })
     assert(deleteOwner.ok, `owner DELETE failed (${deleteOwner.status})`)
-
     const deleteOwnerLegacy = await fetch(`${workerBase}?prefix=${encodeURIComponent(ownerLegacyPrefix)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${userA.idToken}` },
     })
-    assert(deleteOwnerLegacy.ok, `owner legacy DELETE failed (${deleteOwnerLegacy.status})`)
+    assert(deleteOwnerLegacy.status === 400, `legacy DELETE should be 400, got ${deleteOwnerLegacy.status}`)
 
     const verifyNewEmptyRes = await fetch(
       `${workerBase}?prefix=${encodeURIComponent(listPrefix)}&st=${encodeURIComponent(shareToken)}`
@@ -256,13 +243,6 @@ async function main() {
     assert(verifyNewEmptyRes.ok, `verify new list failed (${verifyNewEmptyRes.status})`)
     const verifyNewEmpty = await verifyNewEmptyRes.json().catch(() => [])
     assert(Array.isArray(verifyNewEmpty) && verifyNewEmpty.length === 0, 'new prefix still contains objects after delete')
-
-    const verifyLegacyEmptyRes = await fetch(
-      `${workerBase}?prefix=${encodeURIComponent(ownerLegacyPrefix)}&st=${encodeURIComponent(shareToken)}`
-    )
-    assert(verifyLegacyEmptyRes.ok, `verify legacy list failed (${verifyLegacyEmptyRes.status})`)
-    const verifyLegacyEmpty = await verifyLegacyEmptyRes.json().catch(() => [])
-    assert(Array.isArray(verifyLegacyEmpty) && verifyLegacyEmpty.length === 0, 'legacy prefix still contains objects after delete')
 
     await deleteGalleryDoc({ projectId, galleryId, idToken: userA.idToken })
 

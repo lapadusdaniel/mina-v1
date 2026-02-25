@@ -13,8 +13,8 @@ import {
 
 export function createMediaModule() {
   return {
-    async listGalleryPhotos(galleryId, ownerUid) {
-      return listPoze(galleryId, ownerUid)
+    async listGalleryPhotos(galleryId, _ownerUid) {
+      return listPoze(galleryId)
     },
 
     async getPhotoUrl(photoKey, type = 'original') {
@@ -33,8 +33,8 @@ export function createMediaModule() {
       return getBrandingUrl(path)
     },
 
-    async uploadPhoto(file, galleryId, ownerUid, onProgress, targetPath, idToken) {
-      return uploadPoza(file, galleryId, ownerUid, onProgress, targetPath, idToken)
+    async uploadPhoto(file, galleryId, _ownerUid, onProgress, targetPath, idToken) {
+      return uploadPoza(file, galleryId, '', onProgress, targetPath, idToken)
     },
 
     async uploadFileToPath(file, path, onProgress, idToken) {
@@ -45,8 +45,8 @@ export function createMediaModule() {
       return deletePoza(photoKey, idToken)
     },
 
-    async deleteGalleryAssets(galleryId, idToken, ownerUid = '') {
-      return deleteGalleryFolder(galleryId, idToken, ownerUid)
+    async deleteGalleryAssets(galleryId, idToken, _ownerUid = '') {
+      return deleteGalleryFolder(galleryId, idToken)
     },
 
     async createSecureShareToken(galleryId, idToken, ttlHours = 720) {

@@ -18,17 +18,17 @@ test('normalizePath removes leading slash and rejects traversal/backslash', () =
   assert.equal(normalizePath('galerii/../x'), '')
 })
 
-test('parsePathInfo detects gallery, branding and legacy keys', () => {
+test('parsePathInfo detects gallery and branding keys only', () => {
   assert.deepEqual(parsePathInfo('galerii/g1/originals/a.jpg')?.kind, 'gallery-file')
   assert.deepEqual(parsePathInfo('branding/u1/logo.png')?.kind, 'branding-file')
-  assert.deepEqual(parsePathInfo('u1/g1/photo.jpg')?.kind, 'legacy-file')
+  assert.equal(parsePathInfo('u1/g1/photo.jpg'), null)
   assert.equal(parsePathInfo('invalid-format'), null)
 })
 
 test('parsePrefixInfo validates public vs private prefixes', () => {
   assert.deepEqual(parsePrefixInfo('galerii/g1/originals/')?.kind, 'gallery-read-prefix')
   assert.deepEqual(parsePrefixInfo('galerii/g1/')?.kind, 'gallery-manage-prefix')
-  assert.deepEqual(parsePrefixInfo('u1/g1/')?.kind, 'legacy-prefix')
+  assert.equal(parsePrefixInfo('u1/g1/'), null)
   assert.equal(parsePrefixInfo('x'), null)
 })
 
@@ -38,7 +38,7 @@ test('public access checks allow only approved read/list forms', () => {
   assert.equal(canPublicReadKey(parsePathInfo('unknown')), false)
 
   assert.equal(canPublicListPrefix(parsePrefixInfo('galerii/g1/originals/')), true)
-  assert.equal(canPublicListPrefix(parsePrefixInfo('u1/g1/')), true)
+  assert.equal(canPublicListPrefix(parsePrefixInfo('u1/g1/')), false)
   assert.equal(canPublicListPrefix(parsePrefixInfo('galerii/g1/')), false)
 })
 

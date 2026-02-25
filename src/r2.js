@@ -45,8 +45,6 @@ function isAllowedPublicPath(path) {
   if (!str) return false
   if (/^galerii\/[^/]+\/(originals|medium|thumbnails)\/.+$/i.test(str)) return true
   if (/^branding\/[^/]+\/.+$/i.test(str)) return true
-  // Backward compatibility for migrated legacy objects:
-  if (/^[^/]+\/[^/]+\/.+$/.test(str)) return true
   return false
 }
 
@@ -95,47 +93,27 @@ export const uploadPoza = async (file, galerieId, _ownerUid, onProgress, targetP
   })
 }
 
-export const listPoze = async (galerieId, userId) => {
+export const listPoze = async (galerieId, _ownerUid = '') => {
   if (!galerieId) return []
-  const legacyPrefix = userId ? `${userId}/${galerieId}/` : null
-  const newPrefix = `galerii/${galerieId}/originals/`
-
-  const fetchList = async (prefix, accessToken = '') => {
-    if (!prefix) return []
-    const response = await fetch(listUrl(prefix, accessToken))
-    if (!response.ok) throw new Error(`List failed: ${response.status}`)
-    return response.json()
-  }
+  const prefix = `galerii/${galerieId}/originals/`
 
   const publicShareToken = readShareTokenFromLocation()
-  const [legacyRaw, newRaw] = await Promise.all([
-    fetchList(legacyPrefix, publicShareToken).catch(() => null),
-    fetchList(newPrefix, publicShareToken).catch(() => null),
-  ])
+  const response = await fetch(listUrl(prefix, publicShareToken))
+  if (!response.ok) throw new Error(`List failed: ${response.status}`)
 
-  const toItems = (raw) => {
-    if (!raw) return []
-    const arr = Array.isArray(raw) ? raw : (raw?.Contents ?? raw?.objects ?? raw?.items ?? [])
-    return arr.map((o) => ({
-      key: o?.Key ?? o?.key ?? o?.name,
-      Key: o?.Key,
-      size: o?.Size ?? o?.size,
-    }))
-  }
-
-  const legacyItems = toItems(legacyRaw)
-  const newItems = toItems(newRaw).map((o) => ({ ...o, key: o.key || o.Key }))
-
-  const seen = new Set()
-  const merged = []
-  for (const item of [...newItems, ...legacyItems]) {
-    const k = item.key ?? item.Key
-    if (k && !seen.has(k)) {
-      seen.add(k)
-      merged.push(typeof item === 'object' && (item.key || item.Key) ? item : { key: k, Key: k })
-    }
-  }
-  return merged
+  const raw = await response.json().catch(() => [])
+  const items = Array.isArray(raw) ? raw : (raw?.Contents ?? raw?.objects ?? raw?.items ?? [])
+  return items
+    .map((o) => {
+      const key = o?.Key ?? o?.key ?? o?.name
+      if (!key) return null
+      return {
+        key,
+        Key: o?.Key ?? key,
+        size: o?.Size ?? o?.size,
+      }
+    })
+    .filter(Boolean)
 }
 
 /**
@@ -261,38 +239,26 @@ async function listByPrefix(prefix) {
 }
 
 /**
- * Bulk delete all R2 objects for a gallery (new + legacy prefix when ownerUid is provided).
+ * Bulk delete all R2 objects for a gallery under the current storage structure.
  * Requires Firebase idToken.
  */
-export const deleteGalleryFolder = async (galleryId, idToken, ownerUid = '') => {
+export const deleteGalleryFolder = async (galleryId, idToken, _ownerUid = '') => {
   requireIdToken(idToken, 'Bulk delete')
   if (!galleryId) throw new Error('Bulk delete: galleryId este obligatoriu')
 
-  const normalizedOwnerUid = String(ownerUid || '').trim()
-  const deletePrefixes = [`galerii/${galleryId}/`]
-  if (normalizedOwnerUid) {
-    deletePrefixes.push(`${normalizedOwnerUid}/${galleryId}/`)
-  }
-
-  let deletedTotal = 0
-  for (const prefix of deletePrefixes) {
-    deletedTotal += await deleteByPrefix(prefix, idToken)
-  }
+  const galleryRootPrefix = `galerii/${galleryId}/`
+  const deletedTotal = await deleteByPrefix(galleryRootPrefix, idToken)
 
   const verificationPrefixes = [
     `galerii/${galleryId}/originals/`,
     `galerii/${galleryId}/medium/`,
     `galerii/${galleryId}/thumbnails/`,
   ]
-  if (normalizedOwnerUid) {
-    verificationPrefixes.push(`${normalizedOwnerUid}/${galleryId}/`)
-  }
 
-  let remainingTotal = 0
-  for (const prefix of verificationPrefixes) {
-    const items = await listByPrefix(prefix).catch(() => [])
-    remainingTotal += items.length
-  }
+  const verificationResults = await Promise.all(
+    verificationPrefixes.map((prefix) => listByPrefix(prefix).catch(() => []))
+  )
+  const remainingTotal = verificationResults.reduce((sum, items) => sum + items.length, 0)
 
   if (remainingTotal > 0) {
     throw new Error(`Bulk delete incomplete: ${remainingTotal} fișiere încă există în storage`)
