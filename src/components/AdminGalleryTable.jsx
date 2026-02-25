@@ -82,10 +82,12 @@ function GalleryRow({
   const [coverUrl, setCoverUrl] = useState(null)
   const [totalSize, setTotalSize] = useState(0)
   const [coverLoading, setCoverLoading] = useState(true)
+  const [shouldLoadCover, setShouldLoadCover] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [copyTooltip, setCopyTooltip] = useState(false)
   const urlRef = useRef(null)
   const menuRef = useRef(null)
+  const rowRef = useRef(null)
 
   const galleryUrl = galerie?.id
     ? `${window.location.origin}/gallery/${galerie.id}`
@@ -137,10 +139,45 @@ function GalleryRow({
   }, [menuOpen])
 
   useEffect(() => {
+    setShouldLoadCover(false)
+    setCoverLoading(true)
+  }, [galerie?.id])
+
+  useEffect(() => {
+    const rowNode = rowRef.current
+    if (!rowNode || typeof IntersectionObserver === 'undefined') {
+      setShouldLoadCover(true)
+      return () => {}
+    }
+
+    let observer = null
+    observer = new IntersectionObserver(
+      (entries) => {
+        const isVisible = entries.some((entry) => entry.isIntersecting)
+        if (isVisible) {
+          setShouldLoadCover(true)
+          observer?.disconnect()
+        }
+      },
+      {
+        root: null,
+        rootMargin: '320px 0px',
+        threshold: 0.01,
+      }
+    )
+
+    observer.observe(rowNode)
+    return () => {
+      observer?.disconnect()
+    }
+  }, [galerie?.id])
+
+  useEffect(() => {
     let cancelled = false
     const load = async () => {
       try {
         if (!cancelled) setTotalSize(Number(galerie?.storageBytes || 0))
+        if (!shouldLoadCover) return
 
         const preferredCoverKey = galerie?.coverKey
         if (!preferredCoverKey) {
@@ -168,7 +205,7 @@ function GalleryRow({
         urlRef.current = null
       }
     }
-  }, [galerie.id, galerie.coverKey, galerie.storageBytes, user.uid])
+  }, [galerie.id, galerie.coverKey, galerie.storageBytes, shouldLoadCover, user.uid])
 
   const fileCount = galerie?.poze ?? 0
   const metaText = `${fileCount} fișiere • ${formatBytes(totalSize)}`
@@ -182,7 +219,7 @@ function GalleryRow({
   const showUnarchiveInMenu = isArchivedView && onUnarchive
 
   return (
-    <div className={`gallery-row ${isTrashView ? 'gallery-row-trash' : ''}`}>
+    <div ref={rowRef} className={`gallery-row ${isTrashView ? 'gallery-row-trash' : ''}`}>
       <div
         className="gallery-row-col gallery-row-col-branding"
         onClick={() => onDeschide(galerie)}
