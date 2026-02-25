@@ -191,6 +191,43 @@ test('GET list allows public gallery originals prefix', async () => {
   assert.equal(json[0].key, 'galerii/g1/originals/a.jpg')
 })
 
+test('GET is blocked with 429 when READ_RATE_LIMITER rejects the request', async () => {
+  const env = {
+    READ_RATE_LIMITER: {
+      async limit() {
+        return { success: false }
+      },
+    },
+    R2_BUCKET: createMemoryBucket(),
+  }
+
+  const req = new Request('https://worker.example/galerii/g1/originals/a.jpg')
+  const res = await worker.fetch(req, env)
+
+  assert.equal(res.status, 429)
+  assert.equal(res.headers.get('Retry-After'), '60')
+})
+
+test('PUT is blocked with 429 when WRITE_RATE_LIMITER rejects the request', async () => {
+  const env = {
+    WRITE_RATE_LIMITER: {
+      async limit() {
+        return { success: false }
+      },
+    },
+    R2_BUCKET: createMemoryBucket(),
+  }
+
+  const req = new Request('https://worker.example/galerii/g1/originals/a.jpg', {
+    method: 'PUT',
+    body: new Uint8Array([1, 2, 3]),
+  })
+  const res = await worker.fetch(req, env)
+
+  assert.equal(res.status, 429)
+  assert.equal(res.headers.get('Retry-After'), '60')
+})
+
 test('PUT without auth is rejected with 401', async () => {
   const env = {
     FIREBASE_API_KEY: 'fake-key',

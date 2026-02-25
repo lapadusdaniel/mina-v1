@@ -64,8 +64,14 @@ function json(body, status = 200, extraHeaders = {}) {
   })
 }
 
-function text(body, status = 200) {
-  return new Response(body, { status, headers: corsHeaders() })
+function text(body, status = 200, extraHeaders = {}) {
+  return new Response(body, {
+    status,
+    headers: {
+      ...corsHeaders(),
+      ...extraHeaders,
+    },
+  })
 }
 
 function normalizePath(rawPath) {
@@ -156,9 +162,17 @@ function isReadMethod(method) {
   return method === 'GET'
 }
 
-function checkRateLimit(request) {
-  const method = String(request.method || '').toUpperCase()
-  const scope = isReadMethod(method) ? 'read' : 'write'
+function resolveRateLimitBinding(env, scope) {
+  if (!env || typeof env !== 'object') return null
+  const scopedName = scope === 'read' ? 'READ_RATE_LIMITER' : 'WRITE_RATE_LIMITER'
+  const scoped = env[scopedName]
+  if (scoped && typeof scoped.limit === 'function') return scoped
+  const shared = env.RATE_LIMITER
+  if (shared && typeof shared.limit === 'function') return shared
+  return null
+}
+
+function localRateLimit(request, scope) {
   const limit = scope === 'read' ? RATE_LIMIT_MAX_READ : RATE_LIMIT_MAX_WRITE
   const bucketKey = `${scope}:${getClientIp(request)}`
   const now = Date.now()
@@ -176,6 +190,44 @@ function checkRateLimit(request) {
   current.count += 1
   rateLimitBuckets.set(bucketKey, current)
   return { allowed: true }
+}
+
+function parseLimiterSuccess(result) {
+  if (typeof result === 'boolean') return result
+  if (result && typeof result === 'object' && typeof result.success === 'boolean') {
+    return result.success
+  }
+  return null
+}
+
+function rateLimitKeyForRequest(request, scope) {
+  const ip = getClientIp(request)
+  const method = String(request.method || '').toUpperCase()
+  const url = new URL(request.url)
+  const route = normalizePath(url.pathname.slice(1)) || '/'
+  return `${scope}:${method}:${route}:${ip}`
+}
+
+async function checkRateLimit(request, env) {
+  const method = String(request.method || '').toUpperCase()
+  const scope = isReadMethod(method) ? 'read' : 'write'
+  const binding = resolveRateLimitBinding(env, scope)
+  const key = rateLimitKeyForRequest(request, scope)
+
+  if (binding) {
+    try {
+      const result = await binding.limit({ key })
+      const success = parseLimiterSuccess(result)
+      if (typeof success === 'boolean') {
+        return { allowed: success, source: 'binding' }
+      }
+    } catch (_) {
+      // Fallback local if binding is unavailable or errors.
+    }
+  }
+
+  const local = localRateLimit(request, scope)
+  return { ...local, source: 'local' }
 }
 
 function normalizePlan(raw) {
@@ -907,6 +959,8 @@ export const __workerTestables = {
   canPublicReadKey,
   canPublicListPrefix,
   requireBearerToken,
+  resolveRateLimitBinding,
+  rateLimitKeyForRequest,
 }
 
 export default {
@@ -915,9 +969,9 @@ export default {
       return new Response(null, { headers: corsHeaders() })
     }
 
-    const rate = checkRateLimit(request)
+    const rate = await checkRateLimit(request, env)
     if (!rate.allowed) {
-      return text('Too Many Requests', 429)
+      return text('Too Many Requests', 429, { 'Retry-After': '60' })
     }
 
     const url = new URL(request.url)

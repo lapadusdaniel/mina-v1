@@ -6,3 +6,13 @@ workers_dev = true
 [[r2_buckets]]
 binding = "R2_BUCKET"
 bucket_name = "mina-v1-media"
+
+[[ratelimits]]
+name = "READ_RATE_LIMITER"
+namespace_id = "11001"
+simple = { limit = 600, period = 60 }
+
+[[ratelimits]]
+name = "WRITE_RATE_LIMITER"
+namespace_id = "11002"
+simple = { limit = 180, period = 60 }
