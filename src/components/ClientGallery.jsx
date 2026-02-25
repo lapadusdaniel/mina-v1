@@ -68,7 +68,15 @@ async function downloadOriginalImage(pozaKey, filename) {
   }
 }
 
-function LazyGalleryImage({ pozaKey, isFav, onFavoriteClick, onClick, accentColor }) {
+function LazyGalleryImage({
+  pozaKey,
+  isFav,
+  onFavoriteClick,
+  onClick,
+  accentColor,
+  allowPhotoSelection = true,
+  allowOriginalDownloads = true,
+}) {
   const [url, setUrl] = useState(() => urlCache.get(`thumb:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -125,24 +133,28 @@ function LazyGalleryImage({ pozaKey, isFav, onFavoriteClick, onClick, accentColo
         )}
         <div className="cg-item-overlay">
           <div className="cg-item-actions">
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onFavoriteClick(pozaKey); }}
-              className={`cg-action-btn ${isFav ? 'cg-action-btn--active' : ''}`}
-              aria-label="Favorite"
-              style={{ color: isFav ? (accentColor || '#b8965a') : 'rgba(255,255,255,0.9)' }}
-            >
-              <Heart size={20} fill={isFav ? (accentColor || '#b8965a') : 'none'} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="cg-action-btn"
-              aria-label="Download"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDownload(); }}
-              disabled={isDownloading}
-            >
-              {isDownloading ? <Loader2 size={20} strokeWidth={1.5} style={{ animation: 'cg-spin 0.8s linear infinite' }} /> : <Download size={20} strokeWidth={1.5} />}
-            </button>
+            {allowPhotoSelection && (
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onFavoriteClick(pozaKey); }}
+                className={`cg-action-btn ${isFav ? 'cg-action-btn--active' : ''}`}
+                aria-label="Favorite"
+                style={{ color: isFav ? (accentColor || '#b8965a') : 'rgba(255,255,255,0.9)' }}
+              >
+                <Heart size={20} fill={isFav ? (accentColor || '#b8965a') : 'none'} strokeWidth={1.5} />
+              </button>
+            )}
+            {allowOriginalDownloads && (
+              <button
+                type="button"
+                className="cg-action-btn"
+                aria-label="Download"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDownload(); }}
+                disabled={isDownloading}
+              >
+                {isDownloading ? <Loader2 size={20} strokeWidth={1.5} style={{ animation: 'cg-spin 0.8s linear infinite' }} /> : <Download size={20} strokeWidth={1.5} />}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -191,9 +203,7 @@ function LightboxFavoriteButton({ galerie, pozeAfisate, onFavoriteClick, accentC
   );
 }
 
-function LightboxSelectionCounter({ galerie, accentColor }) {
-  const count = galerie?.favorite?.length ?? 0;
-  const limit = galerie?.limitSelectie ?? galerie?.maxSelectie;
+function LightboxSelectionCounter({ count = 0, limit = null, selectionTitle = 'Selecție', accentColor }) {
   const limitColor = accentColor || '#b8965a';
   return (
     <div key="lightbox-selection-counter" style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', color: 'rgba(255,255,255,0.9)', fontSize: '13px', fontFamily: "'DM Sans', sans-serif", fontWeight: 400, marginRight: 'auto' }}>
@@ -202,7 +212,7 @@ function LightboxSelectionCounter({ galerie, accentColor }) {
           {count} / {limit}
         </span>
       ) : (
-        <span style={{ color: 'rgba(255,255,255,0.65)' }}>{galerie?.numeSelectieClient || 'Selecție'}: <strong style={{ color: '#fff', fontWeight: 500 }}>{count}</strong> poze</span>
+        <span style={{ color: 'rgba(255,255,255,0.65)' }}>{selectionTitle}: <strong style={{ color: '#fff', fontWeight: 500 }}>{count}</strong> poze</span>
       )}
     </div>
   );
@@ -284,6 +294,23 @@ const ClientGallery = () => {
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
   const pozeAfisate = galerie ? (doarFavorite ? poze.filter((p) => galerie.favorite?.includes(p.key)) : poze) : [];
+  const gallerySettings = galerie?.settings || {};
+  const mainSettings = gallerySettings.main || {};
+  const favoritesSettings = gallerySettings.favorites || {};
+  const contactsSettings = gallerySettings.contacts || {};
+
+  const allowOriginalDownloads = mainSettings.allowOriginalDownloads !== false;
+  const allowPhotoSelection = favoritesSettings.allowPhotoSelection !== false;
+  const showShareButton = contactsSettings.showShareButton !== false;
+  const showBusinessCardWidget = contactsSettings.showBusinessCardWidget !== false;
+  const showNameWebsiteOnCover = contactsSettings.showNameWebsiteOnCover !== false;
+
+  const selectionTitle = favoritesSettings.favoritesName || galerie?.numeSelectieClient || 'Selecție';
+  const settingsLimitEnabled = favoritesSettings.limitSelectedPhotos === true;
+  const settingsMaxSelected = Number(favoritesSettings.maxSelectedPhotos || 0);
+  const limit = settingsLimitEnabled && settingsMaxSelected > 0
+    ? settingsMaxSelected
+    : (galerie?.limitSelectie ?? galerie?.maxSelectie ?? null);
 
   const closeLightbox = useCallback(() => {
     setSelectedImage(null);
@@ -508,6 +535,7 @@ const ClientGallery = () => {
   };
 
   const handleFavoriteClick = (pozaKey) => {
+    if (!allowPhotoSelection) return;
     if (!numeSelectie) { setPendingFavAction(pozaKey); setShowNameModal(true); }
     else { executeFavoriteToggle(pozaKey, numeSelectie); }
   };
@@ -519,7 +547,7 @@ const ClientGallery = () => {
     setNumeSelectie(cleanName);
     setShowNameModal(false);
     const titleToSave = selectionTitleInputValue.trim() || 'Selecție';
-    if (!galerie?.numeSelectieClient && titleToSave) {
+    if (!favoritesSettings?.favoritesName && !galerie?.numeSelectieClient && titleToSave) {
       setGalerie(prev => (prev ? { ...prev, numeSelectieClient: titleToSave } : prev));
     }
     setSelectionTitleInputValue('');
@@ -527,19 +555,23 @@ const ClientGallery = () => {
   };
 
   const executeFavoriteToggle = async (pozaKey, numeClient) => {
-    if (!galerie?.id || !numeClient) return;
+    if (!allowPhotoSelection || !galerie?.id || !numeClient) return;
     const latestSelection = await galleriesService.getClientSelection(galerie.id, numeClient).catch(() => null);
     const currentFav = Array.isArray(latestSelection?.keys)
       ? latestSelection.keys
       : (Array.isArray(galerie?.favorite) ? galerie.favorite : []);
     const isFav = currentFav.includes(pozaKey);
     try {
-      const title = galerie?.numeSelectieClient || 'Selecție';
+      const title = selectionTitle;
       if (isFav) {
         await galleriesService.removeClientFavorite(galerie.id, numeClient, pozaKey, title);
         const next = currentFav.filter(k => k !== pozaKey);
         setGalerie(prev => ({ ...prev, favorite: next }));
       } else {
+        if (limit != null && Number(limit) > 0 && currentFav.length >= Number(limit)) {
+          alert(`Ai atins limita de ${limit} fotografii pentru această selecție.`);
+          return;
+        }
         await galleriesService.addClientFavorite(galerie.id, numeClient, pozaKey, title);
         const next = Array.from(new Set([...currentFav, pozaKey]));
         setGalerie(prev => ({ ...prev, favorite: next }));
@@ -550,6 +582,7 @@ const ClientGallery = () => {
   };
 
   const handleDownload = async () => {
+    if (!allowOriginalDownloads) return;
     const targets = doarFavorite ? poze.filter(p => galerie.favorite?.includes(p.key)) : poze;
     if (!window.confirm(`Descarci ${targets.length} fotografii?`)) return;
     setDownloadingAll(true);
@@ -594,7 +627,6 @@ const ClientGallery = () => {
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
   const dataExpirareText = formatDate(galerie.dataExpirare);
   const favCount = galerie?.favorite?.length ?? 0;
-  const limit = galerie?.limitSelectie ?? galerie?.maxSelectie;
   const isExpired = isGalleryExpired(galerie);
 
   if (isExpired) {
@@ -625,13 +657,15 @@ const ClientGallery = () => {
 
         <div className="cg-cover-overlay">
           {/* Brand logo */}
-          <div className="cg-cover-brand">
-            {profile.logoPreviewUrl ? (
-              <img src={profile.logoPreviewUrl} alt={profile.brandName} className="cg-cover-logo" />
-            ) : (
-              <span className="cg-cover-brand-name">{profile.brandName}</span>
-            )}
-          </div>
+          {showNameWebsiteOnCover && (
+            <div className="cg-cover-brand">
+              {profile.logoPreviewUrl ? (
+                <img src={profile.logoPreviewUrl} alt={profile.brandName} className="cg-cover-logo" />
+              ) : (
+                <span className="cg-cover-brand-name">{profile.brandName}</span>
+              )}
+            </div>
+          )}
 
           {/* Title */}
           <div className="cg-cover-center">
@@ -658,27 +692,29 @@ const ClientGallery = () => {
         <div className="cg-toolbar">
           {/* Stânga: Selecție */}
           <div className="cg-toolbar-left">
-            <button
-              onClick={() => setDoarFavorite(!doarFavorite)}
-              className={`cg-fav-toggle ${doarFavorite ? 'cg-fav-toggle--active' : ''}`}
-              style={{ '--accent': profile.accentColor || '#b8965a' }}
-            >
-              <Heart
-                size={18}
-                strokeWidth={1.5}
-                fill={doarFavorite ? (profile.accentColor || '#b8965a') : 'none'}
-                style={{ color: doarFavorite ? (profile.accentColor || '#b8965a') : '#86868b' }}
-              />
-              <span className={countPop ? 'cg-count-pop' : ''}>
-                {limit != null ? (
-                  <span className="cg-fav-badge" style={{ '--accent': profile.accentColor || '#b8965a', '--active': favCount >= limit ? '1' : '0' }}>
-                    {favCount} / {limit}
-                  </span>
-                ) : (
-                  <>{galerie?.numeSelectieClient || 'Selecție'}: <strong>{favCount}</strong></>
-                )}
-              </span>
-            </button>
+            {allowPhotoSelection && (
+              <button
+                onClick={() => setDoarFavorite(!doarFavorite)}
+                className={`cg-fav-toggle ${doarFavorite ? 'cg-fav-toggle--active' : ''}`}
+                style={{ '--accent': profile.accentColor || '#b8965a' }}
+              >
+                <Heart
+                  size={18}
+                  strokeWidth={1.5}
+                  fill={doarFavorite ? (profile.accentColor || '#b8965a') : 'none'}
+                  style={{ color: doarFavorite ? (profile.accentColor || '#b8965a') : '#86868b' }}
+                />
+                <span className={countPop ? 'cg-count-pop' : ''}>
+                  {limit != null ? (
+                    <span className="cg-fav-badge" style={{ '--accent': profile.accentColor || '#b8965a', '--active': favCount >= limit ? '1' : '0' }}>
+                      {favCount} / {limit}
+                    </span>
+                  ) : (
+                    <>{selectionTitle}: <strong>{favCount}</strong></>
+                  )}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Dreapta: Actions */}
@@ -689,19 +725,23 @@ const ClientGallery = () => {
                 <span>Expiră: {dataExpirareText}</span>
               </div>
             )}
-            <button onClick={handleShare} className="cg-toolbar-btn">
-              <Share2 size={16} strokeWidth={1.5} />
-              <span>Share</span>
-            </button>
-            <button
-              onClick={handleDownload}
-              disabled={downloadingAll}
-              className="cg-toolbar-download"
-              style={{ background: profile.accentColor || '#1d1d1f' }}
-            >
-              <Download size={16} strokeWidth={1.5} />
-              <span>{downloadingAll ? 'Se descarcă...' : 'Descarcă'}</span>
-            </button>
+            {showShareButton && (
+              <button onClick={handleShare} className="cg-toolbar-btn">
+                <Share2 size={16} strokeWidth={1.5} />
+                <span>Share</span>
+              </button>
+            )}
+            {allowOriginalDownloads && (
+              <button
+                onClick={handleDownload}
+                disabled={downloadingAll}
+                className="cg-toolbar-download"
+                style={{ background: profile.accentColor || '#1d1d1f' }}
+              >
+                <Download size={16} strokeWidth={1.5} />
+                <span>{downloadingAll ? 'Se descarcă...' : 'Descarcă'}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -725,6 +765,8 @@ const ClientGallery = () => {
                     isFav={galerie.favorite?.includes(poza.key)}
                     onFavoriteClick={handleFavoriteClick}
                     accentColor={profile.accentColor}
+                    allowPhotoSelection={allowPhotoSelection}
+                    allowOriginalDownloads={allowOriginalDownloads}
                     onClick={async () => {
                       const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
                       if (nextIndex < 0) return;
@@ -793,9 +835,34 @@ const ClientGallery = () => {
                 }}
                 toolbar={{
                   buttons: [
-                    <LightboxSelectionCounter key="counter" galerie={galerie} accentColor={profile.accentColor} />,
-                    <LightboxFavoriteButton key="fav" galerie={galerie} pozeAfisate={pozeAfisate} onFavoriteClick={handleFavoriteClick} accentColor={profile.accentColor} />,
-                    <LightboxDownloadButton key="dl" pozeAfisate={pozeAfisate} isDownloading={lightboxDownloading} setDownloading={setLightboxDownloading} />,
+                    ...(allowPhotoSelection
+                      ? [
+                          <LightboxSelectionCounter
+                            key="counter"
+                            count={favCount}
+                            limit={limit}
+                            selectionTitle={selectionTitle}
+                            accentColor={profile.accentColor}
+                          />,
+                          <LightboxFavoriteButton
+                            key="fav"
+                            galerie={galerie}
+                            pozeAfisate={pozeAfisate}
+                            onFavoriteClick={handleFavoriteClick}
+                            accentColor={profile.accentColor}
+                          />,
+                        ]
+                      : []),
+                    ...(allowOriginalDownloads
+                      ? [
+                          <LightboxDownloadButton
+                            key="dl"
+                            pozeAfisate={pozeAfisate}
+                            isDownloading={lightboxDownloading}
+                            setDownloading={setLightboxDownloading}
+                          />,
+                        ]
+                      : []),
                     'close',
                   ],
                 }}
@@ -807,29 +874,33 @@ const ClientGallery = () => {
 
         {/* Footer Brand */}
         <footer className="cg-footer">
-          {profile.logoPreviewUrl ? (
-            <img src={profile.logoPreviewUrl} alt={profile.brandName} className="cg-footer-logo" />
-          ) : (
-            <p className="cg-footer-brand">{profile.brandName}</p>
-          )}
-          {profile.websiteUrl && (
-            <a href={normalizeUrl(profile.websiteUrl)} className="cg-footer-website" target="_blank" rel="noreferrer">
-              {profile.websiteUrl.replace(/^https?:\/\//, '')}
-            </a>
-          )}
-          {(profile.whatsappNumber || profile.instagramUrl) && (
-            <div className="cg-footer-social">
-              {profile.whatsappNumber && (
-                <a href={`https://wa.me/${profile.whatsappNumber.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="cg-footer-social-btn" title="WhatsApp" style={{ background: profile.accentColor || '#1d1d1f' }}>
-                  <MessageCircle size={20} strokeWidth={1.5} />
+          {showBusinessCardWidget && (
+            <>
+              {profile.logoPreviewUrl ? (
+                <img src={profile.logoPreviewUrl} alt={profile.brandName} className="cg-footer-logo" />
+              ) : (
+                <p className="cg-footer-brand">{profile.brandName}</p>
+              )}
+              {showNameWebsiteOnCover && profile.websiteUrl && (
+                <a href={normalizeUrl(profile.websiteUrl)} className="cg-footer-website" target="_blank" rel="noreferrer">
+                  {profile.websiteUrl.replace(/^https?:\/\//, '')}
                 </a>
               )}
-              {profile.instagramUrl && (
-                <a href={profile.instagramUrl.startsWith('http') ? profile.instagramUrl : `https://instagram.com/${profile.instagramUrl.replace(/^@/, '')}`} target="_blank" rel="noopener noreferrer" className="cg-footer-social-btn" title="Instagram" style={{ background: profile.accentColor || '#1d1d1f' }}>
-                  <Instagram size={20} strokeWidth={1.5} />
-                </a>
+              {(profile.whatsappNumber || profile.instagramUrl) && (
+                <div className="cg-footer-social">
+                  {profile.whatsappNumber && (
+                    <a href={`https://wa.me/${profile.whatsappNumber.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="cg-footer-social-btn" title="WhatsApp" style={{ background: profile.accentColor || '#1d1d1f' }}>
+                      <MessageCircle size={20} strokeWidth={1.5} />
+                    </a>
+                  )}
+                  {profile.instagramUrl && (
+                    <a href={profile.instagramUrl.startsWith('http') ? profile.instagramUrl : `https://instagram.com/${profile.instagramUrl.replace(/^@/, '')}`} target="_blank" rel="noopener noreferrer" className="cg-footer-social-btn" title="Instagram" style={{ background: profile.accentColor || '#1d1d1f' }}>
+                      <Instagram size={20} strokeWidth={1.5} />
+                    </a>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
           <p className="cg-footer-copy">Galerie creată cu Mina</p>
         </footer>
@@ -856,7 +927,7 @@ const ClientGallery = () => {
                   className="cg-modal-input"
                 />
               </div>
-              {!galerie?.numeSelectieClient && (
+              {!favoritesSettings?.favoritesName && !galerie?.numeSelectieClient && (
                 <div className="cg-modal-field">
                   <label className="cg-modal-label">Numele selecției (opțional)</label>
                   <input

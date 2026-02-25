@@ -1,3 +1,5 @@
+import { auth } from './firebase'
+
 const WORKER_URL = import.meta.env.VITE_R2_WORKER_URL
 
 function baseWorkerUrl() {
@@ -54,6 +56,18 @@ function ensurePublicPath(path, operation) {
   }
 }
 
+async function buildReadAuthHeaders() {
+  try {
+    const currentUser = auth?.currentUser
+    if (!currentUser) return {}
+    const idToken = await currentUser.getIdToken()
+    if (!idToken) return {}
+    return { Authorization: `Bearer ${idToken}` }
+  } catch (_) {
+    return {}
+  }
+}
+
 /** Upload file to R2. Requires Firebase idToken for Worker auth. */
 export const uploadPoza = async (file, galerieId, _ownerUid, onProgress, targetPath, idToken) => {
   requireIdToken(idToken, 'Upload')
@@ -98,7 +112,11 @@ export const listPoze = async (galerieId, _ownerUid = '') => {
   const prefix = `galerii/${galerieId}/originals/`
 
   const publicShareToken = readShareTokenFromLocation()
-  const response = await fetch(listUrl(prefix, publicShareToken))
+  const headers = await buildReadAuthHeaders()
+  const response = await fetch(listUrl(prefix, publicShareToken), {
+    method: 'GET',
+    headers,
+  })
   if (!response.ok) throw new Error(`List failed: ${response.status}`)
 
   const raw = await response.json().catch(() => [])
@@ -137,7 +155,8 @@ function resolvePath(key, type) {
 
 async function fetchBlobFromWorker(path, errorLabel, accessToken = '') {
   ensurePublicPath(path, errorLabel)
-  const response = await fetch(objectUrl(path, accessToken), { method: 'GET' })
+  const headers = await buildReadAuthHeaders()
+  const response = await fetch(objectUrl(path, accessToken), { method: 'GET', headers })
   if (!response.ok) throw new Error(`${errorLabel}: ${response.status}`)
   return response.blob()
 }

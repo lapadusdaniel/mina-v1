@@ -781,6 +781,35 @@ async function requireAuthContext(request, env) {
   return { uid, idToken }
 }
 
+async function getOptionalAuthContext(request, env) {
+  const idToken = requireBearerToken(request)
+  if (!idToken) return null
+  if (!env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT_ID) return null
+  const uid = await verifyFirebaseToken(idToken, env.FIREBASE_API_KEY)
+  if (!uid) return null
+  return { uid, idToken }
+}
+
+async function assertPublicGalleryAccessOrOwner({ galleryId, shareToken, request, env }) {
+  const publicAccess = await assertPublicGalleryAccess(galleryId, shareToken, env)
+  if (publicAccess.ok) return publicAccess
+
+  const authContext = await getOptionalAuthContext(request, env)
+  if (!authContext?.uid) return publicAccess
+
+  const ownerUid = await getGalleryOwnerUid({
+    galleryId,
+    idToken: authContext.idToken,
+    projectId: env.FIREBASE_PROJECT_ID,
+  })
+
+  if (ownerUid && ownerUid === authContext.uid) {
+    return { ok: true }
+  }
+
+  return publicAccess
+}
+
 async function assertWritablePathAccess(pathInfo, authContext, env) {
   if (!pathInfo) return { ok: false, status: 400, message: 'Invalid path' }
 
@@ -961,7 +990,12 @@ export default {
 
           const galleryId = galleryIdFromPublicPrefix(prefixInfo)
           if (galleryId) {
-            const access = await assertPublicGalleryAccess(galleryId, shareToken, env)
+            const access = await assertPublicGalleryAccessOrOwner({
+              galleryId,
+              shareToken,
+              request,
+              env,
+            })
             if (!access.ok) return text(access.message, access.status)
           }
 
@@ -977,7 +1011,12 @@ export default {
 
         const galleryId = galleryIdFromPublicPath(pathInfo)
         if (galleryId) {
-          const access = await assertPublicGalleryAccess(galleryId, shareToken, env)
+          const access = await assertPublicGalleryAccessOrOwner({
+            galleryId,
+            shareToken,
+            request,
+            env,
+          })
           if (!access.ok) return text(access.message, access.status)
         }
 
