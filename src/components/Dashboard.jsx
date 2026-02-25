@@ -501,15 +501,23 @@ function Dashboard({ user, onLogout, initialTab }) {
   }
 
   const userInitial = (user?.name || 'U').charAt(0).toUpperCase()
+  const runUiTransition = (callback) => {
+    const startViewTransition = typeof document !== 'undefined' ? document.startViewTransition : null
+    if (typeof startViewTransition === 'function') {
+      startViewTransition(() => callback())
+      return
+    }
+    callback()
+  }
 
   const renderSidebar = () => (
     <div className="dashboard-sidebar">
       <div className="sidebar-logo-area">
-        <h1 className="dashboard-logo" onClick={() => {
+        <h1 className="dashboard-logo" onClick={() => runUiTransition(() => {
           closeActiveGallery()
           if (location.pathname === '/settings') navigate('/dashboard?tab=galerii')
           else setSearchParams({ tab: 'galerii' })
-        }}>
+        })}>
           Mina
         </h1>
       </div>
@@ -518,11 +526,11 @@ function Dashboard({ user, onLogout, initialTab }) {
           key={key}
           type="button"
           className={`dashboard-sidebar-btn ${activeTab === key ? 'active' : ''}`}
-          onClick={() => {
+          onClick={() => runUiTransition(() => {
             if (key === 'setari') navigate('/settings')
             else if (location.pathname === '/settings') navigate(`/dashboard?tab=${key}`)
             else setSearchParams({ tab: key })
-          }}
+          })}
         >
           <span className="dashboard-sidebar-btn-indicator" />
           {Icon && <Icon size={18} className="dashboard-sidebar-btn-icon" />}
@@ -536,27 +544,29 @@ function Dashboard({ user, onLogout, initialTab }) {
     // Vizualizare poze într-o galerie specifică
     if (galerieActiva) {
       return (
-        <GalleryDetailView
-          galerie={galerieActiva}
-          pozeGalerie={pozeGalerie}
-          loadingPoze={loadingPoze}
-          user={user}
-          uploading={uploading}
-          uploadProgress={uploadProgress}
-          fileInputRef={fileInputRef}
-          onBack={closeActiveGallery}
-          onPreview={handlePreview}
-          onUploadPoze={handleUploadPoze}
-          onDeletePoza={handleDeletePoza}
-          onDeleteGallery={handleMoveToTrash}
-        />
+        <div key={`view-gallery-${galerieActiva.id}`} className="dashboard-view-animate">
+          <GalleryDetailView
+            galerie={galerieActiva}
+            pozeGalerie={pozeGalerie}
+            loadingPoze={loadingPoze}
+            user={user}
+            uploading={uploading}
+            uploadProgress={uploadProgress}
+            fileInputRef={fileInputRef}
+            onBack={closeActiveGallery}
+            onPreview={handlePreview}
+            onUploadPoze={handleUploadPoze}
+            onDeletePoza={handleDeletePoza}
+            onDeleteGallery={handleMoveToTrash}
+          />
+        </div>
       )
     }
 
     const activeTabLabel = SIDEBAR_TABS.find((t) => t.key === activeTab)?.label ?? activeTab
 
     return (
-      <>
+      <div key={`view-${activeTab}`} className="dashboard-view-animate">
         <header className="dashboard-topbar">
           <div className="dashboard-topbar-right">
             <div className="dashboard-profile">
@@ -670,7 +680,7 @@ function Dashboard({ user, onLogout, initialTab }) {
             Secțiunea {activeTabLabel} urmează să fie implementată.
           </div>
         )}
-      </>
+      </div>
     )
   }
 

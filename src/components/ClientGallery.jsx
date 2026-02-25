@@ -969,6 +969,7 @@ const ClientGallery = () => {
           color: #1d1d1f;
           -webkit-font-smoothing: antialiased;
           overflow-x: hidden;
+          animation: cgPageIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
         }
 
         /* ── Cover ── */
@@ -1414,6 +1415,10 @@ const ClientGallery = () => {
         @keyframes cg-spin {
           to { transform: rotate(360deg); }
         }
+        @keyframes cgPageIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         @keyframes selectionCounterPop {
           0% { transform: scale(1); }
           50% { transform: scale(1.18); }
@@ -1430,6 +1435,12 @@ const ClientGallery = () => {
           .cg-masonry { margin-left: -10px; }
           .cg-masonry-col { padding-left: 10px; }
           .cg-masonry-col > div { margin-bottom: 10px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .cg-root {
+            animation: none;
+          }
         }
 
         /* ── Mobile ── */
