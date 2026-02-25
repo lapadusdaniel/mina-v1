@@ -162,7 +162,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
       price: '0 lei',
       features: ['15 GB Stocare Cloud', 'Galerii nelimitate', 'Branding de bază'],
       isCurrent: userPlan === 'Free',
-      cta: 'Plan Actual'
+      cta: 'Plan gratuit'
     },
     {
       id: 'pro',
@@ -195,6 +195,18 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
 
       <div className="sub-pricing-grid">
         {plans.map((plan) => (
+          (() => {
+            const isFreePlan = plan.id === 'free'
+            const isDisabled = plan.isCurrent || Boolean(loadingPlan) || isFreePlan
+            const label = loadingPlan === plan.id
+              ? 'Se încarcă...'
+              : plan.isCurrent
+                ? 'Planul tău'
+                : isFreePlan
+                  ? 'Disponibil după anulare'
+                  : plan.cta
+
+            return (
           <div key={plan.id} className={`sub-plan-card ${plan.highlight ? 'pro-featured' : ''}`}>
             {plan.highlight && <div className="sub-plan-badge">Cel mai ales</div>}
             <h3 className="sub-plan-name">{plan.name}</h3>
@@ -210,11 +222,18 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
             <button 
               className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
               onClick={() => handleCheckout(plan.id)}
-              disabled={plan.isCurrent || Boolean(loadingPlan)}
+              disabled={isDisabled}
             >
-              {loadingPlan === plan.id ? 'Se încarcă...' : plan.isCurrent ? 'Planul tău' : plan.cta}
+              {label}
             </button>
+            {!plan.isCurrent && isFreePlan && (
+              <p className="sub-muted" style={{ marginTop: 8 }}>
+                Pentru plan Free, anulezi întâi abonamentul curent la final de perioadă.
+              </p>
+            )}
           </div>
+            )
+          })()
         ))}
       </div>
 
