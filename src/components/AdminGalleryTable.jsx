@@ -1,10 +1,21 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { MoreVertical, Settings, Eye, Pin, Trash2, Link2, Share2, Archive, ArchiveRestore } from 'lucide-react'
+import {
+  MoreVertical,
+  Settings,
+  Eye,
+  Pin,
+  Trash2,
+  Link2,
+  Share2,
+  Archive,
+  ArchiveRestore,
+  ImagePlus,
+  Users,
+  Heart,
+} from 'lucide-react'
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { formatBytes, formatDateRO, CATEGORII_FILTRU } from '../utils/galleryUtils'
-import AdminGalleryForm from './AdminGalleryForm'
-import { ImagePlus, Users, Heart } from 'lucide-react'
 
 import './Dashboard.css'
 
@@ -365,7 +376,7 @@ function GalleryRow({
               onClick={() => { setMenuOpen(false); onTogglePin?.(galerie?.id); }}
             >
               <Pin size={16} />
-              <span>Pin gallery</span>
+              <span>Fixează galerie</span>
             </button>
             {showUnarchiveInMenu && (
               <button
@@ -394,7 +405,7 @@ function GalleryRow({
               }}
             >
               <Trash2 size={16} />
-              <span>{isTrashView ? 'Șterge definitiv' : 'Delete gallery'}</span>
+              <span>{isTrashView ? 'Șterge definitiv' : 'Șterge galerie'}</span>
             </button>
           </div>
         )}
@@ -421,8 +432,8 @@ export default function AdminGalleryTable({
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('Toate categoriile')
   const [statusFilter, setStatusFilter] = useState('active')
-  const [showAddGalerie, setShowAddGalerie] = useState(false)
-  const [formFiles, setFormFiles] = useState([])
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [createModalFiles, setCreateModalFiles] = useState([])
   const [selectedGaleriiIds, setSelectedGaleriiIds] = useState([])
   const [dragOverlayVisible, setDragOverlayVisible] = useState(false)
   const dragCounterRef = useRef(0)
@@ -497,6 +508,16 @@ export default function AdminGalleryTable({
     setSelectedGaleriiIds([])
   }
 
+  const openCreateModal = (files = []) => {
+    setCreateModalFiles(Array.isArray(files) ? files : [])
+    setCreateModalOpen(true)
+  }
+
+  const closeCreateModal = () => {
+    setCreateModalOpen(false)
+    setCreateModalFiles([])
+  }
+
   const filteredGalerii = useMemo(() => {
     let list = galerii
     if (activeTab === 'trash') {
@@ -556,8 +577,7 @@ export default function AdminGalleryTable({
       setDragOverlayVisible(false)
       const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith('image/'))
       if (files.length > 0) {
-        setFormFiles(files)
-        setShowAddGalerie(true)
+        openCreateModal(files)
       }
     }
     const onDragOver = (e) => { if (hasFiles(e)) e.preventDefault() }
@@ -579,16 +599,6 @@ export default function AdminGalleryTable({
   const planLimitGB = storageLimitProp ?? PLAN_LIMITS_GB[planName] ?? 15
   const storageUsedGB = Number((totalStorageBytes / (1024 * 1024 * 1024)).toFixed(2))
   const storagePercent = Math.min(100, (storageUsedGB / planLimitGB) * 100)
-
-  const handleFormSuccess = () => {
-    setShowAddGalerie(false)
-    setFormFiles([])
-  }
-
-  const handleFormCancel = () => {
-    setShowAddGalerie(false)
-    setFormFiles([])
-  }
 
   const isArchivedView = activeTab === 'galerii' && statusFilter === 'archived'
   const showStatusToggle = activeTab === 'galerii'
@@ -659,25 +669,13 @@ export default function AdminGalleryTable({
             </h2>
             {showAddButton && (
               <button
-                onClick={() => {
-                  setShowAddGalerie((v) => !v)
-                  if (showAddGalerie) setFormFiles([])
-                }}
+                onClick={() => openCreateModal()}
                 className="btn-primary dashboard-add-galerie-btn"
               >
-                {showAddGalerie ? 'Anulează' : '+ Adaugă galerie'}
+                + Adaugă galerie
               </button>
             )}
           </div>
-
-          {showAddButton && showAddGalerie && (
-            <AdminGalleryForm
-              user={user}
-              onSuccess={handleFormSuccess}
-              onCancel={() => { setShowAddGalerie(false); setFormFiles([]); }}
-              initialFiles={formFiles}
-            />
-          )}
 
           {loading ? (
             <div className="gallery-list-loading"><p>Se încarcă galeriile...</p></div>
@@ -689,7 +687,7 @@ export default function AdminGalleryTable({
                 <button
                   type="button"
                   className="btn-primary gallery-empty-btn"
-                  onClick={() => setShowAddGalerie(true)}
+                  onClick={() => openCreateModal()}
                 >
                   Adaugă Galerie
                 </button>
@@ -767,14 +765,26 @@ export default function AdminGalleryTable({
           )}
 
           <GallerySettingsModal
+            user={user}
             galerie={settingsGalerie}
+            mode="edit"
             open={!!settingsGalerie}
+            onDeleted={handleMoveToTrashWithCleanup}
+            onSaved={() => setSettingsGalerie(null)}
             onClose={() => setSettingsGalerie(null)}
+          />
+
+          <GallerySettingsModal
+            user={user}
+            mode="create"
+            open={createModalOpen}
+            initialFiles={createModalFiles}
+            onClose={closeCreateModal}
           />
         </div>
       </div>
 
-      {activeTab === 'galerii' && statusFilter === 'active' && dragOverlayVisible && (
+      {activeTab === 'galerii' && statusFilter === 'active' && dragOverlayVisible && !createModalOpen && (
         <div
           className="gallery-drag-overlay"
           onDragOver={(e) => e.preventDefault()}
@@ -783,8 +793,7 @@ export default function AdminGalleryTable({
             e.stopPropagation()
             const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith('image/'))
             if (files.length > 0) {
-              setFormFiles(files)
-              setShowAddGalerie(true)
+              openCreateModal(files)
             }
             dragCounterRef.current = 0
             setDragOverlayVisible(false)
