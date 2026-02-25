@@ -10,21 +10,106 @@ const outputDir = process.argv[3]
   ? path.resolve(process.argv[3])
   : path.resolve(process.cwd(), 'tmp', 'qa-auth')
 
-const email = process.env.QA_EMAIL || ''
-const password = process.env.QA_PASSWORD || ''
+function parseEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {}
+  const raw = fs.readFileSync(filePath, 'utf8')
+  const lines = raw.split(/\r?\n/)
+  const result = {}
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const idx = trimmed.indexOf('=')
+    if (idx <= 0) continue
+    const key = trimmed.slice(0, idx).trim()
+    const value = trimmed.slice(idx + 1).trim()
+    result[key] = value
+  }
+  return result
+}
 
-if (!email || !password) {
-  console.error('ERROR: Seteaza QA_EMAIL si QA_PASSWORD pentru testul de autentificare.')
-  console.error('Exemplu:')
-  console.error('QA_EMAIL="test@example.com" QA_PASSWORD="parola123" npm run qa:auth -- https://your-url')
-  process.exit(1)
+async function jsonFetch(url, options = {}) {
+  const res = await fetch(url, options)
+  const text = await res.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch (_) {
+    data = null
+  }
+  return { res, data, text }
+}
+
+async function createAuthUser(apiKey, email, password) {
+  const { res, data, text } = await jsonFetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password,
+        returnSecureToken: true,
+      }),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(`signUp failed (${res.status}): ${text}`)
+  }
+  return {
+    uid: data.localId,
+    idToken: data.idToken,
+    email,
+    password,
+  }
+}
+
+async function deleteAuthUser(apiKey, idToken) {
+  const { res, text } = await jsonFetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(`accounts:delete failed (${res.status}): ${text}`)
+  }
+}
+
+async function resolveCredentials() {
+  const envEmail = (process.env.QA_EMAIL || '').trim()
+  const envPassword = (process.env.QA_PASSWORD || '').trim()
+
+  if (envEmail && envPassword) {
+    return { email: envEmail, password: envPassword, cleanup: null }
+  }
+
+  const envPath = path.resolve(process.cwd(), '.env')
+  const envFile = parseEnvFile(envPath)
+  const apiKey = String(envFile.VITE_FIREBASE_API_KEY || '').trim()
+  if (!apiKey) {
+    throw new Error(
+      'Lipsesc QA_EMAIL/QA_PASSWORD si nu am VITE_FIREBASE_API_KEY in .env pentru auto-provisioning.'
+    )
+  }
+
+  const stamp = Date.now()
+  const email = `qa-auth-${stamp}@example.com`
+  const password = `Qa!${stamp}Ab`
+  const user = await createAuthUser(apiKey, email, password)
+  return {
+    email,
+    password,
+    cleanup: { apiKey, idToken: user.idToken, uid: user.uid, email },
+  }
 }
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-async function loginAndCheckDesktop(context, screenshotsPath) {
+async function loginAndCheckDesktop(context, screenshotsPath, credentials) {
   const page = await context.newPage()
   const pageErrors = []
   page.on('pageerror', (err) => pageErrors.push(err.message || String(err)))
@@ -32,8 +117,8 @@ async function loginAndCheckDesktop(context, screenshotsPath) {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' })
 
-  await page.locator('input[type="email"]').fill(email)
-  await page.locator('input[type="password"]').fill(password)
+  await page.locator('input[type="email"]').fill(credentials.email)
+  await page.locator('input[type="password"]').fill(credentials.password)
   await page.getByRole('button', { name: /Intră în cont/i }).click()
 
   // Login redirect can take a few seconds (auth listener + profile read),
@@ -131,15 +216,24 @@ async function checkMobileWithSameSession(context, screenshotsPath) {
 async function main() {
   fs.mkdirSync(outputDir, { recursive: true })
 
+  const credentials = await resolveCredentials()
+  if (credentials.cleanup) {
+    console.log(`QA Auth: am creat utilizator temporar ${credentials.cleanup.email} (${credentials.cleanup.uid})`)
+  }
+
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext()
 
   try {
-    const desktopResult = await loginAndCheckDesktop(context, outputDir)
+    const desktopResult = await loginAndCheckDesktop(context, outputDir, credentials)
     const mobileResult = await checkMobileWithSameSession(context, outputDir)
 
     await context.close()
     await browser.close()
+
+    if (credentials.cleanup) {
+      await deleteAuthUser(credentials.cleanup.apiKey, credentials.cleanup.idToken)
+    }
 
     console.log(`QA Auth - baseUrl: ${baseUrl}`)
     console.log(`Desktop screenshot: ${desktopResult.desktopShot}`)
@@ -148,6 +242,11 @@ async function main() {
   } catch (err) {
     await context.close().catch(() => {})
     await browser.close().catch(() => {})
+    if (credentials.cleanup) {
+      await deleteAuthUser(credentials.cleanup.apiKey, credentials.cleanup.idToken).catch((cleanupErr) => {
+        console.warn(`Cleanup auth user failed: ${cleanupErr.message || cleanupErr}`)
+      })
+    }
     console.error(`QA Auth FAILED: ${err.message || err}`)
     process.exit(1)
   }
