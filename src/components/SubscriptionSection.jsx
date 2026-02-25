@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
 import './SubscriptionSection.css';
 
-const billingService = getAppServices().billing;
+const {
+  billing: billingService,
+} = getAppServices()
 
 function formatDate(value) {
   if (!(value instanceof Date)) return '—'
@@ -44,6 +46,7 @@ function statusClass(status) {
 
 const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => {
   const [loadingPlan, setLoadingPlan] = useState(null);
+  const [openingPortal, setOpeningPortal] = useState(false)
   const [billingData, setBillingData] = useState(null)
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
@@ -104,6 +107,32 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
   const activeSubscription = billingData?.activeSubscription || null
   const overridePlan = billingData?.overridePlan || null
   const hasManualOverride = Boolean(overridePlan)
+  const canCancelAtPeriodEnd = Boolean(
+    activeSubscription &&
+      ['active', 'trialing'].includes(String(activeSubscription.status || '').toLowerCase()) &&
+      !activeSubscription.cancelAtPeriodEnd
+  )
+
+  const handleCancelAtPeriodEnd = async () => {
+    if (!activeSubscription) return
+    if (activeSubscription.cancelAtPeriodEnd) {
+      alert('Abonamentul este deja programat pentru anulare la finalul perioadei curente.')
+      return
+    }
+    const confirmed = window.confirm('Anulezi abonamentul la finalul perioadei curente? Vei păstra accesul până la data de reînnoire.')
+    if (!confirmed) return
+    setOpeningPortal(true)
+    try {
+      const portalUrl = await billingService.createPortalLink({
+        returnUrl: `${window.location.origin}/dashboard?tab=abonament&billing=updated`,
+      })
+      window.location.assign(portalUrl)
+    } catch (err) {
+      console.error('Eroare portal Stripe:', err)
+      alert(`Nu pot deschide portalul Stripe.\nDetalii: ${String(err?.message || 'necunoscut')}`)
+      setOpeningPortal(false)
+    }
+  }
 
   const plans = [
     {
@@ -209,7 +238,31 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
               <span>Sursă plan</span>
               <strong>{hasManualOverride ? `Manual (${overridePlan})` : 'Stripe automat'}</strong>
             </div>
+            <div className="sub-kv-row">
+              <span>Anulare la final perioadă</span>
+              <strong>{activeSubscription?.cancelAtPeriodEnd ? 'Da' : 'Nu'}</strong>
+            </div>
           </div>
+
+          {activeSubscription && (
+            <div className="sub-billing-actions">
+              <button
+                type="button"
+                className="sub-danger-btn"
+                onClick={handleCancelAtPeriodEnd}
+                disabled={!canCancelAtPeriodEnd || openingPortal}
+              >
+                {openingPortal
+                  ? 'Se deschide portalul Stripe...'
+                  : activeSubscription?.cancelAtPeriodEnd
+                    ? 'Anulare programată'
+                    : 'Anulează abonamentul la finalul perioadei'}
+              </button>
+              <p className="sub-muted">
+                Anularea este gestionată prin Stripe și menține accesul până la sfârșitul perioadei plătite.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="sub-billing-card">

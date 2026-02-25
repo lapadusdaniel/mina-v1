@@ -1,4 +1,5 @@
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 
 export const STRIPE_PRICES = {
   pro: (import.meta.env.VITE_STRIPE_PRICE_PRO || '').trim(),
@@ -130,7 +131,10 @@ async function addCheckoutSessionWithTimeout({ db, uid, payload }) {
   return Promise.race([createPromise, timeoutPromise])
 }
 
-export function createBillingModule({ db }) {
+export function createBillingModule({ db, functions }) {
+  const createPortalLinkCallable =
+    functions ? httpsCallable(functions, 'ext-firestore-stripe-payments-createPortalLink') : null
+
   return {
     db,
 
@@ -313,6 +317,22 @@ export function createBillingModule({ db }) {
         payments: payments.slice(0, 20),
         checkoutSessions: checkoutSessions.slice(0, 20),
       }
+    },
+
+    async createPortalLink({ returnUrl }) {
+      if (!createPortalLinkCallable) {
+        throw new Error('Billing portal indisponibil: Firebase Functions nu este configurat.')
+      }
+      const result = await createPortalLinkCallable({
+        returnUrl: returnUrl || '',
+      })
+      const payload = result?.data
+      if (typeof payload === 'string' && payload.startsWith('http')) return payload
+      const url = payload?.url || payload?.portalLink || payload?.link || ''
+      if (!url) {
+        throw new Error('Nu am primit URL-ul de Stripe Customer Portal.')
+      }
+      return url
     },
 
     async getCurrentPlan() {

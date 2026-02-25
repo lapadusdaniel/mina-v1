@@ -1,4 +1,4 @@
-import { auth, db } from '../../firebase'
+import { auth, db, functions } from '../../firebase'
 import { createAuthModule } from '../../modules/auth'
 import { createGalleriesModule } from '../../modules/galleries'
 import { createMediaModule } from '../../modules/media'
@@ -11,7 +11,7 @@ export function createAppServices() {
     auth: createAuthModule({ auth, db }),
     galleries: createGalleriesModule({ db }),
     media: createMediaModule(),
-    billing: createBillingModule({ db }),
+    billing: createBillingModule({ db, functions }),
     sites: createSitesModule({ db }),
     admin: createAdminModule({ db }),
   }
