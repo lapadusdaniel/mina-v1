@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import imageCompression from 'browser-image-compression'
 import './Dashboard.css'
@@ -227,11 +227,28 @@ function Dashboard({ user, onLogout, initialTab }) {
     }
   }, [galerii])
 
+  const closeActiveGallery = useCallback(() => {
+    setGalerieActiva(null)
+    setPozeGalerie([])
+    if (location.pathname !== '/settings') {
+      const next = new URLSearchParams(location.search)
+      next.delete('gallery')
+      if (!next.get('tab')) next.set('tab', 'galerii')
+      setSearchParams(next)
+    }
+  }, [location.pathname, location.search, setSearchParams])
+
   // Logica încărcare poze în galerie
-  const handleDeschideGalerie = async (galerie) => {
+  const handleDeschideGalerie = useCallback(async (galerie) => {
     setGalerieActiva(galerie)
     setLoadingPoze(true)
     setPozeGalerie([])
+    if (location.pathname !== '/settings' && galerie?.id) {
+      const next = new URLSearchParams(location.search)
+      if (!next.get('tab')) next.set('tab', 'galerii')
+      next.set('gallery', galerie.id)
+      setSearchParams(next)
+    }
     try {
       const poze = await mediaService.listGalleryPhotos(galerie.id, user.uid)
       const pozeWithUrlsRaw = await Promise.all(
@@ -267,7 +284,34 @@ function Dashboard({ user, onLogout, initialTab }) {
     } finally {
       setLoadingPoze(false)
     }
-  }
+  }, [location.pathname, location.search, setSearchParams, user.uid])
+
+  // Dacă URL-ul are ?gallery=<id>, redeschide galeria după refresh.
+  useEffect(() => {
+    if (location.pathname === '/settings') return
+    const galleryIdFromUrl = searchParams.get('gallery')
+    if (!galleryIdFromUrl) return
+    if (galerieActiva?.id === galleryIdFromUrl) return
+    if (!galerii.length) return
+
+    const target = galerii.find((g) => g.id === galleryIdFromUrl && g.status !== 'trash')
+    if (!target) {
+      const next = new URLSearchParams(location.search)
+      next.delete('gallery')
+      setSearchParams(next)
+      return
+    }
+
+    handleDeschideGalerie(target)
+  }, [
+    galerieActiva?.id,
+    galerii,
+    handleDeschideGalerie,
+    location.pathname,
+    location.search,
+    searchParams,
+    setSearchParams,
+  ])
 
   // Logica Upload (Original + Medium + Thumb)
   const handleUploadPoze = async (e) => {
@@ -357,8 +401,7 @@ function Dashboard({ user, onLogout, initialTab }) {
     try {
       await galleriesService.moveToTrash(id, new Date())
       if (galerieActiva?.id === id) {
-        setGalerieActiva(null)
-        setPozeGalerie([])
+        closeActiveGallery()
       }
     } catch (error) {
       console.error('Error:', error)
@@ -391,7 +434,9 @@ function Dashboard({ user, onLogout, initialTab }) {
   }
 
   const handlePreview = async (galerie) => {
-    let url = `${window.location.origin}/gallery/${galerie.id}`
+    const fallbackUrl = `${window.location.origin}/gallery/${galerie.id}`
+    let url = fallbackUrl
+    const previewWindow = window.open('about:blank', '_blank', 'noopener')
     try {
       const idToken = await authService.getCurrentIdToken()
       if (idToken && galerie?.id) {
@@ -406,6 +451,10 @@ function Dashboard({ user, onLogout, initialTab }) {
         }
       }
     } catch (_) {
+    }
+    if (previewWindow && !previewWindow.closed) {
+      previewWindow.location.replace(url)
+      return
     }
     window.open(url, '_blank')
   }
@@ -457,7 +506,7 @@ function Dashboard({ user, onLogout, initialTab }) {
     <div className="dashboard-sidebar">
       <div className="sidebar-logo-area">
         <h1 className="dashboard-logo" onClick={() => {
-          setGalerieActiva(null)
+          closeActiveGallery()
           if (location.pathname === '/settings') navigate('/dashboard?tab=galerii')
           else setSearchParams({ tab: 'galerii' })
         }}>
@@ -495,7 +544,7 @@ function Dashboard({ user, onLogout, initialTab }) {
           uploading={uploading}
           uploadProgress={uploadProgress}
           fileInputRef={fileInputRef}
-          onBack={() => { setGalerieActiva(null); setPozeGalerie([]) }}
+          onBack={closeActiveGallery}
           onPreview={handlePreview}
           onUploadPoze={handleUploadPoze}
           onDeletePoza={handleDeletePoza}
