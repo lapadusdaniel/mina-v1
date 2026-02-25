@@ -10,6 +10,7 @@
  *   - GET/LIST public doar pe căi controlate (galerii + branding).
  *   - PUT/DELETE necesită Firebase ID token valid.
  *   - PUT/DELETE pe galerii validează ownership în Firestore (galerii/{id}.userId == uid).
+ *   - PUT pe galerii validează quota de stocare (plan Free/Pro/Unlimited) înainte de upload.
  *   - PUT/DELETE pe branding validează `branding/{uid}/...`.
  */
 
@@ -30,6 +31,19 @@ const RATE_LIMIT_MAX_WRITE = 180
 const rateLimitBuckets = new Map()
 const galleryAccessCache = new Map()
 const GALLERY_ACCESS_CACHE_TTL_MS = 10 * 1000
+const quotaCache = new Map()
+const QUOTA_CACHE_TTL_MS = 15 * 1000
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing'])
+const PLAN_PRIORITY = {
+  Free: 0,
+  Pro: 1,
+  Unlimited: 2,
+}
+const DEFAULT_STORAGE_LIMITS_GB = {
+  Free: 15,
+  Pro: 500,
+  Unlimited: 1000,
+}
 
 function corsHeaders() {
   return {
@@ -164,6 +178,53 @@ function checkRateLimit(request) {
   return { allowed: true }
 }
 
+function normalizePlan(raw) {
+  const normalized = String(raw || '').trim().toLowerCase()
+  if (normalized === 'unlimited') return 'Unlimited'
+  if (normalized === 'pro') return 'Pro'
+  if (normalized === 'free') return 'Free'
+  return ''
+}
+
+function parseNumber(raw, fallback) {
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value < 0) return fallback
+  return value
+}
+
+function storageLimitBytesForPlan(plan, env) {
+  const normalizedPlan = normalizePlan(plan) || 'Free'
+  const envKey = `STORAGE_LIMIT_${normalizedPlan.toUpperCase()}_GB`
+  const limitGb = parseNumber(env?.[envKey], DEFAULT_STORAGE_LIMITS_GB[normalizedPlan])
+  return Math.floor(limitGb * 1024 * 1024 * 1024)
+}
+
+function parseCommaSeparatedSet(rawValue) {
+  const values = String(rawValue || '')
+    .split(',')
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+  return new Set(values)
+}
+
+function getConfiguredPriceIds(env) {
+  const pro = new Set([
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_IDS),
+  ])
+  const unlimited = new Set([
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED_IDS),
+  ])
+  return { pro, unlimited }
+}
+
+function pickMaxPlan(currentPlan, candidatePlan) {
+  const current = normalizePlan(currentPlan) || 'Free'
+  const candidate = normalizePlan(candidatePlan) || 'Free'
+  return PLAN_PRIORITY[candidate] > PLAN_PRIORITY[current] ? candidate : current
+}
+
 function firestoreStringField(data, fieldName) {
   return data?.fields?.[fieldName]?.stringValue || ''
 }
@@ -171,6 +232,167 @@ function firestoreStringField(data, fieldName) {
 function firestoreBoolField(data, fieldName, fallback = false) {
   const value = data?.fields?.[fieldName]?.booleanValue
   return typeof value === 'boolean' ? value : fallback
+}
+
+function firestoreValueToPlain(value) {
+  if (!value || typeof value !== 'object') return null
+  if ('nullValue' in value) return null
+  if ('stringValue' in value) return String(value.stringValue || '')
+  if ('booleanValue' in value) return Boolean(value.booleanValue)
+  if ('integerValue' in value) {
+    const parsed = Number(value.integerValue)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if ('doubleValue' in value) {
+    const parsed = Number(value.doubleValue)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if ('timestampValue' in value) return String(value.timestampValue || '')
+  if ('arrayValue' in value) {
+    const values = value.arrayValue?.values || []
+    return values.map((item) => firestoreValueToPlain(item))
+  }
+  if ('listValue' in value) {
+    const values = value.listValue?.values || []
+    return values.map((item) => firestoreValueToPlain(item))
+  }
+  if ('mapValue' in value) {
+    const fields = value.mapValue?.fields || {}
+    const plain = {}
+    for (const [key, fieldValue] of Object.entries(fields)) {
+      plain[key] = firestoreValueToPlain(fieldValue)
+    }
+    return plain
+  }
+  return null
+}
+
+function firestoreDocToPlain(doc) {
+  if (!doc || typeof doc !== 'object') return null
+  const fields = doc.fields || {}
+  const plain = {}
+  for (const [key, value] of Object.entries(fields)) {
+    plain[key] = firestoreValueToPlain(value)
+  }
+  return plain
+}
+
+function parseJsonOrNdjson(rawText) {
+  const text = String(rawText || '').trim()
+  if (!text) return []
+  try {
+    const parsed = JSON.parse(text)
+    return Array.isArray(parsed) ? parsed : [parsed]
+  } catch (_) {
+    const rows = []
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        rows.push(JSON.parse(trimmed))
+      } catch (_) {
+        // Ignore malformed lines and continue parsing the response stream.
+      }
+    }
+    return rows
+  }
+}
+
+function docIdFromFirestoreName(name) {
+  const parts = String(name || '').split('/').filter(Boolean)
+  return parts.length ? parts[parts.length - 1] : ''
+}
+
+function parseSubscriptionPriceId(docData) {
+  if (!docData || typeof docData !== 'object') return ''
+
+  const items = docData?.items?.data ?? docData?.items
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      const nested = item?.price?.id || item?.priceId || item?.price
+      if (nested) return String(nested)
+    }
+  }
+
+  if (docData?.price?.id) return String(docData.price.id)
+  if (typeof docData?.price === 'string') return String(docData.price)
+  return ''
+}
+
+function parseSubscriptionPriceObject(docData) {
+  if (!docData || typeof docData !== 'object') return null
+  const items = docData?.items?.data ?? docData?.items
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      if (item?.price && typeof item.price === 'object') return item.price
+    }
+  }
+  if (docData?.price && typeof docData.price === 'object') return docData.price
+  return null
+}
+
+function inferPlanFromSubscription(docData, env) {
+  const explicitPlan = normalizePlan(
+    docData?.plan
+    || docData?.role
+    || docData?.metadata?.plan
+    || docData?.metadata?.tier
+  )
+  if (explicitPlan) return explicitPlan
+
+  const priceId = parseSubscriptionPriceId(docData)
+  if (!priceId) return 'Free'
+
+  const configured = getConfiguredPriceIds(env)
+  if (configured.unlimited.has(priceId)) return 'Unlimited'
+  if (configured.pro.has(priceId)) return 'Pro'
+
+  const priceObj = parseSubscriptionPriceObject(docData)
+  const fromLabels = normalizePlan(
+    priceObj?.lookup_key
+    || priceObj?.lookupKey
+    || priceObj?.nickname
+    || priceObj?.product?.name
+    || docData?.product?.name
+  )
+  if (fromLabels) return fromLabels
+
+  const unitAmount = Number(
+    priceObj?.unit_amount
+    ?? priceObj?.unitAmount
+    ?? priceObj?.unit_amount_decimal
+    ?? docData?.unit_amount
+    ?? docData?.unitAmount
+    ?? docData?.unit_amount_decimal
+  )
+  if (Number.isFinite(unitAmount)) {
+    if (unitAmount >= 15000) return 'Unlimited'
+    if (unitAmount >= 10000) return 'Pro'
+  }
+
+  // Unknown active subscription: default to Pro to avoid false hard-blocking paid users.
+  return 'Pro'
+}
+
+function invalidateQuotaCache(uid) {
+  if (!uid) return
+  quotaCache.delete(uid)
+}
+
+function readCachedQuota(uid) {
+  if (!uid) return null
+  const cached = quotaCache.get(uid)
+  if (!cached) return null
+  if (Date.now() - cached.ts > QUOTA_CACHE_TTL_MS) {
+    quotaCache.delete(uid)
+    return null
+  }
+  return cached.value
+}
+
+function writeCachedQuota(uid, value) {
+  if (!uid || !value) return
+  quotaCache.set(uid, { ts: Date.now(), value })
 }
 
 async function sha256Hex(value) {
@@ -225,18 +447,234 @@ async function verifyFirebaseToken(idToken, apiKey) {
   return data?.users?.[0]?.localId || null
 }
 
-async function fetchGalleryDoc({ galleryId, projectId, idToken, apiKey }) {
-  if (!galleryId || !projectId) return null
+function firestoreDocBaseUrl(projectId) {
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`
+}
 
-  const encodedId = encodeURIComponent(galleryId)
-  const keyParam = apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/galerii/${encodedId}${keyParam}`
-  const headers = idToken ? { Authorization: `Bearer ${idToken}` } : {}
+function firestoreApiKeySuffix(apiKey) {
+  return apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''
+}
 
-  const res = await fetch(url, { method: 'GET', headers })
+function firestoreAuthHeaders(idToken) {
+  return idToken ? { Authorization: `Bearer ${idToken}` } : {}
+}
+
+async function fetchFirestoreDocByPath({ projectId, docPath, idToken, apiKey }) {
+  if (!projectId || !docPath) return null
+  const safePath = String(docPath)
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+  const url = `${firestoreDocBaseUrl(projectId)}/${safePath}${firestoreApiKeySuffix(apiKey)}`
+  const res = await fetch(url, { method: 'GET', headers: firestoreAuthHeaders(idToken) })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`Firestore read failed (${res.status})`)
   return res.json().catch(() => null)
+}
+
+async function fetchGalleryDoc({ galleryId, projectId, idToken, apiKey }) {
+  if (!galleryId || !projectId) return null
+  return fetchFirestoreDocByPath({
+    projectId,
+    docPath: `galerii/${galleryId}`,
+    idToken,
+    apiKey,
+  })
+}
+
+async function listFirestoreCollectionDocs({ projectId, collectionPath, idToken, apiKey, pageSize = 100 }) {
+  if (!projectId || !collectionPath) return []
+  let pageToken = ''
+  const docs = []
+
+  while (true) {
+    const query = new URLSearchParams()
+    query.set('pageSize', String(pageSize))
+    if (pageToken) query.set('pageToken', pageToken)
+    if (apiKey) query.set('key', apiKey)
+
+    const safePath = String(collectionPath)
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/')
+    const url = `${firestoreDocBaseUrl(projectId)}/${safePath}?${query.toString()}`
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: firestoreAuthHeaders(idToken),
+    })
+    if (res.status === 404) return docs
+    if (!res.ok) throw new Error(`Firestore list failed (${res.status})`)
+
+    const payload = await res.json().catch(() => ({}))
+    const currentDocs = Array.isArray(payload?.documents) ? payload.documents : []
+    docs.push(...currentDocs)
+    pageToken = payload?.nextPageToken || ''
+    if (!pageToken) break
+  }
+
+  return docs
+}
+
+async function runFirestoreQuery({ projectId, idToken, apiKey, structuredQuery }) {
+  if (!projectId || !structuredQuery) return []
+  const url = `${firestoreDocBaseUrl(projectId)}:runQuery${firestoreApiKeySuffix(apiKey)}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...firestoreAuthHeaders(idToken),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ structuredQuery }),
+  })
+  if (!res.ok) throw new Error(`Firestore runQuery failed (${res.status})`)
+  const raw = await res.text().catch(() => '')
+  return parseJsonOrNdjson(raw)
+}
+
+async function listOwnerGalleryIds({ uid, idToken, projectId, apiKey }) {
+  if (!uid || !idToken || !projectId) return []
+  const rows = await runFirestoreQuery({
+    projectId,
+    idToken,
+    apiKey,
+    structuredQuery: {
+      from: [{ collectionId: 'galerii' }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: 'userId' },
+          op: 'EQUAL',
+          value: { stringValue: uid },
+        },
+      },
+      select: {
+        fields: [{ fieldPath: 'userId' }],
+      },
+    },
+  }).catch(() => [])
+
+  const ids = new Set()
+  for (const row of rows) {
+    const doc = row?.document
+    const id = docIdFromFirestoreName(doc?.name)
+    if (id) ids.add(id)
+  }
+  return [...ids]
+}
+
+async function sumPrefixBytes(bucket, prefix) {
+  let total = 0
+  let cursor = undefined
+  while (true) {
+    const listed = await bucket.list({ prefix, cursor })
+    for (const obj of listed.objects || []) {
+      total += Number(obj?.size || 0)
+    }
+    if (!listed.truncated) break
+    cursor = listed.cursor
+    if (!cursor) break
+  }
+  return total
+}
+
+async function resolveUserPlan({ uid, idToken, env }) {
+  const projectId = env?.FIREBASE_PROJECT_ID
+  const apiKey = env?.FIREBASE_API_KEY
+  if (!uid || !idToken || !projectId) return 'Free'
+
+  const overrideDoc = await fetchFirestoreDocByPath({
+    projectId,
+    docPath: `adminOverrides/${uid}`,
+    idToken,
+    apiKey,
+  }).catch(() => null)
+  const overridePlan = normalizePlan(firestoreDocToPlain(overrideDoc)?.plan)
+  if (overridePlan) return overridePlan
+
+  const subscriptionDocs = await listFirestoreCollectionDocs({
+    projectId,
+    collectionPath: `customers/${uid}/subscriptions`,
+    idToken,
+    apiKey,
+  }).catch(() => [])
+
+  let bestPlan = 'Free'
+  for (const doc of subscriptionDocs) {
+    const sub = firestoreDocToPlain(doc)
+    const status = String(sub?.status || '').trim().toLowerCase()
+    if (!ACTIVE_SUBSCRIPTION_STATUSES.has(status)) continue
+    bestPlan = pickMaxPlan(bestPlan, inferPlanFromSubscription(sub, env))
+  }
+  if (bestPlan !== 'Free') return bestPlan
+
+  const userDoc = await fetchFirestoreDocByPath({
+    projectId,
+    docPath: `users/${uid}`,
+    idToken,
+    apiKey,
+  }).catch(() => null)
+  const userPlan = normalizePlan(firestoreDocToPlain(userDoc)?.plan)
+  if (userPlan) return userPlan
+  return 'Free'
+}
+
+async function computeOwnerUsageBytes({ uid, idToken, env }) {
+  if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID || !env?.R2_BUCKET) return 0
+  const galleryIds = await listOwnerGalleryIds({
+    uid,
+    idToken,
+    projectId: env.FIREBASE_PROJECT_ID,
+    apiKey: env.FIREBASE_API_KEY,
+  })
+  if (!galleryIds.length) return 0
+
+  let total = 0
+  for (const galleryId of galleryIds) {
+    total += await sumPrefixBytes(env.R2_BUCKET, `galerii/${galleryId}/`)
+  }
+  return total
+}
+
+async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadBytes, env }) {
+  if (!authContext?.uid || pathInfo?.kind !== 'gallery-file') {
+    return { ok: true }
+  }
+
+  const uid = authContext.uid
+  const cached = readCachedQuota(uid)
+  if (cached) {
+    if (cached.usedBytes + uploadBytes > cached.limitBytes) {
+      return {
+        ok: false,
+        status: 403,
+        message: 'Quota Exceeded',
+      }
+    }
+    writeCachedQuota(uid, {
+      ...cached,
+      usedBytes: cached.usedBytes + uploadBytes,
+    })
+    return { ok: true }
+  }
+
+  const plan = await resolveUserPlan({ uid, idToken: authContext.idToken, env })
+  const limitBytes = storageLimitBytesForPlan(plan, env)
+  const usedBytes = await computeOwnerUsageBytes({ uid, idToken: authContext.idToken, env })
+
+  if (usedBytes + uploadBytes > limitBytes) {
+    writeCachedQuota(uid, { usedBytes, limitBytes, plan })
+    return {
+      ok: false,
+      status: 403,
+      message: 'Quota Exceeded',
+    }
+  }
+
+  writeCachedQuota(uid, {
+    usedBytes: usedBytes + uploadBytes,
+    limitBytes,
+    plan,
+  })
+  return { ok: true }
 }
 
 async function getGalleryOwnerUid({ galleryId, idToken, projectId }) {
@@ -579,12 +1017,24 @@ export default {
           return text('Tip de fișier nepermis', 415)
         }
 
-        const contentLength = Number(request.headers.get('Content-Length') || '0')
-        if (contentLength > MAX_UPLOAD_BYTES) {
+        const bodyBuffer = await request.arrayBuffer()
+        const uploadBytes = Number(bodyBuffer.byteLength || 0)
+        if (!uploadBytes) {
+          return text('Body upload lipsă', 400)
+        }
+        if (uploadBytes > MAX_UPLOAD_BYTES) {
           return text('Fișier prea mare (max 25 MB)', 413)
         }
 
-        await env.R2_BUCKET.put(pathInfo.key, request.body, {
+        const quota = await assertStorageQuotaBeforeUpload({
+          authContext,
+          pathInfo,
+          uploadBytes,
+          env,
+        })
+        if (!quota.ok) return text(quota.message, quota.status)
+
+        await env.R2_BUCKET.put(pathInfo.key, bodyBuffer, {
           httpMetadata: { contentType },
         })
         return text('OK', 200)
@@ -605,6 +1055,7 @@ export default {
             await Promise.all(batch.map((k) => env.R2_BUCKET.delete(k)))
           }
 
+          invalidateQuotaCache(authContext.uid)
           return json({ deleted: keys.length }, 200)
         }
 
@@ -615,6 +1066,7 @@ export default {
         if (!access.ok) return text(access.message, access.status)
 
         await env.R2_BUCKET.delete(pathInfo.key)
+        invalidateQuotaCache(authContext.uid)
         return text('Deleted', 200)
       }
 

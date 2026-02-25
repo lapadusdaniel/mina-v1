@@ -44,9 +44,49 @@ function createMemoryBucket(seed = {}) {
   }
 }
 
-function createFirebaseFetchStub({ tokenToUid, galleryOwnerById }) {
+function toFirestoreValue(value) {
+  if (value === null || value === undefined) return { nullValue: null }
+  if (typeof value === 'string') return { stringValue: value }
+  if (typeof value === 'boolean') return { booleanValue: value }
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) return { integerValue: String(value) }
+    return { doubleValue: value }
+  }
+  if (Array.isArray(value)) {
+    return {
+      arrayValue: {
+        values: value.map((item) => toFirestoreValue(item)),
+      },
+    }
+  }
+  if (typeof value === 'object') {
+    const fields = {}
+    for (const [k, v] of Object.entries(value)) {
+      fields[k] = toFirestoreValue(v)
+    }
+    return { mapValue: { fields } }
+  }
+  return { stringValue: String(value) }
+}
+
+function toFirestoreDoc(name, data) {
+  const fields = {}
+  for (const [k, v] of Object.entries(data || {})) {
+    fields[k] = toFirestoreValue(v)
+  }
+  return { name, fields }
+}
+
+function createFirebaseFetchStub({
+  tokenToUid = {},
+  galleryOwnerById = {},
+  adminOverridesByUid = {},
+  usersByUid = {},
+  subscriptionsByUid = {},
+} = {}) {
   return async function fetchStub(url, options = {}) {
     const u = String(url)
+    const method = String(options.method || 'GET').toUpperCase()
 
     if (u.includes('identitytoolkit.googleapis.com') && u.includes('accounts:lookup')) {
       const parsed = JSON.parse(options.body || '{}')
@@ -60,18 +100,67 @@ function createFirebaseFetchStub({ tokenToUid, galleryOwnerById }) {
       })
     }
 
+    if (u.includes('firestore.googleapis.com') && u.includes('/documents:runQuery') && method === 'POST') {
+      const parsed = JSON.parse(options.body || '{}')
+      const queryUid = parsed?.structuredQuery?.where?.fieldFilter?.value?.stringValue || ''
+      const results = Object.entries(galleryOwnerById)
+        .filter(([, ownerUid]) => ownerUid === queryUid)
+        .map(([galleryId, ownerUid]) => ({
+          document: toFirestoreDoc(
+            `projects/fake-project/databases/(default)/documents/galerii/${galleryId}`,
+            { userId: ownerUid }
+          ),
+        }))
+      return new Response(JSON.stringify(results), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (u.includes('firestore.googleapis.com') && u.includes('/documents/adminOverrides/')) {
+      const uid = decodeURIComponent((u.match(/\/documents\/adminOverrides\/([^/?]+)/) || [])[1] || '')
+      const data = adminOverridesByUid[uid]
+      if (!data) return new Response('Not found', { status: 404 })
+      return new Response(
+        JSON.stringify(toFirestoreDoc(`projects/fake-project/databases/(default)/documents/adminOverrides/${uid}`, data)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (u.includes('firestore.googleapis.com') && u.includes('/documents/users/')) {
+      const uid = decodeURIComponent((u.match(/\/documents\/users\/([^/?]+)/) || [])[1] || '')
+      const data = usersByUid[uid]
+      if (!data) return new Response('Not found', { status: 404 })
+      return new Response(
+        JSON.stringify(toFirestoreDoc(`projects/fake-project/databases/(default)/documents/users/${uid}`, data)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (u.includes('firestore.googleapis.com') && u.includes('/documents/customers/') && u.includes('/subscriptions')) {
+      const uid = decodeURIComponent((u.match(/\/documents\/customers\/([^/]+)\/subscriptions/) || [])[1] || '')
+      const docs = (subscriptionsByUid[uid] || []).map((sub, idx) =>
+        toFirestoreDoc(
+          `projects/fake-project/databases/(default)/documents/customers/${uid}/subscriptions/sub-${idx + 1}`,
+          sub
+        )
+      )
+      return new Response(JSON.stringify({ documents: docs }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     if (u.includes('firestore.googleapis.com') && u.includes('/documents/galerii/')) {
-      const galleryId = decodeURIComponent(u.split('/documents/galerii/')[1] || '')
+      const galleryId = decodeURIComponent((u.match(/\/documents\/galerii\/([^/?]+)/) || [])[1] || '')
       const ownerUid = galleryOwnerById[galleryId]
       if (!ownerUid) {
         return new Response('Not found', { status: 404 })
       }
       return new Response(
-        JSON.stringify({
-          fields: {
-            userId: { stringValue: ownerUid },
-          },
-        }),
+        JSON.stringify(
+          toFirestoreDoc(`projects/fake-project/databases/(default)/documents/galerii/${galleryId}`, { userId: ownerUid })
+        ),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
     }
@@ -176,6 +265,47 @@ test('PUT with owner token succeeds and writes object', async () => {
     const res = await worker.fetch(req, env)
     assert.equal(res.status, 200)
     assert.equal(bucket._store.has('galerii/g1/originals/new.jpg'), true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('PUT is rejected with 403 when storage quota is exceeded', async () => {
+  const originalFetch = globalThis.fetch
+  const quotaUid = 'owner-uid-quota'
+  const quotaGalleryId = 'g-quota'
+  globalThis.fetch = createFirebaseFetchStub({
+    tokenToUid: { ownerTokenQuota: quotaUid },
+    galleryOwnerById: { [quotaGalleryId]: quotaUid },
+    usersByUid: {
+      [quotaUid]: { plan: 'Free' },
+    },
+  })
+
+  try {
+    const bucket = createMemoryBucket({
+      [`galerii/${quotaGalleryId}/originals/already-there.jpg`]: { body: new Uint8Array([1, 2, 3, 4]), contentType: 'image/jpeg' },
+    })
+    const env = {
+      FIREBASE_API_KEY: 'fake-key',
+      FIREBASE_PROJECT_ID: 'fake-project',
+      STORAGE_LIMIT_FREE_GB: '0.000000001',
+      R2_BUCKET: bucket,
+    }
+
+    const req = new Request(`https://worker.example/galerii/${quotaGalleryId}/originals/new.jpg`, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer ownerTokenQuota',
+        'Content-Type': 'image/jpeg',
+      },
+      body: new Uint8Array([9, 8, 7]),
+    })
+
+    const res = await worker.fetch(req, env)
+    assert.equal(res.status, 403)
+    assert.equal(await res.text(), 'Quota Exceeded')
+    assert.equal(bucket._store.has(`galerii/${quotaGalleryId}/originals/new.jpg`), false)
   } finally {
     globalThis.fetch = originalFetch
   }
