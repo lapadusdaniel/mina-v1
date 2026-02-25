@@ -7,12 +7,6 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 
-const BOOTSTRAP_ADMIN_EMAIL = 'lapadusdaniel@gmail.com'
-
-function isBootstrapAdminEmail(email) {
-  return String(email || '').trim().toLowerCase() === BOOTSTRAP_ADMIN_EMAIL
-}
-
 function normalizeUser(firebaseUser, profileData) {
   if (!firebaseUser) return null
   return {
@@ -32,7 +26,6 @@ function normalizeUser(firebaseUser, profileData) {
 function buildDefaultProfile(firebaseUser) {
   const fallbackName = firebaseUser?.displayName
     || (firebaseUser?.email ? firebaseUser.email.split('@')[0] : 'Utilizator')
-  const bootstrapAdmin = isBootstrapAdminEmail(firebaseUser?.email)
 
   return {
     name: fallbackName || 'Utilizator',
@@ -40,8 +33,8 @@ function buildDefaultProfile(firebaseUser) {
     email: firebaseUser?.email || '',
     createdAt: new Date().toISOString(),
     plan: 'Free',
-    role: bootstrapAdmin ? 'admin' : 'user',
-    isAdmin: bootstrapAdmin,
+    role: 'user',
+    isAdmin: false,
     status: 'active',
   }
 }
@@ -51,17 +44,7 @@ async function ensureUserProfileDoc(db, firebaseUser) {
   const ref = doc(db, 'users', firebaseUser.uid)
   const snap = await getDoc(ref)
   if (snap.exists()) {
-    const current = snap.data() || {}
-    if (isBootstrapAdminEmail(firebaseUser?.email) && !(current.isAdmin === true || current.role === 'admin')) {
-      const promoted = {
-        role: 'admin',
-        isAdmin: true,
-        updatedAt: new Date().toISOString(),
-      }
-      await setDoc(ref, promoted, { merge: true })
-      return { ...current, ...promoted }
-    }
-    return current
+    return snap.data() || {}
   }
 
   const payload = buildDefaultProfile(firebaseUser)
@@ -109,7 +92,6 @@ export function createAuthModule({ auth, db }) {
     async registerWithEmail({ name, brandName, email, password }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const uid = userCredential.user.uid
-      const bootstrapAdmin = isBootstrapAdminEmail(email)
 
       await updateProfile(userCredential.user, { displayName: name })
 
@@ -119,8 +101,8 @@ export function createAuthModule({ auth, db }) {
         email,
         createdAt: new Date().toISOString(),
         plan: 'Free',
-        role: bootstrapAdmin ? 'admin' : 'user',
-        isAdmin: bootstrapAdmin,
+        role: 'user',
+        isAdmin: false,
         status: 'active',
       })
 
@@ -138,8 +120,8 @@ export function createAuthModule({ auth, db }) {
         name,
         brandName,
         plan: 'Free',
-        role: bootstrapAdmin ? 'admin' : 'user',
-        isAdmin: bootstrapAdmin,
+        role: 'user',
+        isAdmin: false,
       })
     },
 

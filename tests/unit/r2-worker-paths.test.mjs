@@ -9,6 +9,7 @@ const {
   normalizePath,
   parsePathInfo,
   parsePrefixInfo,
+  rateLimitKeyForRequest,
   requireBearerToken,
 } = __workerTestables
 
@@ -52,4 +53,20 @@ test('requireBearerToken extracts valid bearer token', () => {
 
   assert.equal(requireBearerToken(reqOk), 'token-123')
   assert.equal(requireBearerToken(reqBad), null)
+})
+
+test('rateLimitKeyForRequest uses only ip+method for write scope', () => {
+  const reqA = new Request('https://worker.example/galerii/g1/originals/a.jpg', {
+    method: 'PUT',
+    headers: { 'CF-Connecting-IP': '1.2.3.4' },
+  })
+  const reqB = new Request('https://worker.example/galerii/g1/originals/b.jpg', {
+    method: 'PUT',
+    headers: { 'CF-Connecting-IP': '1.2.3.4' },
+  })
+
+  const keyA = rateLimitKeyForRequest(reqA, 'write')
+  const keyB = rateLimitKeyForRequest(reqB, 'write')
+  assert.equal(keyA, keyB)
+  assert.equal(keyA, 'write:PUT:1.2.3.4')
 })

@@ -40,9 +40,21 @@ Log retroactiv pentru lucrul făcut în `/Users/daniellapadus/Desktop/mina-v1` (
   - `WRITE_RATE_LIMITER`: 180 req / 60s
   - răspuns `429` + header `Retry-After: 60`
 
+### 2026-02-25 (Refactor P1/P2 în ordinea stabilită)
+- `P1 rate limit`:
+  - cheie write limit schimbată la per-IP + method (nu mai include path), deci upload-uri cu nume unice nu mai ocolesc limita.
+- `P1 admin backdoor`:
+  - eliminat bootstrap admin hardcodat din `auth.service.js` și `firestore.rules`;
+  - admin rămâne strict role-based (`role/isAdmin` din `users/{uid}`).
+- `P2 quota`:
+  - Worker citește usage din `users/{uid}.storageUsedBytes` (counter pre-calculat), fără scan complet R2 la fiecare verificare.
+  - frontend actualizează counter-ul la upload/delete + sync periodic din totalul galeriilor.
+- `P2 admin N+1`:
+  - Admin folosește snapshot agregat (`users`, `galerii`, `adminOverrides`, `collectionGroup(subscriptions)`) în loc de query-uri secvențiale per user.
+
 ## Deploy + verificări
 - Worker live: `mina-v1-r2-worker.lapadusdaniel.workers.dev`
-- Teste locale: `npm run test` (19/19 PASS)
+- Teste locale: `npm run test` (20/20 PASS)
 - QA worker end-to-end: `npm run qa:worker` (PASS)
 - Build: `npm run build` (PASS)
 
@@ -51,4 +63,3 @@ Log retroactiv pentru lucrul făcut în `/Users/daniellapadus/Desktop/mina-v1` (
   - A) quota enforcement backend: închis.
   - C) rate limiting global real: închis.
 - Punctul B (share token cu semnătură HMAC secret) rămâne opțional de implementat ca întărire extra.
-

@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -14,6 +15,38 @@ import {
 
 function mapDoc(snap) {
   return { id: snap.id, ...snap.data() }
+}
+
+function normalizePlanFromString(raw) {
+  const normalized = String(raw || '').trim().toLowerCase()
+  if (normalized === 'unlimited') return 'Unlimited'
+  if (normalized === 'pro') return 'Pro'
+  if (normalized === 'free') return 'Free'
+  return ''
+}
+
+function extractUidFromSubscriptionSnap(snap) {
+  const path = String(snap?.ref?.path || '')
+  const parts = path.split('/')
+  const customersIndex = parts.indexOf('customers')
+  if (customersIndex < 0) return ''
+  return parts[customersIndex + 1] || ''
+}
+
+function inferPlanFromSubscriptionData(data, { stripePricePro, stripePriceUnlimited }) {
+  const explicitPlan = normalizePlanFromString(
+    data?.plan
+    || data?.role
+    || data?.metadata?.plan
+    || data?.metadata?.tier
+  )
+  if (explicitPlan) return explicitPlan
+
+  const priceId = data?.items?.data?.[0]?.price?.id || data?.price?.id || ''
+  if (priceId && priceId === stripePriceUnlimited) return 'Unlimited'
+  if (priceId && priceId === stripePricePro) return 'Pro'
+
+  return 'Free'
 }
 
 export function createAdminModule({ db }) {
@@ -57,6 +90,73 @@ export function createAdminModule({ db }) {
         })
       }
       return allSubs
+    },
+
+    async getAdminSnapshot({ stripePricePro, stripePriceUnlimited } = {}) {
+      const [
+        usersSnap,
+        galleriesSnap,
+        overridesSnap,
+        subscriptionsSnap,
+      ] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'galerii')),
+        getDocs(collection(db, 'adminOverrides')),
+        getDocs(collectionGroup(db, 'subscriptions')),
+      ])
+
+      const users = usersSnap.docs.map((d) => ({ uid: d.id, ...d.data() }))
+
+      const galleryCountByUid = {}
+      galleriesSnap.docs.forEach((d) => {
+        const uid = d.data()?.userId
+        if (!uid) return
+        galleryCountByUid[uid] = (galleryCountByUid[uid] || 0) + 1
+      })
+
+      const planOverrideByUid = {}
+      overridesSnap.docs.forEach((d) => {
+        const plan = normalizePlanFromString(d.data()?.plan)
+        if (!plan) return
+        planOverrideByUid[d.id] = plan
+      })
+
+      const subscriptions = []
+      const activePlanByUid = {}
+      subscriptionsSnap.docs.forEach((d) => {
+        const subData = d.data() || {}
+        const uid = extractUidFromSubscriptionSnap(d)
+        if (!uid) return
+
+        subscriptions.push({
+          uid,
+          ...subData,
+        })
+
+        const status = String(subData?.status || '').trim().toLowerCase()
+        if (!['active', 'trialing'].includes(status)) return
+
+        const inferredPlan = inferPlanFromSubscriptionData(subData, {
+          stripePricePro,
+          stripePriceUnlimited,
+        })
+
+        if (inferredPlan === 'Unlimited') {
+          activePlanByUid[uid] = 'Unlimited'
+          return
+        }
+        if (inferredPlan === 'Pro' && activePlanByUid[uid] !== 'Unlimited') {
+          activePlanByUid[uid] = 'Pro'
+        }
+      })
+
+      return {
+        users,
+        subscriptions,
+        galleryCountByUid,
+        planOverrideByUid,
+        activePlanByUid,
+      }
     },
 
     watchContactMessages(onChange, onError) {

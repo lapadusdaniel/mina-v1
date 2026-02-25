@@ -693,17 +693,21 @@ export default function AdminPanel({ user }) {
   // ── Load utilizatori din colecția 'users' (creată la Register) ──
   useEffect(() => {
     const load = async () => {
+      let snapshot = null
       try {
         // Ensure current user profile doc exists before admin queries.
         await authService.getCurrentUser().catch(() => null)
 
-        let usersBase = []
-        try {
-          usersBase = await adminService.listUsers()
-        } catch (listErr) {
-          setUsersLoadError('Nu pot citi lista completă de utilizatori (permisiuni Firestore).')
-        }
+        snapshot = await adminService.getAdminSnapshot({
+          stripePricePro: STRIPE_PRICE_PRO,
+          stripePriceUnlimited: STRIPE_PRICE_UNLIMITED,
+        })
+      } catch (listErr) {
+        setUsersLoadError('Nu pot citi lista completă de utilizatori (permisiuni Firestore).')
+      }
 
+      try {
+        let usersBase = Array.isArray(snapshot?.users) ? snapshot.users : []
         if (!Array.isArray(usersBase) || usersBase.length === 0) {
           usersBase = [{
             uid: user.uid,
@@ -717,37 +721,12 @@ export default function AdminPanel({ user }) {
           }]
         }
 
-        const usersData = []
-
-        for (const userData of usersBase) {
+        const usersData = usersBase.map((userData) => {
           const uid = userData.uid
-
-          // Numără galeriile
-          let galeriiCount = 0
-          try {
-            galeriiCount = await adminService.countUserGalleries(uid)
-          } catch (_) {
-            galeriiCount = 0
-          }
-
-          // Citește planul manual (dacă există override)
-          const planOverride = await adminService.getUserPlanOverride(uid)
-
-          // Citește subscripțiile Stripe
-          let plan = planOverride || 'Free'
-          if (!planOverride) {
-            try {
-              const subscriptionsForUser = await adminService.listUserSubscriptions(uid)
-              subscriptionsForUser.forEach((d) => {
-                if (!['active', 'trialing'].includes(d.status)) return
-                const priceId = d.items?.data?.[0]?.price?.id || d.price?.id
-                if (priceId === STRIPE_PRICE_UNLIMITED) plan = 'Unlimited'
-                else if (priceId === STRIPE_PRICE_PRO && plan !== 'Unlimited') plan = 'Pro'
-              })
-            } catch { /* no subscription */ }
-          }
-
-          usersData.push({
+          const planOverride = snapshot?.planOverrideByUid?.[uid] || null
+          const inferredPlan = snapshot?.activePlanByUid?.[uid] || 'Free'
+          const plan = planOverride || inferredPlan || 'Free'
+          return {
             uid,
             email: userData.email || uid,
             name: userData.name || '',
@@ -759,16 +738,30 @@ export default function AdminPanel({ user }) {
               || userData.role === 'admin',
             plan,
             planOverride,
-            galeriiCount,
-          })
-        }
+            galeriiCount: Number(snapshot?.galleryCountByUid?.[uid] || 0),
+          }
+        })
+
+        const subscriptionsRaw = Array.isArray(snapshot?.subscriptions) ? snapshot.subscriptions : []
+        const allSubs = subscriptionsRaw.map((d) => {
+          const priceId = d.items?.data?.[0]?.price?.id || d.price?.id
+          return {
+            uid: d.uid,
+            status: d.status,
+            plan: PLAN_PRICES[priceId] || d.plan || 'Free',
+            created: d.created,
+            current_period_end: d.current_period_end,
+          }
+        })
 
         setUsers(usersData)
+        setSubscriptions(allSubs)
       } catch (err) {
         console.error('Error loading users:', err)
         setUsersLoadError('Eroare la încărcarea utilizatorilor.')
       } finally {
         setLoadingUsers(false)
+        setLoadingSubscriptions(false)
       }
     }
     load()
@@ -784,31 +777,6 @@ export default function AdminPanel({ user }) {
       () => setLoadingGalerii(false)
     )
     return () => unsubscribe()
-  }, [])
-
-  // ── Load subscriptions ──
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const subscriptionsRaw = await adminService.listAllSubscriptions()
-        const allSubs = subscriptionsRaw.map((d) => {
-          const priceId = d.items?.data?.[0]?.price?.id || d.price?.id
-          return {
-            uid: d.uid,
-            status: d.status,
-            plan: PLAN_PRICES[priceId] || 'Free',
-            created: d.created,
-            current_period_end: d.current_period_end,
-          }
-        })
-        setSubscriptions(allSubs)
-      } catch (err) {
-        console.error('Error loading subscriptions:', err)
-      } finally {
-        setLoadingSubscriptions(false)
-      }
-    }
-    load()
   }, [])
 
   // ── Load mesaje ──

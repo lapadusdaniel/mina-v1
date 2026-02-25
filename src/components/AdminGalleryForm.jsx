@@ -116,6 +116,7 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
             coverKey: firstOriginalKey || '',
             storageBytes: uploadedBytes,
           })
+          await galleriesService.adjustUserStorageUsed(user.uid, uploadedBytes)
         } catch (uploadErr) {
           console.error('Error uploading:', uploadErr)
           alert('Galerie creată, dar a apărut o eroare la încărcarea fotografiilor.')

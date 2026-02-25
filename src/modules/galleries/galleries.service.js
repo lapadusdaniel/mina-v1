@@ -4,6 +4,7 @@ import {
   deleteField,
   deleteDoc,
   doc,
+  increment,
   getDoc,
   getDocs,
   onSnapshot,
@@ -48,6 +49,35 @@ async function syncSelectionAggregates(db, galleryId) {
 export function createGalleriesModule({ db }) {
   return {
     db,
+
+    async adjustUserStorageUsed(uid, deltaBytes) {
+      if (!uid) return
+      const delta = Math.trunc(Number(deltaBytes || 0))
+      if (!Number.isFinite(delta) || delta === 0) return
+
+      const userRef = doc(db, 'users', uid)
+      await setDoc(
+        userRef,
+        {
+          storageUsedBytes: increment(delta),
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      )
+    },
+
+    async setUserStorageUsed(uid, totalBytes) {
+      if (!uid) return
+      const value = Math.max(0, Math.trunc(Number(totalBytes || 0)))
+      await setDoc(
+        doc(db, 'users', uid),
+        {
+          storageUsedBytes: value,
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      )
+    },
 
     watchOwnerGalleries(ownerUid, onChange) {
       const q = query(collection(db, 'galerii'), where('userId', '==', ownerUid))

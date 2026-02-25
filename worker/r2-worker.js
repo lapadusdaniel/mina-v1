@@ -151,11 +151,16 @@ function requireBearerToken(request) {
 }
 
 function getClientIp(request) {
-  return (
-    request.headers.get('CF-Connecting-IP')
-    || request.headers.get('x-forwarded-for')
-    || 'unknown'
-  )
+  const direct = request.headers.get('CF-Connecting-IP')
+  if (direct && String(direct).trim()) return String(direct).trim()
+
+  const forwarded = request.headers.get('x-forwarded-for') || ''
+  if (forwarded) {
+    const first = String(forwarded).split(',')[0]?.trim()
+    if (first) return first
+  }
+
+  return 'unknown'
 }
 
 function isReadMethod(method) {
@@ -203,6 +208,10 @@ function parseLimiterSuccess(result) {
 function rateLimitKeyForRequest(request, scope) {
   const ip = getClientIp(request)
   const method = String(request.method || '').toUpperCase()
+  if (scope === 'write') {
+    // Keep write limiting strict per IP + method so unique file paths cannot bypass limits.
+    return `${scope}:${method}:${ip}`
+  }
   const url = new URL(request.url)
   const route = normalizePath(url.pathname.slice(1)) || '/'
   return `${scope}:${method}:${route}:${ip}`
@@ -327,32 +336,6 @@ function firestoreDocToPlain(doc) {
     plain[key] = firestoreValueToPlain(value)
   }
   return plain
-}
-
-function parseJsonOrNdjson(rawText) {
-  const text = String(rawText || '').trim()
-  if (!text) return []
-  try {
-    const parsed = JSON.parse(text)
-    return Array.isArray(parsed) ? parsed : [parsed]
-  } catch (_) {
-    const rows = []
-    for (const line of text.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      try {
-        rows.push(JSON.parse(trimmed))
-      } catch (_) {
-        // Ignore malformed lines and continue parsing the response stream.
-      }
-    }
-    return rows
-  }
-}
-
-function docIdFromFirestoreName(name) {
-  const parts = String(name || '').split('/').filter(Boolean)
-  return parts.length ? parts[parts.length - 1] : ''
 }
 
 function parseSubscriptionPriceId(docData) {
@@ -567,65 +550,10 @@ async function listFirestoreCollectionDocs({ projectId, collectionPath, idToken,
   return docs
 }
 
-async function runFirestoreQuery({ projectId, idToken, apiKey, structuredQuery }) {
-  if (!projectId || !structuredQuery) return []
-  const url = `${firestoreDocBaseUrl(projectId)}:runQuery${firestoreApiKeySuffix(apiKey)}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...firestoreAuthHeaders(idToken),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ structuredQuery }),
-  })
-  if (!res.ok) throw new Error(`Firestore runQuery failed (${res.status})`)
-  const raw = await res.text().catch(() => '')
-  return parseJsonOrNdjson(raw)
-}
-
-async function listOwnerGalleryIds({ uid, idToken, projectId, apiKey }) {
-  if (!uid || !idToken || !projectId) return []
-  const rows = await runFirestoreQuery({
-    projectId,
-    idToken,
-    apiKey,
-    structuredQuery: {
-      from: [{ collectionId: 'galerii' }],
-      where: {
-        fieldFilter: {
-          field: { fieldPath: 'userId' },
-          op: 'EQUAL',
-          value: { stringValue: uid },
-        },
-      },
-      select: {
-        fields: [{ fieldPath: 'userId' }],
-      },
-    },
-  }).catch(() => [])
-
-  const ids = new Set()
-  for (const row of rows) {
-    const doc = row?.document
-    const id = docIdFromFirestoreName(doc?.name)
-    if (id) ids.add(id)
-  }
-  return [...ids]
-}
-
-async function sumPrefixBytes(bucket, prefix) {
-  let total = 0
-  let cursor = undefined
-  while (true) {
-    const listed = await bucket.list({ prefix, cursor })
-    for (const obj of listed.objects || []) {
-      total += Number(obj?.size || 0)
-    }
-    if (!listed.truncated) break
-    cursor = listed.cursor
-    if (!cursor) break
-  }
-  return total
+function toNonNegativeInteger(value, fallback = 0) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < 0) return fallback
+  return Math.floor(numeric)
 }
 
 async function resolveUserPlan({ uid, idToken, env }) {
@@ -669,21 +597,25 @@ async function resolveUserPlan({ uid, idToken, env }) {
   return 'Free'
 }
 
-async function computeOwnerUsageBytes({ uid, idToken, env }) {
-  if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID || !env?.R2_BUCKET) return 0
-  const galleryIds = await listOwnerGalleryIds({
-    uid,
-    idToken,
+async function readUserStorageUsedBytes({ uid, idToken, env }) {
+  if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID) return 0
+  const userDoc = await fetchFirestoreDocByPath({
     projectId: env.FIREBASE_PROJECT_ID,
+    docPath: `users/${uid}`,
+    idToken,
     apiKey: env.FIREBASE_API_KEY,
-  })
-  if (!galleryIds.length) return 0
+  }).catch(() => null)
 
-  let total = 0
-  for (const galleryId of galleryIds) {
-    total += await sumPrefixBytes(env.R2_BUCKET, `galerii/${galleryId}/`)
+  const userData = firestoreDocToPlain(userDoc) || {}
+  const fields = [
+    userData.storageUsedBytes,
+    userData.storageBytesUsed,
+  ]
+  for (const value of fields) {
+    const parsed = toNonNegativeInteger(value, -1)
+    if (parsed >= 0) return parsed
   }
-  return total
+  return 0
 }
 
 async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadBytes, env }) {
@@ -710,7 +642,7 @@ async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadByt
 
   const plan = await resolveUserPlan({ uid, idToken: authContext.idToken, env })
   const limitBytes = storageLimitBytesForPlan(plan, env)
-  const usedBytes = await computeOwnerUsageBytes({ uid, idToken: authContext.idToken, env })
+  const usedBytes = await readUserStorageUsedBytes({ uid, idToken: authContext.idToken, env })
 
   if (usedBytes + uploadBytes > limitBytes) {
     writeCachedQuota(uid, { usedBytes, limitBytes, plan })

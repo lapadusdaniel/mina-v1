@@ -83,6 +83,7 @@ function Dashboard({ user, onLogout, initialTab }) {
   
   const fileInputRef = useRef(null)
   const metadataBackfillQueueRef = useRef(new Set())
+  const lastSyncedStorageBytesRef = useRef(null)
 
   // Auto-cleanup: șterge galeriile din coș mai vechi de TRASH_RETENTION_DAYS (R2 + Firestore)
   useEffect(() => {
@@ -104,6 +105,10 @@ function Dashboard({ user, onLogout, initialTab }) {
           try {
             await mediaService.deleteGalleryAssets(g.id, idToken, g.userId || user.uid)
             await galleriesService.deleteGallery(g.id)
+            const removedBytes = Math.max(0, Number(g?.storageBytes || 0))
+            if (removedBytes > 0) {
+              await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
+            }
           } catch (e) {
             console.warn('Trash cleanup failed for gallery', g.id, e)
           }
@@ -114,6 +119,18 @@ function Dashboard({ user, onLogout, initialTab }) {
     }
     run()
   }, [user?.uid])
+
+  // Keep a pre-calculated per-user storage counter in Firestore for fast quota checks in Worker.
+  useEffect(() => {
+    if (!user?.uid) return
+    const totalBytes = galerii.reduce((sum, g) => sum + Math.max(0, Number(g?.storageBytes || 0)), 0)
+    if (lastSyncedStorageBytesRef.current === totalBytes) return
+    lastSyncedStorageBytesRef.current = totalBytes
+
+    galleriesService.setUserStorageUsed(user.uid, totalBytes).catch(() => {
+      lastSyncedStorageBytesRef.current = null
+    })
+  }, [galerii, user?.uid])
 
   // Real-time listener pentru galerii
   useEffect(() => {
@@ -295,6 +312,7 @@ function Dashboard({ user, onLogout, initialTab }) {
         storageBytes: currentBytes + uploadedBytes,
         coverKey: galerieActiva?.coverKey || firstUploadedOriginal || '',
       })
+      await galleriesService.adjustUserStorageUsed(user.uid, uploadedBytes)
     } catch (error) {
       console.error('Error uploading:', error)
       alert('Eroare la upload!')
@@ -324,6 +342,9 @@ function Dashboard({ user, onLogout, initialTab }) {
           storageBytes: Math.max(0, currentBytes - removedBytes),
           coverKey: nextCoverKey,
         })
+        if (removedBytes > 0) {
+          await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
+        }
       }
     } catch (error) {
       console.error('Error:', error)
@@ -347,9 +368,14 @@ function Dashboard({ user, onLogout, initialTab }) {
   const handleDeletePermanently = async (id) => {
     if (!window.confirm('Această acțiune va șterge definitiv toate fotografiile din stocarea Cloudflare și nu poate fi anulată. Ștergi definitiv?')) return
     try {
+      const targetGallery = galerii.find((g) => g.id === id) || (galerieActiva?.id === id ? galerieActiva : null)
+      const removedBytes = Math.max(0, Number(targetGallery?.storageBytes || 0))
       const idToken = await authService.getCurrentIdToken()
       await mediaService.deleteGalleryAssets(id, idToken, user?.uid || '')
       await galleriesService.deleteGallery(id)
+      if (removedBytes > 0) {
+        await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
+      }
     } catch (error) {
       console.error('Error:', error)
       alert('Eroare la ștergere definitivă. Încearcă din nou.')
