@@ -9,6 +9,7 @@ const {
   normalizePath,
   parsePathInfo,
   parsePrefixInfo,
+  publicAssetCacheControl,
   rateLimitKeyForRequest,
   requireBearerToken,
 } = __workerTestables
@@ -69,4 +70,10 @@ test('rateLimitKeyForRequest uses only ip+method for write scope', () => {
   const keyB = rateLimitKeyForRequest(reqB, 'write')
   assert.equal(keyA, keyB)
   assert.equal(keyA, 'write:PUT:1.2.3.4')
+})
+
+
+test('publicAssetCacheControl differentiates token vs public assets', () => {
+  assert.equal(publicAssetCacheControl(''), 'public, max-age=31536000, immutable')
+  assert.equal(publicAssetCacheControl('abc123'), 'private, max-age=86400')
 })

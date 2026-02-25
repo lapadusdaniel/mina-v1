@@ -12,6 +12,7 @@ const BATCH_SIZE = 24;
 const INITIAL_VISIBLE = 24;
 const SELECTION_NAME_STORAGE_KEY = 'mina_nume_client';
 const LEGACY_SELECTION_NAME_STORAGE_KEY = 'fotolio_nume_client';
+const LIGHTBOX_PRELOAD_OFFSETS = [0, -1, 1, -2, 2, -3, 3, -4, 4];
 
 const urlCache = new Map();
 const { galleries: galleriesService, media: mediaService, sites: sitesService } = getAppServices();
@@ -67,51 +68,32 @@ async function downloadOriginalImage(pozaKey, filename) {
   }
 }
 
-function LazyGalleryImage({ pozaKey, index, isFav, onFavoriteClick, onClick, accentColor }) {
-  const [url, setUrl] = useState(() => urlCache.get(`medium:${pozaKey}`) || urlCache.get(`thumb:${pozaKey}`) || null);
+function LazyGalleryImage({ pozaKey, isFav, onFavoriteClick, onClick, accentColor }) {
+  const [url, setUrl] = useState(() => urlCache.get(`thumb:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (url) return;
     let cancelled = false;
 
-    const preferredType = window.innerWidth <= 768 ? 'thumb' : 'medium';
-    const preferredKey = `${preferredType}:${pozaKey}`;
-    const cachedPreferred = urlCache.get(preferredKey);
-    if (cachedPreferred) {
-      setUrl(cachedPreferred);
+    const cachedThumb = urlCache.get(`thumb:${pozaKey}`);
+    if (cachedThumb) {
+      setUrl(cachedThumb);
       return () => { cancelled = true; };
     }
 
-    const load = async () => {
-      try {
-        const preferred = await mediaService.getPhotoUrl(pozaKey, preferredType);
-        if (cancelled) return;
-        urlCache.set(preferredKey, preferred);
-        setUrl(preferred);
-        return;
-      } catch (_) {
-      }
-
+    const loadThumb = async () => {
       try {
         const thumb = await mediaService.getPhotoUrl(pozaKey, 'thumb');
         if (cancelled) return;
         urlCache.set(`thumb:${pozaKey}`, thumb);
         setUrl(thumb);
-        return;
       } catch (_) {
-      }
-
-      try {
-        const original = await mediaService.getPhotoUrl(pozaKey, 'original');
-        if (cancelled) return;
-        urlCache.set(`original:${pozaKey}`, original);
-        setUrl(original);
-      } catch (_) {
+        // Keep placeholder when thumb is unavailable. Grid should load thumbnails only.
       }
     };
 
-    load();
+    loadThumb();
     return () => { cancelled = true; };
   }, [pozaKey, url]);
 
@@ -272,10 +254,11 @@ const ClientGallery = () => {
   const [galerie, setGalerie] = useState(null);
   const [poze, setPoze] = useState([]);
   const [coverThumbUrl, setCoverThumbUrl] = useState(null);
-  const [coverOriginalUrl, setCoverOriginalUrl] = useState(null);
+  const [coverMediumUrl, setCoverMediumUrl] = useState(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const [lightboxOriginalUrls, setLightboxOriginalUrls] = useState({});
   const [lightboxMediumUrls, setLightboxMediumUrls] = useState({});
+  const [lightboxSessionSources, setLightboxSessionSources] = useState({});
   const [loading, setLoading] = useState(true);
   const [eroare, setEroare] = useState(null);
   const loadMoreRef = useRef(null);
@@ -285,8 +268,7 @@ const ClientGallery = () => {
   const [nameInputValue, setNameInputValue] = useState('');
   const [selectionTitleInputValue, setSelectionTitleInputValue] = useState('');
   const [pendingFavAction, setPendingFavAction] = useState(null);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [selectedImage, setSelectedImage] = useState(null);
   const [lightboxDownloading, setLightboxDownloading] = useState(false);
   const [countPop, setCountPop] = useState(false);
 
@@ -299,6 +281,79 @@ const ClientGallery = () => {
   });
 
   const contentRef = useRef(null);
+  const lightboxOpen = selectedImage !== null;
+  const lightboxIndex = selectedImage ?? 0;
+
+  const closeLightbox = useCallback(() => {
+    setSelectedImage(null);
+    setLightboxDownloading(false);
+    setLightboxSessionSources({});
+  }, []);
+
+  const preloadMediumForLightbox = useCallback(async (photoKey) => {
+    if (!photoKey) return null;
+
+    const cached = urlCache.get(`medium:${photoKey}`);
+    if (cached) {
+      setLightboxMediumUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: cached }));
+      return cached;
+    }
+
+    try {
+      const medium = await mediaService.getPhotoUrl(photoKey, 'medium');
+      urlCache.set(`medium:${photoKey}`, medium);
+      setLightboxMediumUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: medium }));
+      return medium;
+    } catch (_) {
+      return null;
+    }
+  }, []);
+
+  const preloadOriginalForLightbox = useCallback(async (photoKey) => {
+    if (!photoKey) return null;
+
+    const cached = urlCache.get(`original:${photoKey}`);
+    if (cached) {
+      setLightboxOriginalUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: cached }));
+      return cached;
+    }
+
+    try {
+      const original = await mediaService.getPhotoUrl(photoKey, 'original');
+      urlCache.set(`original:${photoKey}`, original);
+      setLightboxOriginalUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: original }));
+      return original;
+    } catch (_) {
+      return null;
+    }
+  }, []);
+
+  const seedLightboxSources = useCallback((centerIndex) => {
+    if (!Number.isInteger(centerIndex) || centerIndex < 0 || !pozeAfisate.length) return;
+
+    setLightboxSessionSources((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      for (const offset of LIGHTBOX_PRELOAD_OFFSETS) {
+        const idx = centerIndex + offset;
+        if (idx < 0 || idx >= pozeAfisate.length) continue;
+
+        const key = pozeAfisate[idx]?.key;
+        if (!key || next[key]) continue;
+
+        const source = isMobile
+          ? (urlCache.get(`original:${key}`) || urlCache.get(`medium:${key}`) || urlCache.get(`thumb:${key}`) || '')
+          : (urlCache.get(`medium:${key}`) || urlCache.get(`original:${key}`) || urlCache.get(`thumb:${key}`) || '');
+
+        if (!source) continue;
+        next[key] = source;
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [isMobile, pozeAfisate]);
 
   const formatDate = (val) => {
     if (!val) return null;
@@ -387,8 +442,8 @@ const ClientGallery = () => {
 
   useEffect(() => {
     const coverKey = poze[0]?.key;
-    if (!coverKey || urlCache.get(`original:${coverKey}`)) return;
-    mediaService.getPhotoUrl(coverKey, 'original').then((url) => { urlCache.set(`original:${coverKey}`, url); setCoverOriginalUrl(url); }).catch(() => {});
+    if (!coverKey || urlCache.get(`medium:${coverKey}`)) return;
+    mediaService.getPhotoUrl(coverKey, 'medium').then((url) => { urlCache.set(`medium:${coverKey}`, url); setCoverMediumUrl(url); }).catch(() => {});
   }, [poze]);
 
   useEffect(() => {
@@ -405,24 +460,41 @@ const ClientGallery = () => {
 
   useEffect(() => {
     if (!lightboxOpen || !pozeAfisate.length) return;
-    const indices = [lightboxIndex, lightboxIndex - 1, lightboxIndex + 1].filter((i) => i >= 0 && i < pozeAfisate.length);
+    seedLightboxSources(lightboxIndex);
+    const indices = LIGHTBOX_PRELOAD_OFFSETS
+      .map((offset) => lightboxIndex + offset)
+      .filter((i) => i >= 0 && i < pozeAfisate.length);
     indices.forEach((i) => {
       const key = pozeAfisate[i].key;
-      if (!urlCache.get(`original:${key}`)) {
-        mediaService.getPhotoUrl(key, 'original').then((url) => {
-          urlCache.set(`original:${key}`, url);
-          setLightboxOriginalUrls((prev) => ({ ...prev, [key]: url }));
-        }).catch(() => {});
+      void preloadMediumForLightbox(key);
+      if (isMobile) {
+        void preloadOriginalForLightbox(key);
       }
-      if (!urlCache.get(`medium:${key}`)) {
-        mediaService.getPhotoUrl(key, 'medium').then((url) => {
-          urlCache.set(`medium:${key}`, url);
-          setLightboxMediumUrls((prev) => ({ ...prev, [key]: url }));
-        }).catch(() => {});
+      if (!urlCache.get(`thumb:${key}`)) {
+        mediaService.getPhotoUrl(key, 'thumb').then((url) => urlCache.set(`thumb:${key}`, url)).catch(() => {});
       }
-      if (!urlCache.get(`thumb:${key}`)) { mediaService.getPhotoUrl(key, 'thumb').then((url) => urlCache.set(`thumb:${key}`, url)).catch(() => {}); }
     });
-  }, [lightboxOpen, lightboxIndex, pozeAfisate]);
+  }, [isMobile, lightboxOpen, lightboxIndex, pozeAfisate, preloadMediumForLightbox, preloadOriginalForLightbox, seedLightboxSources]);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    if (!pozeAfisate.length) {
+      closeLightbox();
+      return;
+    }
+    if (lightboxIndex >= pozeAfisate.length) {
+      setSelectedImage(pozeAfisate.length - 1);
+    }
+  }, [lightboxOpen, lightboxIndex, pozeAfisate.length, closeLightbox]);
+
+  useEffect(() => {
+    if (!lightboxOpen) return undefined;
+    const hadOverflowHidden = document.body.classList.contains('overflow-hidden');
+    document.body.classList.add('overflow-hidden');
+    return () => {
+      if (!hadOverflowHidden) document.body.classList.remove('overflow-hidden');
+    };
+  }, [lightboxOpen]);
 
   const handleEnterGallery = () => {
     setCoverVisible(false);
@@ -518,8 +590,8 @@ const ClientGallery = () => {
 
   if (!galerie) return null;
 
-  const coverImageUrl = galerie.coverUrl || coverOriginalUrl || coverThumbUrl;
-  const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverOriginalUrl;
+  const coverImageUrl = galerie.coverUrl || coverMediumUrl || coverThumbUrl;
+  const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverMediumUrl;
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
   const dataExpirareText = formatDate(galerie.dataExpirare);
   const favCount = galerie?.favorite?.length ?? 0;
@@ -643,21 +715,33 @@ const ClientGallery = () => {
           ) : (
             <>
               <Masonry
-                breakpointCols={{ default: 3, 1100: 3, 900: 2, 600: 1 }}
+                breakpointCols={{ default: 3, 1100: 3, 900: 2, 640: 2, 340: 1 }}
                 className="cg-masonry"
                 columnClassName="cg-masonry-col"
               >
-                {pozeVizibile.map((poza, index) => (
+                {pozeVizibile.map((poza) => (
                   <LazyGalleryImage
                     key={poza.key}
                     pozaKey={poza.key}
-                    index={index}
                     isFav={galerie.favorite?.includes(poza.key)}
                     onFavoriteClick={handleFavoriteClick}
                     accentColor={profile.accentColor}
-                    onClick={() => {
-                      setLightboxIndex(pozeAfisate.findIndex((p) => p.key === poza.key));
-                      setLightboxOpen(true);
+                    onClick={async () => {
+                      const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
+                      if (nextIndex < 0) return;
+
+                      if (isMobile && !urlCache.get(`original:${poza.key}`)) {
+                        await Promise.race([
+                          preloadOriginalForLightbox(poza.key),
+                          new Promise((resolve) => setTimeout(resolve, 700)),
+                        ]);
+                      } else if (!urlCache.get(`medium:${poza.key}`)) {
+                        await preloadMediumForLightbox(poza.key);
+                      }
+
+                      seedLightboxSources(nextIndex);
+                      setSelectedImage(nextIndex >= 0 ? nextIndex : 0);
+                      setLightboxDownloading(false);
                     }}
                   />
                 ))}
@@ -668,17 +752,41 @@ const ClientGallery = () => {
 
               <Lightbox
                 open={lightboxOpen}
-                close={() => setLightboxOpen(false)}
+                className="mina-lightbox"
+                close={closeLightbox}
                 index={lightboxIndex}
+                on={{
+                  view: ({ index }) => {
+                    seedLightboxSources(index);
+                    setSelectedImage(index);
+                  },
+                  click: ({ target }) => { if (target === 'backdrop') closeLightbox(); },
+                }}
                 slides={pozeAfisate.map((p) => ({
-                  src: lightboxOriginalUrls[p.key]
-                    || urlCache.get(`original:${p.key}`)
-                    || lightboxMediumUrls[p.key]
-                    || urlCache.get(`medium:${p.key}`)
-                    || urlCache.get(`thumb:${p.key}`)
-                    || '',
+                  src: lightboxSessionSources[p.key]
+                    || (isMobile
+                    ? (
+                      lightboxOriginalUrls[p.key]
+                      || urlCache.get(`original:${p.key}`)
+                      || lightboxMediumUrls[p.key]
+                      || urlCache.get(`medium:${p.key}`)
+                      || ''
+                    )
+                    : (
+                      lightboxMediumUrls[p.key]
+                      || urlCache.get(`medium:${p.key}`)
+                      || lightboxOriginalUrls[p.key]
+                      || urlCache.get(`original:${p.key}`)
+                      || ''
+                    )),
                 }))}
                 plugins={lightboxPlugins}
+                controller={{ closeOnBackdropClick: true, closeOnPullDown: true }}
+                styles={{
+                  button: { filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))' },
+                  root: { position: 'fixed', inset: 0, zIndex: 10000, backgroundColor: '#000' },
+                  container: { position: 'fixed', inset: 0, backgroundColor: '#000' },
+                }}
                 carousel={{ finite: false }}
                 render={{
                   buttonPrev: isMobile ? () => null : undefined,
@@ -1263,7 +1371,7 @@ const ClientGallery = () => {
           .cg-toolbar-btn span { display: none; }
           .cg-toolbar-download span { display: none; }
           .cg-toolbar-download { padding: 8px 12px; }
-          .cg-gallery { padding: 20px 12px 0; }
+          .cg-gallery { padding: 20px 8px 0; }
           .cg-masonry { margin-left: -8px; }
           .cg-masonry-col { padding-left: 8px; }
           .cg-masonry-col > div { margin-bottom: 8px; }
@@ -1274,6 +1382,25 @@ const ClientGallery = () => {
         }
 
         /* ── Lightbox mobile overrides ── */
+        .mina-lightbox.yarl__portal {
+          position: fixed !important;
+          inset: 0 !important;
+          z-index: 10000 !important;
+          width: 100vw !important;
+          height: 100dvh !important;
+          background: #000 !important;
+        }
+        .mina-lightbox .yarl__container {
+          position: fixed !important;
+          inset: 0 !important;
+          width: 100vw !important;
+          height: 100dvh !important;
+          background: #000 !important;
+          padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+        }
+        .mina-lightbox .yarl__toolbar {
+          padding-top: max(4px, env(safe-area-inset-top, 0px)) !important;
+        }
         @media (max-width: 768px) {
           .yarl__slide_image {
             object-fit: contain !important;

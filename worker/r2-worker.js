@@ -859,6 +859,10 @@ function galleryIdFromPublicPrefix(prefixInfo) {
   return ''
 }
 
+function publicAssetCacheControl(shareToken = '') {
+  return shareToken ? 'private, max-age=86400' : 'public, max-age=31536000, immutable'
+}
+
 async function listAllKeys(bucket, prefix) {
   const keys = []
   let cursor = undefined
@@ -890,6 +894,7 @@ export const __workerTestables = {
   parsePrefixInfo,
   canPublicReadKey,
   canPublicListPrefix,
+  publicAssetCacheControl,
   requireBearerToken,
   resolveRateLimitBinding,
   rateLimitKeyForRequest,
@@ -979,11 +984,16 @@ export default {
         const object = await env.R2_BUCKET.get(pathInfo.key)
         if (!object) return text('Not Found', 404)
 
+        const cacheControl = publicAssetCacheControl(shareToken)
         return new Response(object.body, {
           status: 200,
           headers: {
             ...corsHeaders(),
             'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+            'Cache-Control': cacheControl,
+            ...(object.httpEtag
+              ? { ETag: object.httpEtag }
+              : {}),
           },
         })
       }

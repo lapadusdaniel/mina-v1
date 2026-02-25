@@ -294,8 +294,8 @@ function Dashboard({ user, onLogout, initialTab }) {
         if (!firstUploadedOriginal) firstUploadedOriginal = origPath
 
         const [mediumFile, thumbFile] = await Promise.all([
-          imageCompression(file, { maxWidthOrHeight: 2560, fileType: 'image/webp', initialQuality: 0.95, useWebWorker: true }),
-          imageCompression(file, { maxWidthOrHeight: 1000, fileType: 'image/webp', initialQuality: 0.86, useWebWorker: true })
+          imageCompression(file, { maxWidthOrHeight: 3200, fileType: 'image/webp', initialQuality: 0.92, useWebWorker: true }),
+          imageCompression(file, { maxWidthOrHeight: 1200, fileType: 'image/webp', initialQuality: 0.9, useWebWorker: true })
         ])
 
         await Promise.all([

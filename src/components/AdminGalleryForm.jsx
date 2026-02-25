@@ -90,14 +90,14 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
 
             const [mediumFile, thumbFile] = await Promise.all([
               imageCompression(file, {
-                maxWidthOrHeight: 2560,
-                initialQuality: 0.95,
+                maxWidthOrHeight: 3200,
+                initialQuality: 0.92,
                 useWebWorker: true,
                 fileType: 'image/webp',
               }),
               imageCompression(file, {
-                maxWidthOrHeight: 1000,
-                initialQuality: 0.86,
+                maxWidthOrHeight: 1200,
+                initialQuality: 0.9,
                 useWebWorker: true,
                 fileType: 'image/webp',
               }),
