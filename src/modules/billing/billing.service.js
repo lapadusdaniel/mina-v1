@@ -319,16 +319,21 @@ export function createBillingModule({ db, functions }) {
       }
     },
 
-    async createPortalLink({ returnUrl }) {
+    async createPortalLink({ returnUrl, flowData, locale = 'auto', configuration } = {}) {
       if (!createPortalLinkCallable) {
         throw new Error('Billing portal indisponibil: Firebase Functions nu este configurat.')
       }
-      const result = await createPortalLinkCallable({
+      const requestPayload = {
         returnUrl: returnUrl || '',
-      })
-      const payload = result?.data
-      if (typeof payload === 'string' && payload.startsWith('http')) return payload
-      const url = payload?.url || payload?.portalLink || payload?.link || ''
+      }
+      if (locale) requestPayload.locale = locale
+      if (configuration) requestPayload.configuration = configuration
+      if (flowData) requestPayload.flow_data = flowData
+
+      const result = await createPortalLinkCallable(requestPayload)
+      const responsePayload = result?.data
+      if (typeof responsePayload === 'string' && responsePayload.startsWith('http')) return responsePayload
+      const url = responsePayload?.url || responsePayload?.portalLink || responsePayload?.link || ''
       if (!url) {
         throw new Error('Nu am primit URL-ul de Stripe Customer Portal.')
       }

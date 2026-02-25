@@ -119,13 +119,34 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
       alert('Abonamentul este deja programat pentru anulare la finalul perioadei curente.')
       return
     }
-    const confirmed = window.confirm('Anulezi abonamentul la finalul perioadei curente? Vei păstra accesul până la data de reînnoire.')
-    if (!confirmed) return
+
+    const returnUrl = `${window.location.origin}/dashboard?tab=abonament&billing=updated`
+    const flowData = activeSubscription?.id
+      ? {
+          type: 'subscription_cancel',
+          subscription_cancel: {
+            subscription: activeSubscription.id,
+          },
+          after_completion: {
+            type: 'redirect',
+            redirect: {
+              return_url: returnUrl,
+            },
+          },
+        }
+      : null
+
     setOpeningPortal(true)
     try {
-      const portalUrl = await billingService.createPortalLink({
-        returnUrl: `${window.location.origin}/dashboard?tab=abonament&billing=updated`,
-      })
+      let portalUrl = ''
+      try {
+        portalUrl = await billingService.createPortalLink({
+          returnUrl,
+          flowData,
+        })
+      } catch {
+        portalUrl = await billingService.createPortalLink({ returnUrl })
+      }
       window.location.assign(portalUrl)
     } catch (err) {
       console.error('Eroare portal Stripe:', err)
@@ -256,7 +277,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
                   ? 'Se deschide portalul Stripe...'
                   : activeSubscription?.cancelAtPeriodEnd
                     ? 'Anulare programată'
-                    : 'Anulează abonamentul la finalul perioadei'}
+                    : 'Anulează la finalul perioadei'}
               </button>
               <p className="sub-muted">
                 Anularea este gestionată prin Stripe și menține accesul până la sfârșitul perioadei plătite.
