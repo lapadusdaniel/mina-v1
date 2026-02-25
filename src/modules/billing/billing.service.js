@@ -1,5 +1,4 @@
-import { addDoc, collection, onSnapshot } from 'firebase/firestore'
-import { doc } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot } from 'firebase/firestore'
 
 export const STRIPE_PRICES = {
   pro: (import.meta.env.VITE_STRIPE_PRICE_PRO || '').trim(),
@@ -37,6 +36,73 @@ function getPriceIdFromSubscription(docData) {
   }
   if (docData.price?.id) return docData.price.id
   return null
+}
+
+function toDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return value
+  if (typeof value.toDate === 'function') return value.toDate()
+  if (typeof value.toMillis === 'function') return new Date(value.toMillis())
+  if (typeof value === 'number') {
+    const millis = value > 1e12 ? value : value * 1000
+    const parsed = new Date(millis)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  if (typeof value === 'object' && value) {
+    if (typeof value.seconds === 'number') return new Date(value.seconds * 1000)
+    if (typeof value._seconds === 'number') return new Date(value._seconds * 1000)
+  }
+  return null
+}
+
+function toStripeStatus(raw) {
+  if (!raw) return ''
+  return String(raw).trim().toLowerCase()
+}
+
+function normalizeSubscription(docSnap) {
+  const data = docSnap.data() || {}
+  const priceId = getPriceIdFromSubscription(data)
+  return {
+    id: docSnap.id,
+    status: toStripeStatus(data.status),
+    plan: priceIdToPlan(priceId),
+    priceId,
+    cancelAtPeriodEnd: Boolean(data.cancel_at_period_end ?? data.cancelAtPeriodEnd),
+    createdAt: toDate(data.created ?? data.createdAt),
+    currentPeriodEnd: toDate(data.current_period_end ?? data.currentPeriodEnd),
+  }
+}
+
+function normalizeCheckoutSession(docSnap) {
+  const data = docSnap.data() || {}
+  const priceId = typeof data.price === 'string' ? data.price : null
+  const amountRaw = data.amount_total ?? data.amountTotal ?? data.amount_subtotal ?? data.amountSubtotal
+  const amountTotal = Number.isFinite(Number(amountRaw)) ? Number(amountRaw) : null
+  const statusRaw = data.payment_status ?? data.paymentStatus ?? data.status
+
+  return {
+    id: docSnap.id,
+    status: toStripeStatus(statusRaw || (data.error ? 'error' : 'created')),
+    plan: priceIdToPlan(priceId),
+    priceId,
+    amountTotal,
+    currency: String(data.currency || 'ron').toLowerCase(),
+    createdAt: toDate(data.createdAt ?? data.created),
+    hasError: Boolean(data.error),
+  }
+}
+
+function sortByDateDesc(items, field) {
+  return [...items].sort((a, b) => {
+    const da = a?.[field] instanceof Date ? a[field].getTime() : 0
+    const db = b?.[field] instanceof Date ? b[field].getTime() : 0
+    return db - da
+  })
 }
 
 async function addCheckoutSessionWithTimeout({ db, uid, payload }) {
@@ -180,6 +246,43 @@ export function createBillingModule({ db }) {
       return () => {
         if (unsubOverride) unsubOverride()
         if (unsubStripe) unsubStripe()
+      }
+    },
+
+    async getBillingOverview(uid) {
+      if (!uid) throw new Error('billing.getBillingOverview: uid este obligatoriu')
+
+      const [overrideSnap, subsSnap, sessionsSnap] = await Promise.all([
+        getDoc(doc(db, 'adminOverrides', uid)),
+        getDocs(collection(db, 'customers', uid, 'subscriptions')),
+        getDocs(collection(db, 'customers', uid, 'checkout_sessions')),
+      ])
+
+      const subscriptions = sortByDateDesc(
+        subsSnap.docs.map(normalizeSubscription),
+        'createdAt'
+      )
+
+      const checkoutSessions = sortByDateDesc(
+        sessionsSnap.docs.map(normalizeCheckoutSession),
+        'createdAt'
+      )
+
+      const paidStatuses = new Set(['paid', 'complete', 'succeeded'])
+      const payments = checkoutSessions.filter((session) =>
+        paidStatuses.has(session.status) ||
+        (session.amountTotal !== null && session.amountTotal > 0 && !session.hasError)
+      )
+
+      const activeSubscription =
+        subscriptions.find((sub) => VALID_STATUSES.includes(sub.status)) || null
+
+      return {
+        overridePlan: overrideSnap.exists() ? (overrideSnap.data()?.plan || null) : null,
+        activeSubscription,
+        subscriptions: subscriptions.slice(0, 12),
+        payments: payments.slice(0, 20),
+        checkoutSessions: checkoutSessions.slice(0, 20),
       }
     },
 

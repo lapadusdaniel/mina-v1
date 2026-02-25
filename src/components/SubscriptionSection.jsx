@@ -1,12 +1,71 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
 import './SubscriptionSection.css';
 
 const billingService = getAppServices().billing;
 
-const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
+function formatDate(value) {
+  if (!(value instanceof Date)) return '—'
+  return new Intl.DateTimeFormat('ro-RO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(value)
+}
+
+function formatAmount(amountMinor, currency = 'ron') {
+  if (amountMinor === null || amountMinor === undefined || Number.isNaN(Number(amountMinor))) return '—'
+  const amount = Number(amountMinor) / 100
+  return new Intl.NumberFormat('ro-RO', {
+    style: 'currency',
+    currency: String(currency || 'ron').toUpperCase(),
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+function mapStatusLabel(status) {
+  const normalized = String(status || '').toLowerCase()
+  if (['paid', 'complete', 'succeeded', 'active', 'trialing'].includes(normalized)) return 'Activ'
+  if (['canceled', 'cancelled'].includes(normalized)) return 'Anulat'
+  if (['failed', 'error'].includes(normalized)) return 'Eroare'
+  if (['open', 'pending', 'unpaid'].includes(normalized)) return 'În așteptare'
+  return normalized ? normalized : '—'
+}
+
+function statusClass(status) {
+  const normalized = String(status || '').toLowerCase()
+  if (['paid', 'complete', 'succeeded', 'active', 'trialing'].includes(normalized)) return 'is-success'
+  if (['failed', 'error', 'canceled', 'cancelled'].includes(normalized)) return 'is-danger'
+  return 'is-muted'
+}
+
+const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => {
   const [loadingPlan, setLoadingPlan] = useState(null);
+  const [billingData, setBillingData] = useState(null)
+  const [billingLoading, setBillingLoading] = useState(false)
+  const [billingError, setBillingError] = useState('')
   const userPlan = userPlanProp ?? user?.plan ?? 'Free';
+
+  const loadBillingOverview = async () => {
+    if (!user?.uid) return
+    setBillingLoading(true)
+    setBillingError('')
+    try {
+      const overview = await billingService.getBillingOverview(user.uid)
+      setBillingData(overview)
+    } catch (err) {
+      console.error('Eroare billing overview:', err)
+      setBillingError('Nu pot încărca istoricul de plăți acum.')
+    } finally {
+      setBillingLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBillingOverview()
+  }, [user?.uid, userPlan])
 
   const handleCheckout = async (planId) => {
     if (planId === 'free') return;
@@ -39,6 +98,11 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
       clearTimeout(uiFallbackTimeout)
     }
   };
+
+  const payments = billingData?.payments || []
+  const activeSubscription = billingData?.activeSubscription || null
+  const overridePlan = billingData?.overridePlan || null
+  const hasManualOverride = Boolean(overridePlan)
 
   const plans = [
     {
@@ -101,6 +165,81 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp }) => {
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="sub-billing-grid">
+        <div className="sub-billing-card">
+          <div className="sub-billing-head">
+            <h3>Detalii cont</h3>
+            <button
+              type="button"
+              className="sub-refresh-btn"
+              onClick={loadBillingOverview}
+              disabled={billingLoading}
+            >
+              {billingLoading ? 'Se încarcă...' : 'Actualizează'}
+            </button>
+          </div>
+
+          {billingError && <p className="sub-billing-error">{billingError}</p>}
+
+          <div className="sub-kv">
+            <div className="sub-kv-row">
+              <span>Plan curent</span>
+              <strong>{userPlan}</strong>
+            </div>
+            <div className="sub-kv-row">
+              <span>Limită stocare</span>
+              <strong>{Number(storageLimit || 0)} GB</strong>
+            </div>
+            <div className="sub-kv-row">
+              <span>Email cont</span>
+              <strong>{user?.email || '—'}</strong>
+            </div>
+            <div className="sub-kv-row">
+              <span>Status abonament</span>
+              <strong>{activeSubscription ? mapStatusLabel(activeSubscription.status) : 'Fără abonament activ'}</strong>
+            </div>
+            <div className="sub-kv-row">
+              <span>Următoarea reînnoire</span>
+              <strong>{formatDate(activeSubscription?.currentPeriodEnd)}</strong>
+            </div>
+            <div className="sub-kv-row">
+              <span>Sursă plan</span>
+              <strong>{hasManualOverride ? `Manual (${overridePlan})` : 'Stripe automat'}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="sub-billing-card">
+          <div className="sub-billing-head">
+            <h3>Plăți efectuate</h3>
+            <span className="sub-muted">{payments.length} înregistrări</span>
+          </div>
+
+          {billingLoading && payments.length === 0 ? (
+            <p className="sub-muted">Se încarcă istoricul...</p>
+          ) : payments.length === 0 ? (
+            <p className="sub-muted">Încă nu există plăți confirmate pentru acest cont.</p>
+          ) : (
+            <div className="sub-payments-list">
+              {payments.map((item) => (
+                <div key={item.id} className="sub-payment-row">
+                  <div className="sub-payment-left">
+                    <div className="sub-payment-date">{formatDate(item.createdAt)}</div>
+                    <div className="sub-payment-plan">{item.plan || 'Plan necunoscut'}</div>
+                  </div>
+                  <div className="sub-payment-right">
+                    <div className="sub-payment-amount">{formatAmount(item.amountTotal, item.currency)}</div>
+                    <span className={`sub-payment-status ${statusClass(item.status)}`}>
+                      {mapStatusLabel(item.status)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
