@@ -94,6 +94,7 @@ function normalizeCheckoutSession(docSnap) {
     currency: String(data.currency || 'ron').toLowerCase(),
     createdAt: toDate(data.createdAt ?? data.created),
     hasError: Boolean(data.error),
+    source: 'checkout_session',
   }
 }
 
@@ -103,6 +104,20 @@ function sortByDateDesc(items, field) {
     const db = b?.[field] instanceof Date ? b[field].getTime() : 0
     return db - da
   })
+}
+
+function normalizeSubscriptionAsPayment(sub) {
+  return {
+    id: `subscription:${sub.id}`,
+    status: sub.status || 'active',
+    plan: sub.plan,
+    priceId: sub.priceId || null,
+    amountTotal: null,
+    currency: 'ron',
+    createdAt: sub.createdAt || sub.currentPeriodEnd || null,
+    hasError: false,
+    source: 'subscription',
+  }
 }
 
 async function addCheckoutSessionWithTimeout({ db, uid, payload }) {
@@ -268,14 +283,28 @@ export function createBillingModule({ db }) {
         'createdAt'
       )
 
-      const paidStatuses = new Set(['paid', 'complete', 'succeeded'])
-      const payments = checkoutSessions.filter((session) =>
+      const paidStatuses = new Set([
+        'paid',
+        'complete',
+        'succeeded',
+        'no_payment_required',
+      ])
+      const paymentsFromSessions = checkoutSessions.filter((session) =>
         paidStatuses.has(session.status) ||
-        (session.amountTotal !== null && session.amountTotal > 0 && !session.hasError)
+        (session.amountTotal !== null && session.amountTotal >= 0 && !session.hasError && session.status !== 'created')
       )
 
       const activeSubscription =
         subscriptions.find((sub) => VALID_STATUSES.includes(sub.status)) || null
+
+      const subscriptionFallback = subscriptions
+        .filter((sub) => VALID_STATUSES.includes(sub.status) || sub.status === 'canceled')
+        .map(normalizeSubscriptionAsPayment)
+
+      const payments =
+        paymentsFromSessions.length > 0
+          ? paymentsFromSessions
+          : subscriptionFallback
 
       return {
         overridePlan: overrideSnap.exists() ? (overrideSnap.data()?.plan || null) : null,

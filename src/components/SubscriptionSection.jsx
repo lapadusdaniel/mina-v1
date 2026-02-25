@@ -28,6 +28,7 @@ function formatAmount(amountMinor, currency = 'ron') {
 function mapStatusLabel(status) {
   const normalized = String(status || '').toLowerCase()
   if (['paid', 'complete', 'succeeded', 'active', 'trialing'].includes(normalized)) return 'Activ'
+  if (normalized === 'no_payment_required') return 'Cupon 100% (0 lei)'
   if (['canceled', 'cancelled'].includes(normalized)) return 'Anulat'
   if (['failed', 'error'].includes(normalized)) return 'Eroare'
   if (['open', 'pending', 'unpaid'].includes(normalized)) return 'În așteptare'
@@ -36,7 +37,7 @@ function mapStatusLabel(status) {
 
 function statusClass(status) {
   const normalized = String(status || '').toLowerCase()
-  if (['paid', 'complete', 'succeeded', 'active', 'trialing'].includes(normalized)) return 'is-success'
+  if (['paid', 'complete', 'succeeded', 'active', 'trialing', 'no_payment_required'].includes(normalized)) return 'is-success'
   if (['failed', 'error', 'canceled', 'cancelled'].includes(normalized)) return 'is-danger'
   return 'is-muted'
 }
