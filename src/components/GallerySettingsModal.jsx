@@ -316,14 +316,14 @@ export default function GallerySettingsModal({
                     className={formState.storageMode === 'lifetime' ? 'active' : ''}
                     onClick={() => setField('storageMode', 'lifetime')}
                   >
-                    Durată definită
+                    Durată limitată
                   </button>
                   <button
                     type="button"
                     className={formState.storageMode === 'indefinite' ? 'active' : ''}
                     onClick={() => setField('storageMode', 'indefinite')}
                   >
-                    Stocare nelimitată
+                    Durată nelimitată
                   </button>
                 </div>
 
@@ -349,18 +349,9 @@ export default function GallerySettingsModal({
                   </>
                 )}
 
-                <ToggleField
-                  label="Recunoaștere facială"
-                  hint="Placeholder pentru funcția viitoare."
-                  checked={!!formState.settings.main.faceRecognition}
-                  onChange={(value) => setSetting('main', 'faceRecognition', value)}
-                />
               </section>
 
               <section className="gallery-config-card">
-                <p className="gallery-config-label">Tip galerie</p>
-                <div className="gallery-config-type-pill">Galerie client</div>
-
                 <ToggleField
                   label="Permite descărcarea fișierelor originale"
                   checked={!!formState.settings.main.allowOriginalDownloads}

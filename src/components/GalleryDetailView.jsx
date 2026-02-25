@@ -18,7 +18,8 @@ export default function GalleryDetailView({
   onBack,
   onPreview,
   onUploadPoze,
-  onDeletePoza
+  onDeletePoza,
+  onDeleteGallery
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -123,8 +124,15 @@ export default function GalleryDetailView({
       </div>
 
       <GallerySettingsModal
+        user={user}
         galerie={galerie}
+        mode="edit"
         open={settingsOpen}
+        onDeleted={async (galleryId) => {
+          await onDeleteGallery?.(galleryId)
+          setSettingsOpen(false)
+          onBack?.()
+        }}
         onClose={() => setSettingsOpen(false)}
       />
     </div>

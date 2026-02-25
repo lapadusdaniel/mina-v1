@@ -499,6 +499,7 @@ function Dashboard({ user, onLogout, initialTab }) {
           onPreview={handlePreview}
           onUploadPoze={handleUploadPoze}
           onDeletePoza={handleDeletePoza}
+          onDeleteGallery={handleMoveToTrash}
         />
       )
     }

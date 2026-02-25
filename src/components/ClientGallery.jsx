@@ -283,6 +283,7 @@ const ClientGallery = () => {
   const contentRef = useRef(null);
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
+  const pozeAfisate = galerie ? (doarFavorite ? poze.filter((p) => galerie.favorite?.includes(p.key)) : poze) : [];
 
   const closeLightbox = useCallback(() => {
     setSelectedImage(null);
@@ -435,8 +436,6 @@ const ClientGallery = () => {
     loadClientSelection();
     return () => { cancelled = true; };
   }, [galerie?.id, numeSelectie]);
-
-  const pozeAfisate = galerie ? (doarFavorite ? poze.filter((p) => galerie.favorite?.includes(p.key)) : poze) : [];
 
   useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [doarFavorite]);
 

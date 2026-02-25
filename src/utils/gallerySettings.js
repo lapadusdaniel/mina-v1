@@ -12,8 +12,6 @@ const STORAGE_DURATION_BY_KEY = STORAGE_DURATION_OPTIONS.reduce((acc, option) =>
 
 export const DEFAULT_GALLERY_SETTINGS = {
   main: {
-    faceRecognition: false,
-    galleryType: 'client',
     allowOriginalDownloads: true,
     watermarkEnabled: false,
     language: 'ro',
