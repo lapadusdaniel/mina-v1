@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, setDoc, limit as limitTo } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, limit as limitTo } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 
 export const STRIPE_PRICES = {
@@ -404,12 +404,14 @@ export function createBillingModule({ db, functions }) {
 
       const invoicesQuery = query(
         collection(db, 'users', uid, 'invoices'),
-        orderBy('createdAt', 'desc'),
         limitTo(safeLimit)
       )
 
       const snap = await getDocs(invoicesQuery)
-      return snap.docs.map(normalizeInvoice)
+      return sortByDateDesc(
+        snap.docs.map(normalizeInvoice),
+        'createdAt'
+      )
     },
 
     async createPortalLink({ returnUrl, flowData, locale = 'auto', configuration } = {}) {
