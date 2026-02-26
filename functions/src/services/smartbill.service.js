@@ -287,30 +287,26 @@ class SmartBillService {
 
         const contentType = String(response.headers.get('content-type') || '').toLowerCase()
 
-        if (response.ok && contentType.includes('application/pdf')) {
-          const arrayBuffer = await response.arrayBuffer()
-          const buffer = Buffer.from(arrayBuffer)
-          if (buffer.length > 0) {
-            return {
-              buffer,
-              contentType: 'application/pdf',
-            }
+        // SmartBill can return a valid PDF payload with an incorrect JSON content-type.
+        // Always inspect the binary magic bytes first when status is 2xx.
+        const arrayBuffer = await response.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        const pdfMagic = buffer.toString('utf8', 0, 4)
+        if (response.ok && buffer.length > 4 && pdfMagic === '%PDF') {
+          return {
+            buffer,
+            contentType: 'application/pdf',
           }
         }
 
-        if (response.ok && !contentType.includes('application/json')) {
-          const arrayBuffer = await response.arrayBuffer()
-          const buffer = Buffer.from(arrayBuffer)
-          const asText = buffer.toString('utf8', 0, 8)
-          if (buffer.length > 0 && asText.startsWith('%PDF')) {
-            return {
-              buffer,
-              contentType: 'application/pdf',
-            }
+        if (response.ok && contentType.includes('application/pdf') && buffer.length > 0) {
+          return {
+            buffer,
+            contentType: 'application/pdf',
           }
         }
 
-        const bodyText = await response.text()
+        const bodyText = buffer.toString('utf8')
         const error = this.parseSmartBillError(response.status, bodyText)
         error.requestUrl = requestUrl
         lastError = error
