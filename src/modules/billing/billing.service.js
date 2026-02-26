@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, setDoc, limit as limitTo } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 
 export const STRIPE_PRICES = {
@@ -17,9 +17,68 @@ export const STORAGE_LIMITS = {
   Unlimited: 1000,
 }
 
+export const BILLING_TYPES = {
+  INDIVIDUAL: 'individual',
+  BUSINESS: 'business',
+}
+
+export const DEFAULT_BILLING_DETAILS = {
+  type: BILLING_TYPES.INDIVIDUAL,
+  name: '',
+  address: '',
+  city: '',
+  county: '',
+  country: 'România',
+  cui: '',
+  regCom: '',
+}
+
 const VALID_STATUSES = ['active', 'trialing']
 const CHECKOUT_CREATE_TIMEOUT_MS = 12000
 const CHECKOUT_SESSION_TIMEOUT_MS = 15000
+
+function sanitizeText(value, maxLen) {
+  return String(value || '').trim().slice(0, maxLen)
+}
+
+function normalizeBillingType(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === BILLING_TYPES.BUSINESS) return BILLING_TYPES.BUSINESS
+  return BILLING_TYPES.INDIVIDUAL
+}
+
+function normalizeBillingDetails(raw = {}) {
+  const type = normalizeBillingType(raw.type)
+  const normalized = {
+    type,
+    name: sanitizeText(raw.name, 160),
+    address: sanitizeText(raw.address, 220),
+    city: sanitizeText(raw.city, 100),
+    county: sanitizeText(raw.county, 100),
+    country: sanitizeText(raw.country || DEFAULT_BILLING_DETAILS.country, 100),
+    cui: '',
+    regCom: '',
+  }
+
+  if (type === BILLING_TYPES.BUSINESS) {
+    normalized.cui = sanitizeText(raw.cui, 32).toUpperCase()
+    normalized.regCom = sanitizeText(raw.regCom, 64).toUpperCase()
+  }
+
+  return normalized
+}
+
+function validateBillingDetails(details) {
+  if (!details.name) throw new Error('Numele pentru facturare este obligatoriu.')
+  if (!details.address) throw new Error('Adresa de facturare este obligatorie.')
+  if (!details.city) throw new Error('Orașul este obligatoriu.')
+  if (!details.county) throw new Error('Județul este obligatoriu.')
+  if (!details.country) throw new Error('Țara este obligatorie.')
+  if (details.type === BILLING_TYPES.BUSINESS) {
+    if (!details.cui) throw new Error('CUI este obligatoriu pentru persoane juridice.')
+    if (!details.regCom) throw new Error('Reg. Com este obligatoriu pentru persoane juridice.')
+  }
+}
 
 function priceIdToPlan(priceId) {
   if (!priceId) return 'Free'
@@ -118,6 +177,24 @@ function normalizeSubscriptionAsPayment(sub) {
     createdAt: sub.createdAt || sub.currentPeriodEnd || null,
     hasError: false,
     source: 'subscription',
+  }
+}
+
+function normalizeInvoice(docSnap) {
+  const data = docSnap.data() || {}
+  const amountRaw = data.amount
+  const amount = Number.isFinite(Number(amountRaw)) ? Number(amountRaw) : null
+  const currency = sanitizeText(data.currency || 'RON', 8).toUpperCase()
+
+  return {
+    id: docSnap.id,
+    series: sanitizeText(data.series, 32),
+    number: sanitizeText(data.number, 32) || docSnap.id,
+    amount,
+    currency: currency || 'RON',
+    url: sanitizeText(data.url, 1000),
+    status: toStripeStatus(data.status || ''),
+    createdAt: toDate(data.createdAt ?? data.updatedAt),
   }
 }
 
@@ -319,6 +396,22 @@ export function createBillingModule({ db, functions }) {
       }
     },
 
+    async getInvoices(uid, { limit = 50 } = {}) {
+      if (!uid) throw new Error('billing.getInvoices: uid este obligatoriu')
+      const safeLimit = Number.isFinite(Number(limit))
+        ? Math.min(100, Math.max(1, Number(limit)))
+        : 50
+
+      const invoicesQuery = query(
+        collection(db, 'users', uid, 'invoices'),
+        orderBy('createdAt', 'desc'),
+        limitTo(safeLimit)
+      )
+
+      const snap = await getDocs(invoicesQuery)
+      return snap.docs.map(normalizeInvoice)
+    },
+
     async createPortalLink({ returnUrl, flowData, locale = 'auto', configuration } = {}) {
       if (!createPortalLinkCallable) {
         throw new Error('Billing portal indisponibil: Firebase Functions nu este configurat.')
@@ -342,6 +435,34 @@ export function createBillingModule({ db, functions }) {
 
     async getCurrentPlan() {
       throw new Error('billing.getCurrentPlan nu este implementat inca')
+    },
+
+    async getBillingDetails(uid) {
+      if (!uid) throw new Error('billing.getBillingDetails: uid este obligatoriu')
+      const userSnap = await getDoc(doc(db, 'users', uid))
+      if (!userSnap.exists()) return { ...DEFAULT_BILLING_DETAILS }
+      const raw = userSnap.data()?.billingDetails || {}
+      return {
+        ...DEFAULT_BILLING_DETAILS,
+        ...normalizeBillingDetails(raw),
+      }
+    },
+
+    async saveBillingDetails(uid, details) {
+      if (!uid) throw new Error('billing.saveBillingDetails: uid este obligatoriu')
+      const normalized = normalizeBillingDetails(details)
+      validateBillingDetails(normalized)
+
+      await setDoc(
+        doc(db, 'users', uid),
+        {
+          billingDetails: normalized,
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      )
+
+      return normalized
     },
   }
 }

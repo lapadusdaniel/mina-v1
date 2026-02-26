@@ -112,11 +112,24 @@ export const listPoze = async (galerieId, _ownerUid = '') => {
   const prefix = `galerii/${galerieId}/originals/`
 
   const publicShareToken = readShareTokenFromLocation()
-  const headers = await buildReadAuthHeaders()
-  const response = await fetch(listUrl(prefix, publicShareToken), {
+  let headers = await buildReadAuthHeaders()
+  let response = await fetch(listUrl(prefix, publicShareToken), {
     method: 'GET',
     headers,
   })
+  if (!response.ok && !publicShareToken && response.status === 403) {
+    try {
+      const refreshedToken = await auth?.currentUser?.getIdToken(true)
+      if (refreshedToken) {
+        headers = { Authorization: `Bearer ${refreshedToken}` }
+        response = await fetch(listUrl(prefix), {
+          method: 'GET',
+          headers,
+        })
+      }
+    } catch (_) {
+    }
+  }
   if (!response.ok) throw new Error(`List failed: ${response.status}`)
 
   const raw = await response.json().catch(() => [])

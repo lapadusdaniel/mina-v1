@@ -43,6 +43,11 @@ const SIDEBAR_TABS = [
   { key: 'setari', label: 'Setări', icon: SettingsIcon }
 ]
 const TRASH_RETENTION_DAYS = 30
+const ACTIVE_GALLERY_STORAGE_KEY = 'mina_active_gallery_id'
+const MEDIUM_MAX_DIMENSION = 2048
+const MEDIUM_QUALITY = 0.86
+const THUMB_MAX_DIMENSION = 720
+const THUMB_QUALITY = 0.84
 
 function Dashboard({ user, onLogout, initialTab }) {
   const navigate = useNavigate()
@@ -84,6 +89,14 @@ function Dashboard({ user, onLogout, initialTab }) {
   const fileInputRef = useRef(null)
   const metadataBackfillQueueRef = useRef(new Set())
   const lastSyncedStorageBytesRef = useRef(null)
+
+  const persistActiveGalleryId = useCallback((galleryId) => {
+    try {
+      if (galleryId) localStorage.setItem(ACTIVE_GALLERY_STORAGE_KEY, galleryId)
+      else localStorage.removeItem(ACTIVE_GALLERY_STORAGE_KEY)
+    } catch (_) {
+    }
+  }, [])
 
   // Auto-cleanup: șterge galeriile din coș mai vechi de TRASH_RETENTION_DAYS (R2 + Firestore)
   useEffect(() => {
@@ -230,41 +243,30 @@ function Dashboard({ user, onLogout, initialTab }) {
   const closeActiveGallery = useCallback(() => {
     setGalerieActiva(null)
     setPozeGalerie([])
-    if (location.pathname !== '/settings') {
-      const next = new URLSearchParams(location.search)
-      next.delete('gallery')
-      if (!next.get('tab')) next.set('tab', 'galerii')
-      setSearchParams(next)
-    }
-  }, [location.pathname, location.search, setSearchParams])
+    persistActiveGalleryId(null)
+  }, [persistActiveGalleryId])
 
   // Logica încărcare poze în galerie
   const handleDeschideGalerie = useCallback(async (galerie) => {
+    if (!galerie?.id) return
     setGalerieActiva(galerie)
     setLoadingPoze(true)
     setPozeGalerie([])
-    if (location.pathname !== '/settings' && galerie?.id) {
-      const next = new URLSearchParams(location.search)
-      if (!next.get('tab')) next.set('tab', 'galerii')
-      next.set('gallery', galerie.id)
-      setSearchParams(next)
-    }
+    persistActiveGalleryId(galerie.id)
     try {
       const poze = await mediaService.listGalleryPhotos(galerie.id, user.uid)
-      const pozeWithUrlsRaw = await Promise.all(
-        poze.map(async (poza) => {
+      const normalizedPhotos = poze
+        .map((poza) => {
           const key = poza.key || poza.name || poza.Key
           if (!key) return null
-          const url = await mediaService.getPhotoUrl(key, 'thumb')
           return {
             key,
-            url,
+            url: null,
             size: poza.size ?? poza.Size,
-            lastModified: poza.lastModified ?? poza.uploaded ?? poza.LastModified
+            lastModified: poza.lastModified ?? poza.uploaded ?? poza.LastModified,
           }
         })
-      )
-      const normalizedPhotos = pozeWithUrlsRaw.filter(Boolean)
+        .filter(Boolean)
       setPozeGalerie(normalizedPhotos)
 
       // Backfill metadata once for older galleries to avoid future N+1 listing in table rows.
@@ -284,33 +286,34 @@ function Dashboard({ user, onLogout, initialTab }) {
     } finally {
       setLoadingPoze(false)
     }
-  }, [location.pathname, location.search, setSearchParams, user.uid])
+  }, [persistActiveGalleryId, user.uid])
 
-  // Dacă URL-ul are ?gallery=<id>, redeschide galeria după refresh.
+  // Redeschide ultima galerie după refresh, fără să blocheze navigarea prin URL.
   useEffect(() => {
-    if (location.pathname === '/settings') return
-    const galleryIdFromUrl = searchParams.get('gallery')
-    if (!galleryIdFromUrl) return
-    if (galerieActiva?.id === galleryIdFromUrl) return
+    if (activeTab !== 'galerii') return
+    if (galerieActiva?.id) return
     if (!galerii.length) return
 
-    const target = galerii.find((g) => g.id === galleryIdFromUrl && g.status !== 'trash')
+    let savedGalleryId = null
+    try {
+      savedGalleryId = localStorage.getItem(ACTIVE_GALLERY_STORAGE_KEY)
+    } catch (_) {
+    }
+    if (!savedGalleryId) return
+
+    const target = galerii.find((g) => g.id === savedGalleryId && g.status !== 'trash')
     if (!target) {
-      const next = new URLSearchParams(location.search)
-      next.delete('gallery')
-      setSearchParams(next)
+      persistActiveGalleryId(null)
       return
     }
 
     handleDeschideGalerie(target)
   }, [
+    activeTab,
     galerieActiva?.id,
     galerii,
     handleDeschideGalerie,
-    location.pathname,
-    location.search,
-    searchParams,
-    setSearchParams,
+    persistActiveGalleryId,
   ])
 
   // Logica Upload (Original + Medium + Thumb)
@@ -337,10 +340,20 @@ function Dashboard({ user, onLogout, initialTab }) {
         uploadedBytes += Number(file.size || 0)
         if (!firstUploadedOriginal) firstUploadedOriginal = origPath
 
-        const [mediumFile, thumbFile] = await Promise.all([
-          imageCompression(file, { maxWidthOrHeight: 3200, fileType: 'image/webp', initialQuality: 0.92, useWebWorker: true }),
-          imageCompression(file, { maxWidthOrHeight: 1200, fileType: 'image/webp', initialQuality: 0.9, useWebWorker: true })
-        ])
+        const mediumFile = await imageCompression(file, {
+          maxWidthOrHeight: MEDIUM_MAX_DIMENSION,
+          fileType: 'image/webp',
+          initialQuality: MEDIUM_QUALITY,
+          maxSizeMB: 2.5,
+          useWebWorker: true,
+        })
+        const thumbFile = await imageCompression(mediumFile || file, {
+          maxWidthOrHeight: THUMB_MAX_DIMENSION,
+          fileType: 'image/webp',
+          initialQuality: THUMB_QUALITY,
+          maxSizeMB: 0.35,
+          useWebWorker: true,
+        })
 
         await Promise.all([
           mediaService.uploadPhoto(file, galerieActiva.id, user.uid, (p) => reportProgress(i * 3, p), origPath, idToken),
@@ -436,16 +449,34 @@ function Dashboard({ user, onLogout, initialTab }) {
   const handlePreview = async (galerie) => {
     const fallbackUrl = `${window.location.origin}/gallery/${galerie.id}`
     let url = fallbackUrl
-    const previewWindow = window.open('about:blank', '_blank', 'noopener')
+    const previewWindow = window.open('', '_blank')
+    if (previewWindow && !previewWindow.closed) {
+      try {
+        previewWindow.document.write(
+          '<!doctype html><html><head><meta charset="utf-8"><title>Mina Preview</title><style>body{margin:0;background:#f5f5f7;color:#1d1d1f;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh}p{font-size:14px;color:#6b7280}</style></head><body><p>Se deschide preview...</p></body></html>'
+        )
+        previewWindow.document.close()
+      } catch (_) {
+      }
+    }
     try {
-      const idToken = await authService.getCurrentIdToken()
+      let idToken = await authService.getCurrentIdToken()
+      if (!idToken) idToken = await authService.getCurrentIdToken(true)
       if (idToken && galerie?.id) {
         const rawExpiry = galerie?.dataExpirare ?? galerie?.expiresAt ?? galerie?.dataExpirarii
         const expiryDate = rawExpiry ? new Date(rawExpiry) : null
         const ttlHours = expiryDate && !Number.isNaN(expiryDate.getTime())
           ? Math.max(1, Math.min(24 * 365, Math.ceil((expiryDate.getTime() - Date.now()) / 3600000)))
           : 24 * 30
-        const share = await mediaService.createSecureShareToken(galerie.id, idToken, ttlHours)
+        let share = null
+        try {
+          share = await mediaService.createSecureShareToken(galerie.id, idToken, ttlHours)
+        } catch (_) {
+          const refreshedToken = await authService.getCurrentIdToken(true)
+          if (refreshedToken) {
+            share = await mediaService.createSecureShareToken(galerie.id, refreshedToken, ttlHours)
+          }
+        }
         if (share?.token) {
           url = `${window.location.origin}/gallery/${galerie.id}?st=${encodeURIComponent(share.token)}`
         }
@@ -453,6 +484,10 @@ function Dashboard({ user, onLogout, initialTab }) {
     } catch (_) {
     }
     if (previewWindow && !previewWindow.closed) {
+      try {
+        previewWindow.opener = null
+      } catch (_) {
+      }
       previewWindow.location.replace(url)
       return
     }
@@ -502,12 +537,11 @@ function Dashboard({ user, onLogout, initialTab }) {
 
   const userInitial = (user?.name || 'U').charAt(0).toUpperCase()
   const runUiTransition = (callback) => {
-    const startViewTransition = typeof document !== 'undefined' ? document.startViewTransition : null
-    if (typeof startViewTransition === 'function') {
-      startViewTransition(() => callback())
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => callback())
       return
     }
-    callback()
+    callback?.()
   }
 
   const renderSidebar = () => (
@@ -527,9 +561,12 @@ function Dashboard({ user, onLogout, initialTab }) {
           type="button"
           className={`dashboard-sidebar-btn ${activeTab === key ? 'active' : ''}`}
           onClick={() => runUiTransition(() => {
+            closeActiveGallery()
             if (key === 'setari') navigate('/settings')
-            else if (location.pathname === '/settings') navigate(`/dashboard?tab=${key}`)
-            else setSearchParams({ tab: key })
+            else {
+              if (location.pathname === '/settings') navigate(`/dashboard?tab=${key}`)
+              else setSearchParams({ tab: key })
+            }
           })}
         >
           <span className="dashboard-sidebar-btn-indicator" />

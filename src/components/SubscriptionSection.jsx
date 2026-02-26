@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
+import BillingSettings from './BillingSettings';
+import BillingHistory from './BillingHistory';
 import './SubscriptionSection.css';
 
 const {
@@ -335,6 +337,9 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
           )}
         </div>
       </div>
+
+      <BillingSettings user={user} />
+      <BillingHistory user={user} />
     </div>
   );
 };

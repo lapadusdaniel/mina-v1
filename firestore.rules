@@ -52,6 +52,10 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
           'clientId',
           'clientName',
+          'clientEmail',
+          'clientPhone',
+          'clientAdditionalInfo',
+          'clientComment',
           'keys',
           'count',
           'selectionTitle',
@@ -65,6 +69,38 @@ service cloud.firestore {
         && request.resource.data.keys.size() <= 3000
         && request.resource.data.count is int
         && request.resource.data.count == request.resource.data.keys.size()
+        && (
+          !('clientEmail' in request.resource.data)
+          || request.resource.data.clientEmail is string
+        )
+        && (
+          !('clientEmail' in request.resource.data)
+          || request.resource.data.clientEmail.size() <= 190
+        )
+        && (
+          !('clientPhone' in request.resource.data)
+          || request.resource.data.clientPhone is string
+        )
+        && (
+          !('clientPhone' in request.resource.data)
+          || request.resource.data.clientPhone.size() <= 40
+        )
+        && (
+          !('clientAdditionalInfo' in request.resource.data)
+          || request.resource.data.clientAdditionalInfo is string
+        )
+        && (
+          !('clientAdditionalInfo' in request.resource.data)
+          || request.resource.data.clientAdditionalInfo.size() <= 1000
+        )
+        && (
+          !('clientComment' in request.resource.data)
+          || request.resource.data.clientComment is string
+        )
+        && (
+          !('clientComment' in request.resource.data)
+          || request.resource.data.clientComment.size() <= 1000
+        )
         && (
           !('selectionTitle' in request.resource.data)
           || request.resource.data.selectionTitle is string
@@ -102,10 +138,106 @@ service cloud.firestore {
         );
     }
 
+    function validBillingDetailsMap(details) {
+      return details is map
+        && details.keys().hasOnly([
+          'type',
+          'name',
+          'address',
+          'city',
+          'county',
+          'country',
+          'cui',
+          'regCom',
+        ])
+        && ('type' in details)
+        && details.type is string
+        && details.type in ['individual', 'business']
+        && ('name' in details)
+        && details.name is string
+        && details.name.size() > 0
+        && details.name.size() <= 160
+        && ('address' in details)
+        && details.address is string
+        && details.address.size() > 0
+        && details.address.size() <= 220
+        && ('city' in details)
+        && details.city is string
+        && details.city.size() > 0
+        && details.city.size() <= 100
+        && ('county' in details)
+        && details.county is string
+        && details.county.size() > 0
+        && details.county.size() <= 100
+        && ('country' in details)
+        && details.country is string
+        && details.country.size() > 0
+        && details.country.size() <= 100
+        && (
+          (
+            details.type == 'individual'
+            && (
+              !('cui' in details)
+              || (
+                details.cui is string
+                && details.cui.size() == 0
+              )
+            )
+            && (
+              !('regCom' in details)
+              || (
+                details.regCom is string
+                && details.regCom.size() == 0
+              )
+            )
+          )
+          || (
+            details.type == 'business'
+            && ('cui' in details)
+            && details.cui is string
+            && details.cui.size() > 0
+            && details.cui.size() <= 32
+            && ('regCom' in details)
+            && details.regCom is string
+            && details.regCom.size() > 0
+            && details.regCom.size() <= 64
+          )
+        );
+    }
+
+    function validBillingDetails(data) {
+      return !('billingDetails' in data) || validBillingDetailsMap(data.billingDetails);
+    }
+
+    function validGalleryReviewCreate() {
+      return request.resource.data.keys().hasOnly([
+          'name',
+          'message',
+          'rating',
+          'createdAt',
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 2000
+        && (
+          !('rating' in request.resource.data)
+          || (
+            request.resource.data.rating is int
+            && request.resource.data.rating >= 1
+            && request.resource.data.rating <= 5
+          )
+        )
+        && request.resource.data.createdAt is timestamp;
+    }
+
     // --- Utilizatori ---
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId)
+        && validBillingDetails(request.resource.data)
         && (
           (
             !('role' in request.resource.data)
@@ -124,17 +256,26 @@ service cloud.firestore {
             || request.resource.data.plan in ['free', 'Free']
           )
         );
-      allow update: if isAdmin() || (
-        isOwner(userId)
-        && !request.resource.data.diff(resource.data).changedKeys().hasAny([
-          'plan',
-          'status',
-          'role',
-          'isAdmin',
-          'planOverride',
-        ])
-      );
+      allow update: if validBillingDetails(request.resource.data)
+        && (
+          isAdmin()
+          || (
+            isOwner(userId)
+            && !request.resource.data.diff(resource.data).changedKeys().hasAny([
+              'plan',
+              'status',
+              'role',
+              'isAdmin',
+              'planOverride',
+            ])
+          )
+        );
       allow delete: if isAdmin();
+    }
+
+    match /users/{userId}/invoices/{invoiceId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
     }
 
     // Dashboard card profile: /users/{uid}/settings/profile
@@ -226,6 +367,13 @@ service cloud.firestore {
     match /contactMessages/{messageId} {
       allow create: if validContactCreate();
       allow read, update, delete: if isAdmin();
+    }
+
+    // Public review submissions on gallery pages
+    match /galleryReviews/{galleryId}/items/{reviewId} {
+      allow create: if isGalleryPublicById(galleryId) && validGalleryReviewCreate();
+      allow read: if isGalleryOwnerById(galleryId) || isAdmin();
+      allow update, delete: if isGalleryOwnerById(galleryId) || isAdmin();
     }
 
     // Default deny

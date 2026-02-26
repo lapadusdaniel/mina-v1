@@ -1,8 +1,63 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Masonry from 'react-masonry-css'
 import { Settings } from 'lucide-react'
 import AdminSelections from './AdminSelections'
 import GallerySettingsModal from './GallerySettingsModal'
+import { getAppServices } from '../core/bootstrap/appBootstrap'
+
+const { media: mediaService } = getAppServices()
+
+function GalleryPhotoTile({ photo, onDeletePoza }) {
+  const [thumbUrl, setThumbUrl] = useState(photo?.url || null)
+
+  useEffect(() => {
+    let cancelled = false
+    let createdUrl = ''
+
+    if (photo?.url) {
+      setThumbUrl(photo.url)
+      return () => {}
+    }
+
+    setThumbUrl(null)
+    if (!photo?.key) return () => {}
+
+    mediaService.getPhotoUrl(photo.key, 'thumb')
+      .then((url) => {
+        if (cancelled) {
+          if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url)
+          return
+        }
+        createdUrl = url
+        setThumbUrl(url)
+      })
+      .catch(() => {
+      })
+
+    return () => {
+      cancelled = true
+      if (createdUrl && createdUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(createdUrl)
+      }
+    }
+  }, [photo?.key, photo?.url])
+
+  return (
+    <div className="dashboard-masonry-item">
+      {thumbUrl ? (
+        <img src={thumbUrl} alt="Poză galerie" className="dashboard-masonry-img" loading="lazy" />
+      ) : (
+        <div className="dashboard-masonry-placeholder" />
+      )}
+      <button
+        onClick={() => onDeletePoza(photo.key)}
+        className="dashboard-delete-poza-btn"
+      >
+        ×
+      </button>
+    </div>
+  )
+}
 
 /**
  * Gallery detail view: header, AdminSelections, photo grid.
@@ -109,15 +164,7 @@ export default function GalleryDetailView({
             columnClassName="masonry-grid_column"
           >
             {pozeGalerie.map((poza) => (
-              <div key={poza.key} className="dashboard-masonry-item">
-                <img src={poza.url} alt="Poză galerie" className="dashboard-masonry-img" />
-                <button
-                  onClick={() => onDeletePoza(poza.key)}
-                  className="dashboard-delete-poza-btn"
-                >
-                  ×
-                </button>
-              </div>
+              <GalleryPhotoTile key={poza.key} photo={poza} onDeletePoza={onDeletePoza} />
             ))}
           </Masonry>
         )}
