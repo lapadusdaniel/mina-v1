@@ -209,6 +209,108 @@ class SmartBillService {
     return { body, payload }
   }
 
+  buildInvoicePdfQueries(series, number) {
+    const cleanSeries = sanitizeString(series, 32)
+    const cleanNumber = sanitizeString(number, 32)
+    const cleanCif = sanitizeString(this.cif, 32)
+
+    return [
+      { cif: cleanCif, seriesname: cleanSeries, number: cleanNumber },
+      { cif: cleanCif, seriesName: cleanSeries, number: cleanNumber },
+      { companyVatCode: cleanCif, seriesname: cleanSeries, number: cleanNumber },
+      { companyVatCode: cleanCif, seriesName: cleanSeries, number: cleanNumber },
+    ]
+  }
+
+  parseSmartBillError(status, bodyText) {
+    let body
+
+    try {
+      body = bodyText ? JSON.parse(bodyText) : {}
+    } catch (err) {
+      body = { raw: bodyText }
+    }
+
+    const apiMessage =
+      body?.errorText ||
+      body?.error ||
+      body?.message ||
+      bodyText ||
+      `HTTP ${status}`
+
+    const error = new Error(`SmartBill PDF failed (${status}): ${apiMessage}`)
+    error.status = status
+    error.response = body
+    error.apiMessage = String(apiMessage || '')
+    return error
+  }
+
+  async requestInvoicePdf(series, number) {
+    const cleanSeries = sanitizeString(series, 32)
+    const cleanNumber = sanitizeString(number, 32)
+
+    if (!cleanSeries || !cleanNumber) {
+      throw new Error('SmartBill PDF: series și number sunt obligatorii')
+    }
+
+    const queries = this.buildInvoicePdfQueries(cleanSeries, cleanNumber)
+    let lastError = null
+
+    for (const queryObject of queries) {
+      const queryString = new URLSearchParams(queryObject).toString()
+      const requestUrl = `${this.baseUrl}/invoice/pdf?${queryString}`
+
+      try {
+        const response = await fetch(requestUrl, {
+          method: 'GET',
+          headers: {
+            Authorization: this.buildAuthHeader(),
+            Accept: 'application/pdf, application/json',
+          },
+        })
+
+        const contentType = String(response.headers.get('content-type') || '').toLowerCase()
+
+        if (response.ok && contentType.includes('application/pdf')) {
+          const arrayBuffer = await response.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          if (buffer.length > 0) {
+            return {
+              buffer,
+              contentType: 'application/pdf',
+            }
+          }
+        }
+
+        if (response.ok && !contentType.includes('application/json')) {
+          const arrayBuffer = await response.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          const asText = buffer.toString('utf8', 0, 8)
+          if (buffer.length > 0 && asText.startsWith('%PDF')) {
+            return {
+              buffer,
+              contentType: 'application/pdf',
+            }
+          }
+        }
+
+        const bodyText = await response.text()
+        const error = this.parseSmartBillError(response.status, bodyText)
+        error.requestUrl = requestUrl
+        lastError = error
+      } catch (err) {
+        const wrapped = new Error(`SmartBill PDF request error: ${err?.message || String(err)}`)
+        wrapped.requestUrl = requestUrl
+        lastError = wrapped
+      }
+    }
+
+    if (lastError) {
+      throw lastError
+    }
+    throw new Error('SmartBill PDF request failed')
+  }
+
   buildInvoiceResult(body) {
     const series = sanitizeString(
       body?.series || body?.seriesName || body?.numberSeries || body?.invoice?.series || this.seriesName,
@@ -276,6 +378,13 @@ class SmartBillService {
         warning: 'SmartBill email server not configured. Invoice created without automatic email.',
       }
     }
+  }
+
+  async downloadInvoicePdf({ series, number } = {}) {
+    if (!this.hasCredentials()) {
+      throw new Error('SmartBill credentials missing (SMARTBILL_USERNAME, SMARTBILL_TOKEN, SMARTBILL_CIF, SMARTBILL_SERIES_NAME)')
+    }
+    return this.requestInvoicePdf(series, number)
   }
 }
 

@@ -131,11 +131,21 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 0.74rem;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .bill-history-download:hover {
   border-color: #b8965a;
   background: rgba(184, 150, 90, 0.18);
+}
+
+.bill-history-download:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.bill-history-download-fallback {
+  appearance: none;
 }
 
 .bill-history-no-pdf {

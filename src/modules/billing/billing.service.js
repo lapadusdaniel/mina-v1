@@ -211,6 +211,8 @@ async function addCheckoutSessionWithTimeout({ db, uid, payload }) {
 export function createBillingModule({ db, functions }) {
   const createPortalLinkCallable =
     functions ? httpsCallable(functions, 'ext-firestore-stripe-payments-createPortalLink') : null
+  const downloadInvoicePdfCallable =
+    functions ? httpsCallable(functions, 'downloadInvoicePdf') : null
 
   return {
     db,
@@ -412,6 +414,31 @@ export function createBillingModule({ db, functions }) {
         snap.docs.map(normalizeInvoice),
         'createdAt'
       )
+    },
+
+    async downloadInvoicePdf({ invoiceId }) {
+      if (!invoiceId) {
+        throw new Error('billing.downloadInvoicePdf: invoiceId este obligatoriu')
+      }
+      if (!downloadInvoicePdfCallable) {
+        throw new Error('Descărcarea PDF nu este disponibilă: Firebase Functions nu este configurat.')
+      }
+
+      const response = await downloadInvoicePdfCallable({ invoiceId })
+      const payload = response?.data || {}
+      const pdfBase64 = String(payload.pdfBase64 || '').trim()
+      const filename = sanitizeText(payload.filename || `factura-${invoiceId}.pdf`, 220)
+      const contentType = sanitizeText(payload.contentType || 'application/pdf', 120) || 'application/pdf'
+
+      if (!pdfBase64) {
+        throw new Error('Nu am primit conținutul PDF de la server.')
+      }
+
+      return {
+        pdfBase64,
+        filename: filename || `factura-${invoiceId}.pdf`,
+        contentType,
+      }
     },
 
     async createPortalLink({ returnUrl, flowData, locale = 'auto', configuration } = {}) {

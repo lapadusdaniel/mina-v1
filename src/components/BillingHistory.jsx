@@ -35,10 +35,21 @@ function formatSeriesNumber(invoice) {
   return `${series}/${number}`
 }
 
+function base64ToBlob(base64, contentType = 'application/pdf') {
+  const clean = String(base64 || '').trim()
+  const binaryString = window.atob(clean)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i += 1) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: contentType })
+}
+
 function BillingHistory({ user }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [invoices, setInvoices] = useState([])
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState('')
 
   const loadInvoices = async () => {
     if (!user?.uid) return
@@ -63,6 +74,37 @@ function BillingHistory({ user }) {
     }
     loadInvoices()
   }, [user?.uid])
+
+  const handleDownloadFallback = async (invoice) => {
+    const invoiceId = String(invoice?.id || '').trim()
+    if (!invoiceId) {
+      setError('Factura nu are un identificator valid.')
+      return
+    }
+
+    setError('')
+    setDownloadingInvoiceId(invoiceId)
+
+    try {
+      const result = await billingService.downloadInvoicePdf({ invoiceId })
+      const blob = base64ToBlob(result.pdfBase64, result.contentType || 'application/pdf')
+      const objectUrl = window.URL.createObjectURL(blob)
+
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = result.filename || `factura-${invoiceId}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+
+      window.URL.revokeObjectURL(objectUrl)
+    } catch (err) {
+      console.error('Eroare download PDF factură:', err)
+      setError(err?.message || 'Nu pot descărca factura PDF în acest moment.')
+    } finally {
+      setDownloadingInvoiceId('')
+    }
+  }
 
   return (
     <section className="bill-history-card">
@@ -106,6 +148,7 @@ function BillingHistory({ user }) {
             <tbody>
               {invoices.map((invoice) => {
                 const pdfUrl = String(invoice?.url || '').trim()
+                const isDownloading = downloadingInvoiceId === invoice.id
                 return (
                   <tr key={invoice.id}>
                     <td>{formatDate(invoice.createdAt)}</td>
@@ -124,7 +167,15 @@ function BillingHistory({ user }) {
                           Download PDF
                         </a>
                       ) : (
-                        <span className="bill-history-no-pdf">PDF indisponibil</span>
+                        <button
+                          type="button"
+                          className="bill-history-download bill-history-download-fallback"
+                          onClick={() => handleDownloadFallback(invoice)}
+                          disabled={isDownloading}
+                        >
+                          <Download size={14} />
+                          {isDownloading ? 'Se descarcă...' : 'Generează PDF'}
+                        </button>
                       )}
                     </td>
                   </tr>

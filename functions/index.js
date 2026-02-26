@@ -1,7 +1,7 @@
 const admin = require('firebase-admin')
 const Stripe = require('stripe')
 const logger = require('firebase-functions/logger')
-const { onRequest } = require('firebase-functions/v2/https')
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { defineSecret } = require('firebase-functions/params')
 const { SmartBillService } = require('./src/services/smartbill.service')
 
@@ -39,6 +39,13 @@ function sanitizeIdPart(value, fallback = 'invoice') {
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase().slice(0, 190)
+}
+
+function sanitizeInvoiceId(value) {
+  const clean = String(value || '').trim()
+  if (!clean) return ''
+  if (clean.includes('/')) return ''
+  return clean.slice(0, 120)
 }
 
 function resolveUidFromSessionPayload(session = {}) {
@@ -390,6 +397,91 @@ async function handleCheckoutSessionCompleted(event) {
     },
   }
 }
+
+exports.downloadInvoicePdf = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 20,
+    secrets: [
+      SMARTBILL_USERNAME,
+      SMARTBILL_TOKEN,
+      SMARTBILL_CIF,
+      SMARTBILL_SERIES_NAME,
+    ],
+  },
+  async (request) => {
+    const uid = String(request.auth?.uid || '').trim()
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat pentru a descărca factura.')
+    }
+
+    const invoiceId = sanitizeInvoiceId(request.data?.invoiceId || request.data?.id)
+    if (!invoiceId) {
+      throw new HttpsError('invalid-argument', 'invoiceId este obligatoriu.')
+    }
+
+    const invoiceRef = db.collection('users').doc(uid).collection('invoices').doc(invoiceId)
+    const invoiceSnap = await invoiceRef.get()
+
+    if (!invoiceSnap.exists) {
+      throw new HttpsError('not-found', 'Factura nu a fost găsită.')
+    }
+
+    const invoiceData = invoiceSnap.data() || {}
+    const series = String(invoiceData.series || '').trim()
+    const number = String(invoiceData.number || '').trim()
+
+    if (!series || !number) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Factura există, dar nu are serie/număr valide pentru descărcare.'
+      )
+    }
+
+    const smartBillService = new SmartBillService({
+      username: SMARTBILL_USERNAME.value(),
+      token: SMARTBILL_TOKEN.value(),
+      cif: SMARTBILL_CIF.value(),
+      seriesName: SMARTBILL_SERIES_NAME.value(),
+    })
+
+    let pdf
+    try {
+      pdf = await smartBillService.downloadInvoicePdf({ series, number })
+    } catch (err) {
+      logger.error('SmartBill PDF download failed', {
+        uid,
+        invoiceId,
+        series,
+        number,
+        message: err?.message || String(err),
+      })
+      throw new HttpsError('internal', err?.message || 'Nu pot descărca factura PDF momentan.')
+    }
+
+    await invoiceRef.set(
+      {
+        hasPdf: true,
+        pdfLastCheckedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+
+    const safeSeries = sanitizeIdPart(series, 'factura')
+    const safeNumber = sanitizeIdPart(number, invoiceId)
+
+    return {
+      ok: true,
+      invoiceId,
+      series,
+      number,
+      filename: `factura-${safeSeries}-${safeNumber}.pdf`,
+      contentType: String(pdf.contentType || 'application/pdf'),
+      pdfBase64: pdf.buffer.toString('base64'),
+    }
+  }
+)
 
 exports.onStripeWebhook = onRequest(
   {
