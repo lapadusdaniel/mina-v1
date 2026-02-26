@@ -212,14 +212,30 @@ class SmartBillService {
   buildInvoicePdfQueries(series, number) {
     const cleanSeries = sanitizeString(series, 32)
     const cleanNumber = sanitizeString(number, 32)
-    const cleanCif = sanitizeString(this.cif, 32)
+    const rawCif = sanitizeString(this.cif, 32).toUpperCase()
+    const digitsCif = rawCif.replace(/[^0-9]/g, '')
+    const roCif = digitsCif ? `RO${digitsCif}` : ''
 
-    return [
-      { cif: cleanCif, seriesname: cleanSeries, number: cleanNumber },
-      { cif: cleanCif, seriesName: cleanSeries, number: cleanNumber },
-      { companyVatCode: cleanCif, seriesname: cleanSeries, number: cleanNumber },
-      { companyVatCode: cleanCif, seriesName: cleanSeries, number: cleanNumber },
-    ]
+    const cifCandidates = Array.from(
+      new Set(
+        [rawCif, digitsCif, roCif].filter(Boolean)
+      )
+    )
+
+    const queries = []
+
+    for (const cifCandidate of cifCandidates) {
+      queries.push({ cif: cifCandidate, seriesname: cleanSeries, number: cleanNumber })
+      queries.push({ cif: cifCandidate, seriesName: cleanSeries, number: cleanNumber })
+      queries.push({ companyVatCode: cifCandidate, seriesname: cleanSeries, number: cleanNumber })
+      queries.push({ companyVatCode: cifCandidate, seriesName: cleanSeries, number: cleanNumber })
+    }
+
+    // Some SmartBill accounts infer the active company from Basic Auth without cif/companyVatCode.
+    queries.push({ seriesname: cleanSeries, number: cleanNumber })
+    queries.push({ seriesName: cleanSeries, number: cleanNumber })
+
+    return queries
   }
 
   parseSmartBillError(status, bodyText) {
