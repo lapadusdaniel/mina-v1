@@ -45,11 +45,11 @@ const SIDEBAR_TABS = [
 const TRASH_RETENTION_DAYS = 30
 const ACTIVE_GALLERY_STORAGE_KEY = 'mina_active_gallery_id'
 const MEDIUM_MAX_DIMENSION = 2048
-const MEDIUM_QUALITY = 0.86
+const MEDIUM_QUALITY = 0.85
 const THUMB_MAX_DIMENSION = 720
-const THUMB_QUALITY = 0.84
+const THUMB_QUALITY = 0.88
 
-function Dashboard({ user, onLogout, initialTab }) {
+function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -89,6 +89,7 @@ function Dashboard({ user, onLogout, initialTab }) {
   const fileInputRef = useRef(null)
   const metadataBackfillQueueRef = useRef(new Set())
   const lastSyncedStorageBytesRef = useRef(null)
+  const suppressAutoReopenRef = useRef(false)
 
   const persistActiveGalleryId = useCallback((galleryId) => {
     try {
@@ -241,6 +242,7 @@ function Dashboard({ user, onLogout, initialTab }) {
   }, [galerii])
 
   const closeActiveGallery = useCallback(() => {
+    suppressAutoReopenRef.current = true
     setGalerieActiva(null)
     setPozeGalerie([])
     persistActiveGalleryId(null)
@@ -249,6 +251,7 @@ function Dashboard({ user, onLogout, initialTab }) {
   // Logica încărcare poze în galerie
   const handleDeschideGalerie = useCallback(async (galerie) => {
     if (!galerie?.id) return
+    suppressAutoReopenRef.current = false
     setGalerieActiva(galerie)
     setLoadingPoze(true)
     setPozeGalerie([])
@@ -293,6 +296,7 @@ function Dashboard({ user, onLogout, initialTab }) {
     if (activeTab !== 'galerii') return
     if (galerieActiva?.id) return
     if (!galerii.length) return
+    if (suppressAutoReopenRef.current) return
 
     let savedGalleryId = null
     try {
@@ -447,51 +451,9 @@ function Dashboard({ user, onLogout, initialTab }) {
   }
 
   const handlePreview = async (galerie) => {
-    const fallbackUrl = `${window.location.origin}/gallery/${galerie.id}`
-    let url = fallbackUrl
-    const previewWindow = window.open('', '_blank')
-    if (previewWindow && !previewWindow.closed) {
-      try {
-        previewWindow.document.write(
-          '<!doctype html><html><head><meta charset="utf-8"><title>Mina Preview</title><style>body{margin:0;background:#f5f5f7;color:#1d1d1f;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh}p{font-size:14px;color:#6b7280}</style></head><body><p>Se deschide preview...</p></body></html>'
-        )
-        previewWindow.document.close()
-      } catch (_) {
-      }
-    }
-    try {
-      let idToken = await authService.getCurrentIdToken()
-      if (!idToken) idToken = await authService.getCurrentIdToken(true)
-      if (idToken && galerie?.id) {
-        const rawExpiry = galerie?.dataExpirare ?? galerie?.expiresAt ?? galerie?.dataExpirarii
-        const expiryDate = rawExpiry ? new Date(rawExpiry) : null
-        const ttlHours = expiryDate && !Number.isNaN(expiryDate.getTime())
-          ? Math.max(1, Math.min(24 * 365, Math.ceil((expiryDate.getTime() - Date.now()) / 3600000)))
-          : 24 * 30
-        let share = null
-        try {
-          share = await mediaService.createSecureShareToken(galerie.id, idToken, ttlHours)
-        } catch (_) {
-          const refreshedToken = await authService.getCurrentIdToken(true)
-          if (refreshedToken) {
-            share = await mediaService.createSecureShareToken(galerie.id, refreshedToken, ttlHours)
-          }
-        }
-        if (share?.token) {
-          url = `${window.location.origin}/gallery/${galerie.id}?st=${encodeURIComponent(share.token)}`
-        }
-      }
-    } catch (_) {
-    }
-    if (previewWindow && !previewWindow.closed) {
-      try {
-        previewWindow.opener = null
-      } catch (_) {
-      }
-      previewWindow.location.replace(url)
-      return
-    }
-    window.open(url, '_blank')
+    if (!galerie?.id) return
+    const url = `${window.location.origin}/gallery/${galerie.id}`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const handleLogout = async () => {
@@ -606,11 +568,9 @@ function Dashboard({ user, onLogout, initialTab }) {
       <div key={`view-${activeTab}`} className="dashboard-view-animate">
         <header className="dashboard-topbar">
           <div className="dashboard-topbar-right">
-            <div className="dashboard-profile">
-              <div className="dashboard-avatar-wrap" title={user?.email}>
-                <div className="dashboard-avatar">{userInitial}</div>
-              </div>
-              <div className="dashboard-profile-info">
+            <div className="dashboard-avatar-wrap" title={user?.email}>
+              <div className="dashboard-avatar">{userInitial}</div>
+              <div className="dashboard-profile">
                 <span className="dashboard-profile-name">{user?.name || 'Fotograf'}</span>
                 <span className="dashboard-profile-email">{user?.email}</span>
               </div>
@@ -702,12 +662,23 @@ function Dashboard({ user, onLogout, initialTab }) {
         {activeTab === 'lansare' && <LaunchChecklist />}
 
         {/* Tab Setări Generale */}
-        {activeTab === 'setari' && <Settings user={user} />}
+        {activeTab === 'setari' && (
+          <div className="dashboard-subscription-wrap" style={{ width: '100%', padding: '20px 40px' }}>
+            <Settings
+              user={user}
+              theme={theme}
+              setTheme={setTheme}
+              userPlan={userPlan}
+              storageLimit={storageLimit}
+              checkAccess={checkAccess}
+            />
+          </div>
+        )}
 
         {/* Tab Abonament */}
         {activeTab === 'abonament' && (
           <div className="dashboard-subscription-wrap" style={{ width: '100%', padding: '20px 40px' }}>
-            <SubscriptionSection user={user} userPlan={userPlan} storageLimit={storageLimit} checkAccess={checkAccess} />
+            <SubscriptionSection user={user} userPlan={userPlan} storageLimit={storageLimit} checkAccess={checkAccess} mode="plansOnly" />
           </div>
         )}
 

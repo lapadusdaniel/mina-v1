@@ -175,67 +175,94 @@ function LandingPage({ user }) {
           </div>
 
           <div className="fl-pricing-grid">
-            {/* Gratuit */}
+            {/* Free */}
             <div className="fl-plan fl-reveal">
-              <h3 className="fl-plan-name">Gratuit</h3>
+              <h3 className="fl-plan-name">Free</h3>
               <p className="fl-plan-storage">15 GB stocare</p>
               <div className="fl-plan-price">
                 <span className="fl-plan-price-amount">0 lei</span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
-                <li>15 GB stocare foto</li>
-                <li>Galerii nelimitate</li>
-                <li>Link partajabil</li>
-                <li>Suport comunitate</li>
+                <li>15 GB stocare</li>
+                <li>3 galerii active</li>
+                <li>Galerii protejate cu parolă</li>
+                <li>Selecții favorite pentru clienți</li>
+                <li className="fl-plan-feature-muted">Fără site de prezentare</li>
               </ul>
+              <p className="fl-plan-desc">Perfect pentru a începe și a vedea cum funcționează Mina.</p>
               <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
                 Începe gratuit
               </button>
             </div>
 
+            {/* Starter */}
+            <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.1s' }}>
+              <h3 className="fl-plan-name">Starter</h3>
+              <p className="fl-plan-storage">200 GB stocare</p>
+              <div className="fl-plan-price">
+                <span className="fl-plan-price-amount">
+                  49 lei<span>/lună</span>
+                </span>
+              </div>
+              <div className="fl-plan-divider" />
+              <ul className="fl-plan-features">
+                <li>200 GB stocare</li>
+                <li>Galerii nelimitate</li>
+                <li>Galerii protejate cu parolă</li>
+                <li>Selecții favorite pentru clienți</li>
+                <li>Site de prezentare inclus</li>
+              </ul>
+              <p className="fl-plan-desc">Pentru fotograful care livrează constant și vrea să arate profesional.</p>
+              <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
+                Alege Starter
+              </button>
+            </div>
+
             {/* Pro */}
-            <div className="fl-plan fl-plan-featured fl-reveal" style={{ transitionDelay: '0.1s' }}>
+            <div className="fl-plan fl-plan-featured fl-reveal" style={{ transitionDelay: '0.2s' }}>
               <span className="fl-plan-badge">Recomandat</span>
               <h3 className="fl-plan-name">Pro</h3>
               <p className="fl-plan-storage">500 GB stocare</p>
               <div className="fl-plan-price">
                 <span className="fl-plan-price-amount">
-                  100 lei<span>/lună</span>
+                  99 lei<span>/lună</span>
                 </span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
-                <li>500 GB stocare foto</li>
-                <li>Galerii cu parolă</li>
-                <li>Branding personalizat</li>
-                <li>Statistici acces</li>
-                <li>Suport prioritar</li>
+                <li>500 GB stocare</li>
+                <li>Galerii nelimitate</li>
+                <li>Galerii protejate cu parolă</li>
+                <li>Selecții favorite pentru clienți</li>
+                <li>Site de prezentare inclus</li>
               </ul>
+              <p className="fl-plan-desc">Volumul și viteza de care ai nevoie în sezonul aglomerat.</p>
               <button className="fl-btn-plan fl-btn-plan-gold" onClick={() => navigate('/register')}>
                 Alege Pro
               </button>
             </div>
 
-            {/* Unlimited */}
-            <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.2s' }}>
-              <h3 className="fl-plan-name">Unlimited</h3>
+            {/* Studio */}
+            <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.3s' }}>
+              <h3 className="fl-plan-name">Studio</h3>
               <p className="fl-plan-storage">1 TB stocare</p>
               <div className="fl-plan-price">
                 <span className="fl-plan-price-amount">
-                  150 lei<span>/lună</span>
+                  149 lei<span>/lună</span>
                 </span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
-                <li>1 TB stocare foto</li>
-                <li>Tot ce include Pro</li>
-                <li>Domeniu custom</li>
-                <li>API access</li>
-                <li>Suport dedicat</li>
+                <li>1 TB stocare</li>
+                <li>Galerii nelimitate</li>
+                <li>Galerii protejate cu parolă</li>
+                <li>Selecții favorite pentru clienți</li>
+                <li>Site de prezentare inclus</li>
               </ul>
+              <p className="fl-plan-desc">Pentru cei care nu fac compromisuri. Arhivă, livrări masive, totul într-un singur loc.</p>
               <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
-                Alege Unlimited
+                Alege Studio
               </button>
             </div>
           </div>
@@ -292,7 +319,7 @@ function LandingPage({ user }) {
           </div>
         </div>
         <div className="fl-footer-bottom">
-          <span className="fl-footer-copy">© 2025 Mina. Toate drepturile rezervate.</span>
+          <span className="fl-footer-copy">© 2026 Mina. Toate drepturile rezervate.</span>
           <span className="fl-footer-made">Construit cu React & Cloudflare ✦</span>
         </div>
       </footer>

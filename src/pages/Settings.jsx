@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import SubscriptionSection from '../components/SubscriptionSection'
+import './Settings.css'
 
 const { auth: authService, sites: sitesService, media: mediaService } = getAppServices()
 
@@ -10,10 +12,11 @@ const DEFAULTS = {
   whatsappNumber: '',
   websiteUrl: '',
   accentColor: '#000000',
-  logoUrl: ''
+  logoUrl: '',
 }
 
-export default function Settings({ user }) {
+export default function Settings({ user, theme, setTheme, userPlan, storageLimit, checkAccess }) {
+  const [activeTab, setActiveTab] = useState('branding')
   const [form, setForm] = useState({ ...DEFAULTS })
   const [logoPreview, setLogoPreview] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -25,27 +28,28 @@ export default function Settings({ user }) {
     if (!user?.uid) return
     const load = async () => {
       try {
-        const d = await sitesService.getProfile(user.uid)
-        if (d) {
+        const data = await sitesService.getProfile(user.uid)
+        if (data) {
           setForm({
-            brandName: d.brandName ?? DEFAULTS.brandName,
-            instagramUrl: d.instagramUrl ?? '',
-            whatsappNumber: d.whatsappNumber ?? '',
-            websiteUrl: d.websiteUrl ?? '',
-            accentColor: d.accentColor ?? DEFAULTS.accentColor,
-            logoUrl: d.logoUrl ?? ''
+            brandName: data.brandName ?? DEFAULTS.brandName,
+            instagramUrl: data.instagramUrl ?? '',
+            whatsappNumber: data.whatsappNumber ?? '',
+            websiteUrl: data.websiteUrl ?? '',
+            accentColor: data.accentColor ?? DEFAULTS.accentColor,
+            logoUrl: data.logoUrl ?? '',
           })
-          if (d.logoUrl) {
+
+          if (data.logoUrl) {
             try {
-              const url = await mediaService.getBrandingAsset(d.logoUrl)
+              const url = await mediaService.getBrandingAsset(data.logoUrl)
               setLogoPreview(url)
             } catch {
               setLogoPreview(null)
             }
           }
         }
-      } catch (e) {
-        console.error(e)
+      } catch (error) {
+        console.error(error)
       } finally {
         setLoading(false)
       }
@@ -53,32 +57,39 @@ export default function Settings({ user }) {
     load()
   }, [user?.uid])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     if (!user?.uid) return
+
     setSaving(true)
     try {
-      await sitesService.saveProfile(user.uid, {
-        ...form,
-        brandName: form.brandName.trim() || DEFAULTS.brandName,
-        updatedAt: new Date()
-      }, { merge: true })
+      await sitesService.saveProfile(
+        user.uid,
+        {
+          ...form,
+          brandName: form.brandName.trim() || DEFAULTS.brandName,
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      )
       alert('Setările au fost salvate.')
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
       alert('Eroare la salvare.')
     } finally {
       setSaving(false)
     }
   }
 
-  const handleLogoChange = async (e) => {
-    const file = e.target.files?.[0]
+  const handleLogoChange = async (event) => {
+    const file = event.target.files?.[0]
     if (!file || !user?.uid) return
+
     if (!file.type.startsWith('image/')) {
       alert('Selectează un fișier imagine (PNG, JPG).')
       return
     }
+
     setLogoUploading(true)
     try {
       const path = LOGO_PATH(user.uid)
@@ -86,10 +97,10 @@ export default function Settings({ user }) {
       await mediaService.uploadFileToPath(file, path, undefined, idToken)
       const blobUrl = await mediaService.getBrandingAsset(path)
       setLogoPreview(blobUrl)
-      setForm((p) => ({ ...p, logoUrl: path }))
+      setForm((prev) => ({ ...prev, logoUrl: path }))
       await sitesService.saveProfile(user.uid, { logoUrl: path, updatedAt: new Date() }, { merge: true })
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
       alert('Eroare la încărcarea logo-ului.')
     } finally {
       setLogoUploading(false)
@@ -98,123 +109,197 @@ export default function Settings({ user }) {
   }
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Se încarcă...</div>
+    return <div className="settings-loading">Se încarcă...</div>
   }
 
   return (
-    <div className="settings-page" style={{ padding: '40px 0', maxWidth: 560 }}>
-      <h2 style={{ margin: '0 0 24px 0', fontSize: 24, fontWeight: 600 }}>Branding &amp; Setări</h2>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <div>
-          <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500 }}>Logo</label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleLogoChange}
-            style={{ display: 'none' }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={logoUploading}
-              className="btn-secondary"
-              style={{ padding: '10px 20px' }}
-            >
-              {logoUploading ? 'Se încarcă...' : 'Încarcă logo'}
-            </button>
-            {logoPreview && (
-              <img
-                src={logoPreview}
-                alt="Logo"
-                style={{ width: 64, height: 64, objectFit: 'contain', border: '1px solid #eee', borderRadius: 8 }}
-              />
-            )}
-          </div>
-        </div>
+    <div className="settings-page">
+      <div className="settings-header">
+        <h2>Setări</h2>
+        <p>Controlezi brandingul, tema și zona de abonament dintr-un singur loc.</p>
+      </div>
 
-        <div>
-          <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500 }}>Nume brand</label>
-          <input
-            type="text"
-            value={form.brandName}
-            onChange={(e) => setForm((p) => ({ ...p, brandName: e.target.value }))}
-            placeholder={DEFAULTS.brandName}
-            style={{
-              width: '100%', padding: 12, fontSize: 16, border: '1px solid #ddd', borderRadius: 8,
-              outline: 'none', boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500 }}>Culoare de accent</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <input
-              type="color"
-              value={form.accentColor}
-              onChange={(e) => setForm((p) => ({ ...p, accentColor: e.target.value }))}
-              style={{ width: 48, height: 48, padding: 0, border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' }}
-            />
-            <input
-              type="text"
-              value={form.accentColor}
-              onChange={(e) => setForm((p) => ({ ...p, accentColor: e.target.value }))}
-              style={{
-                width: 100, padding: 10, fontSize: 14, fontFamily: 'monospace', border: '1px solid #ddd',
-                borderRadius: 6, outline: 'none', boxSizing: 'border-box'
-              }}
-            />
-          </div>
-        </div>
-
-        <div>
-          <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500 }}>WhatsApp</label>
-          <input
-            type="text"
-            value={form.whatsappNumber}
-            onChange={(e) => setForm((p) => ({ ...p, whatsappNumber: e.target.value }))}
-            placeholder="+40 712 345 678"
-            style={{
-              width: '100%', padding: 12, fontSize: 16, border: '1px solid #ddd', borderRadius: 8,
-              outline: 'none', boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500 }}>Instagram</label>
-          <input
-            type="text"
-            value={form.instagramUrl}
-            onChange={(e) => setForm((p) => ({ ...p, instagramUrl: e.target.value }))}
-            placeholder="https://instagram.com/username sau @username"
-            style={{
-              width: '100%', padding: 12, fontSize: 16, border: '1px solid #ddd', borderRadius: 8,
-              outline: 'none', boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500 }}>Website</label>
-          <input
-            type="url"
-            value={form.websiteUrl}
-            onChange={(e) => setForm((p) => ({ ...p, websiteUrl: e.target.value }))}
-            placeholder="https://example.com"
-            style={{
-              width: '100%', padding: 12, fontSize: 16, border: '1px solid #ddd', borderRadius: 8,
-              outline: 'none', boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <button type="submit" className="btn-primary" disabled={saving} style={{ padding: 14, alignSelf: 'flex-start' }}>
-          {saving ? 'Se salvează...' : 'Salvează setările'}
+      <div className="settings-tabs" role="tablist" aria-label="Setări">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'branding'}
+          className={`settings-tab-btn ${activeTab === 'branding' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('branding')}
+        >
+          Branding
         </button>
-      </form>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'theme'}
+          className={`settings-tab-btn ${activeTab === 'theme' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('theme')}
+        >
+          Temă
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'billing'}
+          className={`settings-tab-btn ${activeTab === 'billing' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('billing')}
+        >
+          Abonament & Facturare
+        </button>
+      </div>
+
+      {activeTab === 'branding' && (
+        <section className="settings-panel" role="tabpanel" aria-label="Branding">
+          <h3 className="settings-panel-title">Branding</h3>
+
+          <form onSubmit={handleSubmit} className="st-form">
+            <div className="st-field">
+              <label>Logo</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLogoChange}
+                style={{ display: 'none' }}
+              />
+              <div className="st-logo-row">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={logoUploading}
+                  className="btn-secondary"
+                >
+                  {logoUploading ? 'Se încarcă...' : 'Încarcă logo'}
+                </button>
+                {logoPreview && (
+                  <img src={logoPreview} alt="Logo" className="st-logo-preview" />
+                )}
+              </div>
+            </div>
+
+            <div className="st-field">
+              <label>Nume brand</label>
+              <input
+                type="text"
+                value={form.brandName}
+                onChange={(e) => setForm((prev) => ({ ...prev, brandName: e.target.value }))}
+                placeholder={DEFAULTS.brandName}
+              />
+            </div>
+
+            <div className="st-field">
+              <label>Culoare accent</label>
+              <div className="st-color-row">
+                <input
+                  type="color"
+                  value={form.accentColor}
+                  onChange={(e) => setForm((prev) => ({ ...prev, accentColor: e.target.value }))}
+                  className="st-color-input"
+                />
+                <input
+                  type="text"
+                  value={form.accentColor}
+                  onChange={(e) => setForm((prev) => ({ ...prev, accentColor: e.target.value }))}
+                  className="st-color-text"
+                />
+              </div>
+            </div>
+
+            <div className="st-field">
+              <label>WhatsApp</label>
+              <input
+                type="text"
+                value={form.whatsappNumber}
+                onChange={(e) => setForm((prev) => ({ ...prev, whatsappNumber: e.target.value }))}
+                placeholder="+40 712 345 678"
+              />
+            </div>
+
+            <div className="st-field">
+              <label>Instagram</label>
+              <input
+                type="text"
+                value={form.instagramUrl}
+                onChange={(e) => setForm((prev) => ({ ...prev, instagramUrl: e.target.value }))}
+                placeholder="https://instagram.com/username sau @username"
+              />
+            </div>
+
+            <div className="st-field">
+              <label>Website</label>
+              <input
+                type="url"
+                value={form.websiteUrl}
+                onChange={(e) => setForm((prev) => ({ ...prev, websiteUrl: e.target.value }))}
+                placeholder="https://example.com"
+              />
+            </div>
+
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Se salvează...' : 'Salvează setările'}
+            </button>
+          </form>
+        </section>
+      )}
+
+      {activeTab === 'theme' && (
+        <section className="settings-panel" role="tabpanel" aria-label="Temă">
+          <h3 className="settings-panel-title">Tema interfeței</h3>
+          <p className="settings-subtitle">Se aplică pe dashboard, galerii și site-ul tău public.</p>
+
+          <div className="settings-theme-grid">
+            {[
+              { id: 'luxos', label: 'Luxos', bg: '#0d0900', accent: '#d4af64', text: '#f5e6c0', desc: 'Dark auriu, serif elegant' },
+              { id: 'minimal', label: 'Minimal', bg: '#ffffff', accent: '#111111', text: '#1d1d1f', desc: 'Alb pur, fără distrageri' },
+              { id: 'indraznet', label: 'Îndrăzneț', bg: '#0a0a1a', accent: '#a970ff', text: '#ffffff', desc: 'Dark violet, modern' },
+              { id: 'cald', label: 'Cald', bg: '#faf6f0', accent: '#8b6040', text: '#2d1f0f', desc: 'Bej crem, organic' },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTheme(t.id)}
+                style={{
+                  background: t.bg,
+                  border: `2px solid ${theme === t.id ? t.accent : 'transparent'}`,
+                  borderRadius: 14,
+                  padding: '16px 18px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  outline: 'none',
+                  transition: 'border-color 0.2s, transform 0.15s',
+                  transform: theme === t.id ? 'scale(1.02)' : 'scale(1)',
+                  boxShadow: theme === t.id ? `0 0 0 4px ${t.accent}22` : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: t.accent, flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{t.label}</span>
+                  {theme === t.id && (
+                    <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: t.accent, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Activ
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: 11.5, color: t.text, opacity: 0.55, fontWeight: 300 }}>{t.desc}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'billing' && (
+        <section className="settings-panel" role="tabpanel" aria-label="Abonament și facturare">
+          <h3 className="settings-panel-title">Abonament & Facturare</h3>
+          <SubscriptionSection
+            user={user}
+            userPlan={userPlan}
+            storageLimit={storageLimit}
+            checkAccess={checkAccess}
+            mode="billingOnly"
+          />
+        </section>
+      )}
     </div>
   )
 }

@@ -34,6 +34,10 @@ export default function AdminSelections({ galerie, userId }) {
               .filter((item) => Array.isArray(item?.keys) && item.keys.length > 0)
               .map((item) => ({
                 clientName: item.clientName,
+                clientEmail: item.clientEmail || '',
+                clientPhone: item.clientPhone || '',
+                clientAdditionalInfo: item.clientAdditionalInfo || '',
+                clientComment: item.clientComment || '',
                 keys: item.keys,
                 selectionTitle: item.selectionTitle || galerie?.numeSelectieClient || 'Selecție',
               }))
@@ -51,6 +55,10 @@ export default function AdminSelections({ galerie, userId }) {
             .filter(([, keys]) => Array.isArray(keys) && keys.length > 0)
             .map(([clientName, keys]) => ({
               clientName,
+              clientEmail: '',
+              clientPhone: '',
+              clientAdditionalInfo: '',
+              clientComment: '',
               keys,
               selectionTitle: galerie?.numeSelectieClient || 'Selecție',
             }))
@@ -145,7 +153,7 @@ export default function AdminSelections({ galerie, userId }) {
     }
   }
 
-  if (!selectionLoading && selectionItems.length === 0) return null
+  if (selectionItems.length === 0) return null
 
   return (
     <>
@@ -157,16 +165,24 @@ export default function AdminSelections({ galerie, userId }) {
               <tr>
                 <th>Client</th>
                 <th>Titlu selecție</th>
-                <th>Poze</th>
-                <th>Acțiuni</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectionItems.map(({ clientName, keys, selectionTitle }) => (
+                  <th>Poze</th>
+                  <th>Email</th>
+                  <th>Telefon</th>
+                  <th>Detalii</th>
+                  <th>Comentariu</th>
+                  <th>Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody>
+              {selectionItems.map(({ clientName, clientEmail, clientPhone, clientAdditionalInfo, clientComment, keys, selectionTitle }) => (
                 <tr key={clientName}>
                   <td>{clientName}</td>
                   <td>{selectionTitle || 'Selecție'}</td>
                   <td>{keys?.length ?? 0}</td>
+                  <td>{clientEmail || '—'}</td>
+                  <td>{clientPhone || '—'}</td>
+                  <td>{clientAdditionalInfo || '—'}</td>
+                  <td>{clientComment || '—'}</td>
                   <td>
                     <div className="dashboard-selections-actions">
                       <button

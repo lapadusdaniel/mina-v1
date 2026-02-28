@@ -1,0 +1,71 @@
+/* ============================================
+   MINA — Theme System
+   4 teme: luxos | minimal | indraznet | cald
+   Aplicate via atribut data-theme pe <html>
+============================================ */
+
+/* ── DEFAULT (Luxos) ── */
+:root,
+[data-theme='luxos'] {
+  --theme-bg: #0d0900;
+  --theme-bg-2: #1a1208;
+  --theme-bg-card: #1f1610;
+  --theme-border: rgba(212, 175, 100, 0.12);
+  --theme-accent: #d4af64;
+  --theme-accent-soft: rgba(212, 175, 100, 0.1);
+  --theme-text: #f5e6c0;
+  --theme-text-muted: rgba(245, 230, 192, 0.45);
+  --theme-sidebar-bg: #0a0700;
+  --theme-topbar-bg: rgba(13, 9, 0, 0.92);
+  --theme-font-display: 'Cormorant Garamond', Georgia, serif;
+  --theme-font-body: 'DM Sans', sans-serif;
+  --theme-radius: 14px;
+}
+
+[data-theme='minimal'] {
+  --theme-bg: #ffffff;
+  --theme-bg-2: #f5f5f7;
+  --theme-bg-card: #ffffff;
+  --theme-border: rgba(0, 0, 0, 0.07);
+  --theme-accent: #111111;
+  --theme-accent-soft: rgba(0, 0, 0, 0.05);
+  --theme-text: #1d1d1f;
+  --theme-text-muted: #86868b;
+  --theme-sidebar-bg: #111111;
+  --theme-topbar-bg: rgba(255, 255, 255, 0.88);
+  --theme-font-display: 'Inter', sans-serif;
+  --theme-font-body: 'Inter', sans-serif;
+  --theme-radius: 10px;
+}
+
+[data-theme='indraznet'] {
+  --theme-bg: #0a0a1a;
+  --theme-bg-2: #0f0f22;
+  --theme-bg-card: #12122a;
+  --theme-border: rgba(130, 60, 255, 0.15);
+  --theme-accent: #a970ff;
+  --theme-accent-soft: rgba(169, 112, 255, 0.1);
+  --theme-text: #ffffff;
+  --theme-text-muted: rgba(255, 255, 255, 0.45);
+  --theme-sidebar-bg: #080818;
+  --theme-topbar-bg: rgba(10, 10, 26, 0.92);
+  --theme-font-display: 'Space Grotesk', sans-serif;
+  --theme-font-body: 'Space Grotesk', sans-serif;
+  --theme-radius: 12px;
+}
+
+[data-theme='cald'] {
+  --theme-bg: #faf6f0;
+  --theme-bg-2: #f5ede0;
+  --theme-bg-card: #ffffff;
+  --theme-border: rgba(180, 130, 80, 0.12);
+  --theme-accent: #8b6040;
+  --theme-accent-soft: rgba(139, 96, 64, 0.08);
+  --theme-text: #2d1f0f;
+  --theme-text-muted: rgba(45, 31, 15, 0.5);
+  --theme-sidebar-bg: #2d1f0f;
+  --theme-topbar-bg: rgba(250, 246, 240, 0.92);
+  --theme-font-display: 'Playfair Display', Georgia, serif;
+  --theme-font-body: 'DM Sans', sans-serif;
+  --theme-radius: 16px;
+}

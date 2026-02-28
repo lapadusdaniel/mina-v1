@@ -19,8 +19,9 @@ function mapDoc(snap) {
 
 function normalizePlanFromString(raw) {
   const normalized = String(raw || '').trim().toLowerCase()
-  if (normalized === 'unlimited') return 'Unlimited'
+  if (normalized === 'studio' || normalized === 'unlimited') return 'Studio'
   if (normalized === 'pro') return 'Pro'
+  if (normalized === 'starter') return 'Starter'
   if (normalized === 'free') return 'Free'
   return ''
 }
@@ -33,7 +34,7 @@ function extractUidFromSubscriptionSnap(snap) {
   return parts[customersIndex + 1] || ''
 }
 
-function inferPlanFromSubscriptionData(data, { stripePricePro, stripePriceUnlimited }) {
+function inferPlanFromSubscriptionData(data, { stripePriceStarter, stripePricePro, stripePriceStudio }) {
   const explicitPlan = normalizePlanFromString(
     data?.plan
     || data?.role
@@ -43,8 +44,9 @@ function inferPlanFromSubscriptionData(data, { stripePricePro, stripePriceUnlimi
   if (explicitPlan) return explicitPlan
 
   const priceId = data?.items?.data?.[0]?.price?.id || data?.price?.id || ''
-  if (priceId && priceId === stripePriceUnlimited) return 'Unlimited'
+  if (priceId && priceId === stripePriceStudio) return 'Studio'
   if (priceId && priceId === stripePricePro) return 'Pro'
+  if (priceId && priceId === stripePriceStarter) return 'Starter'
 
   return 'Free'
 }
@@ -92,7 +94,7 @@ export function createAdminModule({ db }) {
       return allSubs
     },
 
-    async getAdminSnapshot({ stripePricePro, stripePriceUnlimited } = {}) {
+    async getAdminSnapshot({ stripePriceStarter, stripePricePro, stripePriceStudio } = {}) {
       const [
         usersSnap,
         galleriesSnap,
@@ -137,16 +139,25 @@ export function createAdminModule({ db }) {
         if (!['active', 'trialing'].includes(status)) return
 
         const inferredPlan = inferPlanFromSubscriptionData(subData, {
+          stripePriceStarter,
           stripePricePro,
-          stripePriceUnlimited,
+          stripePriceStudio,
         })
 
-        if (inferredPlan === 'Unlimited') {
-          activePlanByUid[uid] = 'Unlimited'
+        if (inferredPlan === 'Studio') {
+          activePlanByUid[uid] = 'Studio'
           return
         }
-        if (inferredPlan === 'Pro' && activePlanByUid[uid] !== 'Unlimited') {
+        if (inferredPlan === 'Pro' && activePlanByUid[uid] !== 'Studio') {
           activePlanByUid[uid] = 'Pro'
+          return
+        }
+        if (
+          inferredPlan === 'Starter' &&
+          activePlanByUid[uid] !== 'Studio' &&
+          activePlanByUid[uid] !== 'Pro'
+        ) {
+          activePlanByUid[uid] = 'Starter'
         }
       })
 

@@ -4,6 +4,7 @@ import './App.css'
 import Login from './components/login.jsx'
 import Register from './components/Register.jsx'
 import { getAppServices } from './core/bootstrap/appBootstrap'
+import { useTheme } from './hooks/useTheme'
 
 const Dashboard = lazy(() => import('./components/Dashboard.jsx'))
 const ClientGallery = lazy(() => import('./components/ClientGallery.jsx'))
@@ -95,11 +96,11 @@ function AuthLayout({ children }) {
   return <div style={{ fontFamily: 'Arial, sans-serif' }}>{children}</div>
 }
 
-function ProtectedDashboard({ user, onLogout, initialTab }) {
+function ProtectedDashboard({ user, onLogout, initialTab, theme, setTheme }) {
   if (!user) return <Navigate to="/login" replace />
   return (
     <div style={{ fontFamily: 'Arial, sans-serif' }}>
-      <Dashboard user={user} onLogout={onLogout} initialTab={initialTab} />
+      <Dashboard user={user} onLogout={onLogout} initialTab={initialTab} theme={theme} setTheme={setTheme} />
     </div>
   )
 }
@@ -108,6 +109,7 @@ function App() {
   const [user, setUser] = useState(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
   const navigate = useNavigate()
+  const { theme, setTheme } = useTheme(user?.uid)
 
   useEffect(() => {
     const unsubscribe = authService.watchSession((sessionUser) => {
@@ -148,8 +150,8 @@ function App() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthLayout><Login onLogin={handleLogin} onSwitchToRegister={() => navigate('/register')} /></AuthLayout>} />
         <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <AuthLayout><Register onRegister={handleRegister} onSwitchToLogin={() => navigate('/login')} /></AuthLayout>} />
-        <Route path="/dashboard" element={<ProtectedDashboard user={user} onLogout={handleLogout} />} />
-        <Route path="/settings" element={<ProtectedDashboard user={user} onLogout={handleLogout} initialTab="setari" />} />
+        <Route path="/dashboard" element={<ProtectedDashboard user={user} onLogout={handleLogout} theme={theme} setTheme={setTheme} />} />
+        <Route path="/settings" element={<ProtectedDashboard user={user} onLogout={handleLogout} initialTab="setari" theme={theme} setTheme={setTheme} />} />
         <Route path="/admin" element={<AdminPanel user={user} />} />
         <Route path="/gallery/:id" element={<ClientGallery />} />
         <Route path="/" element={<LandingPage user={user} />} />

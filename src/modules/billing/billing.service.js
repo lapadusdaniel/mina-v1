@@ -1,20 +1,25 @@
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, limit as limitTo } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, limit as limitTo } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 
 export const STRIPE_PRICES = {
+  starter: (import.meta.env.VITE_STRIPE_PRICE_STARTER || '').trim(),
   pro: (import.meta.env.VITE_STRIPE_PRICE_PRO || '').trim(),
-  unlimited: (import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
+  studio: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
+  unlimited: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
 }
 
 export const PLAN_PRICES = {
+  STARTER: STRIPE_PRICES.starter,
   PRO: STRIPE_PRICES.pro,
-  UNLIMITED: STRIPE_PRICES.unlimited,
+  STUDIO: STRIPE_PRICES.studio,
+  UNLIMITED: STRIPE_PRICES.studio,
 }
 
 export const STORAGE_LIMITS = {
   Free: 15,
+  Starter: 200,
   Pro: 500,
-  Unlimited: 1000,
+  Studio: 1000,
 }
 
 export const BILLING_TYPES = {
@@ -34,8 +39,6 @@ export const DEFAULT_BILLING_DETAILS = {
 }
 
 const VALID_STATUSES = ['active', 'trialing']
-const CHECKOUT_CREATE_TIMEOUT_MS = 12000
-const CHECKOUT_SESSION_TIMEOUT_MS = 15000
 
 function sanitizeText(value, maxLen) {
   return String(value || '').trim().slice(0, maxLen)
@@ -82,8 +85,9 @@ function validateBillingDetails(details) {
 
 function priceIdToPlan(priceId) {
   if (!priceId) return 'Free'
-  if (priceId === PLAN_PRICES.UNLIMITED) return 'Unlimited'
+  if (priceId === PLAN_PRICES.STUDIO || priceId === PLAN_PRICES.UNLIMITED) return 'Studio'
   if (priceId === PLAN_PRICES.PRO) return 'Pro'
+  if (priceId === PLAN_PRICES.STARTER) return 'Starter'
   return 'Free'
 }
 
@@ -198,17 +202,17 @@ function normalizeInvoice(docSnap) {
   }
 }
 
-async function addCheckoutSessionWithTimeout({ db, uid, payload }) {
-  const createPromise = addDoc(collection(db, 'customers', uid, 'checkout_sessions'), payload)
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new Error('Timeout Stripe checkout: scrierea sesiunii in Firestore a durat prea mult.'))
-    }, CHECKOUT_CREATE_TIMEOUT_MS)
-  })
-  return Promise.race([createPromise, timeoutPromise])
+function normalizePlanName(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (raw === 'studio' || raw === 'unlimited') return 'Studio'
+  if (raw === 'pro') return 'Pro'
+  if (raw === 'starter') return 'Starter'
+  return 'Free'
 }
 
 export function createBillingModule({ db, functions }) {
+  const createCheckoutSessionCallable =
+    functions ? httpsCallable(functions, 'createCheckoutSession') : null
   const createPortalLinkCallable =
     functions ? httpsCallable(functions, 'ext-firestore-stripe-payments-createPortalLink') : null
   const downloadInvoicePdfCallable =
@@ -231,68 +235,26 @@ export function createBillingModule({ db, functions }) {
       if (!price) {
         throw new Error(
           `Config Stripe lipsa pentru planul "${planId}". ` +
-          'Seteaza in .env: VITE_STRIPE_PRICE_PRO si VITE_STRIPE_PRICE_UNLIMITED, apoi rebuild + deploy.'
+          'Seteaza in .env: VITE_STRIPE_PRICE_STARTER, VITE_STRIPE_PRICE_PRO, VITE_STRIPE_PRICE_STUDIO, apoi rebuild + deploy.'
         )
       }
+      if (!createCheckoutSessionCallable) {
+        throw new Error('Checkout indisponibil: Firebase Functions nu este configurat.')
+      }
 
-      const sessionRef = await addCheckoutSessionWithTimeout({
-        db,
-        uid,
-        payload: {
-        mode: 'subscription',
-        price,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        allow_promotion_codes: allowPromotionCodes,
-        createdAt: new Date(),
-        },
+      const result = await createCheckoutSessionCallable({
+        priceId: price,
+        successUrl,
+        cancelUrl,
+        allowPromotionCodes,
       })
 
-      return new Promise((resolve, reject) => {
-        let settled = false
-        let unsubscribe = () => {}
+      const url = String(result?.data?.url || '').trim()
+      if (!url) {
+        throw new Error('Checkout indisponibil: serverul nu a returnat URL-ul Stripe.')
+      }
 
-        const failTimeout = setTimeout(() => {
-          if (settled) return
-          settled = true
-          unsubscribe()
-          reject(
-            new Error(
-              'Timeout Stripe checkout: nu am primit URL de sesiune. Verifica Firebase Stripe extension (checkout_sessions -> url/error).'
-            )
-          )
-        }, CHECKOUT_SESSION_TIMEOUT_MS)
-
-        unsubscribe = onSnapshot(
-          sessionRef,
-          (snap) => {
-            const data = snap.data()
-            if (!data) return
-            if (data.error) {
-              if (settled) return
-              settled = true
-              clearTimeout(failTimeout)
-              unsubscribe()
-              reject(new Error(data.error.message || 'Eroare Stripe'))
-              return
-            }
-            if (data.url) {
-              if (settled) return
-              settled = true
-              clearTimeout(failTimeout)
-              unsubscribe()
-              resolve(data.url)
-            }
-          },
-          (err) => {
-            if (settled) return
-            settled = true
-            clearTimeout(failTimeout)
-            unsubscribe()
-            reject(err)
-          }
-        )
-      })
+      return url
     },
 
     watchUserPlan(uid, onChange) {
@@ -305,7 +267,7 @@ export function createBillingModule({ db, functions }) {
 
       const unsubOverride = onSnapshot(doc(db, 'adminOverrides', uid), (overrideSnap) => {
         if (overrideSnap.exists() && overrideSnap.data().plan) {
-          const overridePlan = overrideSnap.data().plan
+          const overridePlan = normalizePlanName(overrideSnap.data().plan)
           onChange({
             plan: overridePlan,
             storageLimit: STORAGE_LIMITS[overridePlan] || STORAGE_LIMITS.Free,
@@ -329,8 +291,9 @@ export function createBillingModule({ db, functions }) {
 
               const priceId = getPriceIdFromSubscription(data)
               const derived = priceIdToPlan(priceId)
-              if (derived === 'Unlimited') plan = 'Unlimited'
-              else if (derived === 'Pro' && plan !== 'Unlimited') plan = 'Pro'
+              if (derived === 'Studio') plan = 'Studio'
+              else if (derived === 'Pro' && plan !== 'Studio') plan = 'Pro'
+              else if (derived === 'Starter' && plan !== 'Studio' && plan !== 'Pro') plan = 'Starter'
             })
 
             onChange({
@@ -390,7 +353,7 @@ export function createBillingModule({ db, functions }) {
           : subscriptionFallback
 
       return {
-        overridePlan: overrideSnap.exists() ? (overrideSnap.data()?.plan || null) : null,
+        overridePlan: overrideSnap.exists() ? normalizePlanName(overrideSnap.data()?.plan) : null,
         activeSubscription,
         subscriptions: subscriptions.slice(0, 12),
         payments: payments.slice(0, 20),

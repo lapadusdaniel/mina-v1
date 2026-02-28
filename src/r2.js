@@ -17,6 +17,21 @@ function readShareTokenFromLocation() {
   }
 }
 
+async function readCurrentIdToken(forceRefresh = false) {
+  try {
+    const currentUser = auth?.currentUser
+    if (!currentUser) return ''
+    const token = await currentUser.getIdToken(forceRefresh)
+    return token ? String(token) : ''
+  } catch (_) {
+    return ''
+  }
+}
+
+function authHeadersFromToken(idToken = '') {
+  return idToken ? { Authorization: `Bearer ${idToken}` } : {}
+}
+
 function objectUrl(path, accessToken = '') {
   const token = accessToken || readShareTokenFromLocation()
   const query = token ? `?st=${encodeURIComponent(token)}` : ''
@@ -57,15 +72,8 @@ function ensurePublicPath(path, operation) {
 }
 
 async function buildReadAuthHeaders() {
-  try {
-    const currentUser = auth?.currentUser
-    if (!currentUser) return {}
-    const idToken = await currentUser.getIdToken()
-    if (!idToken) return {}
-    return { Authorization: `Bearer ${idToken}` }
-  } catch (_) {
-    return {}
-  }
+  const idToken = await readCurrentIdToken(false)
+  return authHeadersFromToken(idToken)
 }
 
 /** Upload file to R2. Requires Firebase idToken for Worker auth. */
@@ -112,24 +120,30 @@ export const listPoze = async (galerieId, _ownerUid = '') => {
   const prefix = `galerii/${galerieId}/originals/`
 
   const publicShareToken = readShareTokenFromLocation()
-  let headers = await buildReadAuthHeaders()
-  let response = await fetch(listUrl(prefix, publicShareToken), {
-    method: 'GET',
-    headers,
-  })
-  if (!response.ok && !publicShareToken && response.status === 403) {
-    try {
-      const refreshedToken = await auth?.currentUser?.getIdToken(true)
-      if (refreshedToken) {
-        headers = { Authorization: `Bearer ${refreshedToken}` }
-        response = await fetch(listUrl(prefix), {
-          method: 'GET',
-          headers,
-        })
+  const performList = async (shareToken = '', idToken = '') => {
+    return fetch(listUrl(prefix, shareToken), {
+      method: 'GET',
+      headers: authHeadersFromToken(idToken),
+    })
+  }
+
+  let idToken = await readCurrentIdToken(false)
+  let response = await performList(publicShareToken, idToken)
+
+  // If share-token flow fails (expired/invalid token), retry as authenticated owner.
+  if (!response.ok && response.status === 403) {
+    const refreshedToken = await readCurrentIdToken(true)
+    if (refreshedToken) {
+      idToken = refreshedToken
+      response = await performList('', idToken)
+      if (!response.ok && publicShareToken) {
+        response = await performList(publicShareToken, idToken)
       }
-    } catch (_) {
+    } else if (publicShareToken) {
+      response = await performList('', idToken)
     }
   }
+
   if (!response.ok) throw new Error(`List failed: ${response.status}`)
 
   const raw = await response.json().catch(() => [])
@@ -168,8 +182,31 @@ function resolvePath(key, type) {
 
 async function fetchBlobFromWorker(path, errorLabel, accessToken = '') {
   ensurePublicPath(path, errorLabel)
-  const headers = await buildReadAuthHeaders()
-  const response = await fetch(objectUrl(path, accessToken), { method: 'GET', headers })
+  const shareToken = accessToken || readShareTokenFromLocation()
+  const performRead = async (token = '', idToken = '') => {
+    return fetch(objectUrl(path, token), {
+      method: 'GET',
+      headers: authHeadersFromToken(idToken),
+    })
+  }
+
+  let idToken = await readCurrentIdToken(false)
+  let response = await performRead(shareToken, idToken)
+
+  // Retry 403 with refreshed auth and without token (owner access), then with token again.
+  if (!response.ok && response.status === 403) {
+    const refreshedToken = await readCurrentIdToken(true)
+    if (refreshedToken) {
+      idToken = refreshedToken
+      response = await performRead('', idToken)
+      if (!response.ok && shareToken) {
+        response = await performRead(shareToken, idToken)
+      }
+    } else if (shareToken) {
+      response = await performRead('', idToken)
+    }
+  }
+
   if (!response.ok) throw new Error(`${errorLabel}: ${response.status}`)
   return response.blob()
 }

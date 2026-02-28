@@ -63,3 +63,48 @@ Log retroactiv pentru lucrul făcut în `/Users/daniellapadus/Desktop/mina-v1` (
   - A) quota enforcement backend: închis.
   - C) rate limiting global real: închis.
 - Punctul B (share token cu semnătură HMAC secret) rămâne opțional de implementat ca întărire extra.
+
+## Update continuare
+
+### 2026-02-26 (Galerii + SmartBill MVP)
+- `6d3d7d0` — redesign modal creare galerie + setări pe tab-uri.
+- `1fdb880` — stabilizare client preview + simplificare comportament modal setări galerie.
+- `ca92d36` — owner-read bypass pentru galerii protejate + comportament setări client conectat.
+- `bacc4ca` — păstrare galerie activă la refresh + deschidere preview mai rapidă.
+- `43763d3` — tranziții mai fluide între view-urile dashboard/galerie.
+- `a35ae34` — integrare SmartBill webhook flow + UI istoric facturi în Abonament.
+- `e40f7b1` — încărcare istoric facturi fără dependență strictă de `createdAt`.
+- `815c7f7` — fallback sigur pentru download PDF factură din SmartBill.
+- `b9aa1d4` — lookup PDF robust la formate CIF diferite.
+
+### 2026-02-27 (SmartBill hardening + deploy tooling)
+- `a73f8fd` — detectare payload PDF SmartBill chiar dacă răspunsul vine cu `application/json`.
+- `7404226` — hardening runtime pentru functions + teste unitare pe fluxul SmartBill PDF.
+- `b92a221` — ghid/automatizare pentru deploy GCloud functions.
+
+### 2026-02-28 (Theming + polish topbar, WIP live)
+- Theming end-to-end pe Mina v1:
+  - variabile temă în `src/styles/themes.css`;
+  - hook `src/hooks/useTheme.js` cu persistență în profil;
+  - selector de temă în Settings;
+  - mapare extinsă în Dashboard pe `--theme-*`.
+- Polish topbar dashboard:
+  - aliniere avatar + nume + email;
+  - buton logout stilizat, cu contrast mai bun pe toate temele.
+- Build + deploy hosting executat cu succes:
+  - `npm run build` — PASS
+  - `FIREBASE_PROJECT_ID="mina-v1-aea51" npm run deploy:hosting` — PASS
+  - live: `https://mina-v1-aea51.web.app`
+- Notă: modificările de pe 2026-02-28 sunt momentan WIP (necomitate) în working tree.
+
+### 2026-02-28 (Audit tehnic complet Mina)
+- Audit cap-coadă pe codul `mina-v1` pentru:
+  - stack tehnic și versiuni;
+  - structură proiect și rol module;
+  - funcționalități complete vs WIP;
+  - flow-uri critice (auth, billing Stripe/SmartBill, galerii/R2).
+- Rezultat audit:
+  - fluxurile principale există și sunt legate end-to-end (Auth, galerii, Stripe webhook, SmartBill invoice, istoric facturi);
+  - identificate câteva inconsistențe de produs/tehnic (ex: setări compresie nealiniate între componente, secțiuni placeholder în dashboard, puncte de theming încă parțial hardcodate).
+- Livrabil pregătit în conversație: raport detaliat în 7 secțiuni, bazat strict pe cod, cu marcaj `[INCERT]` unde e deducție.
+- Notă: această etapă este audit/documentare; nu s-au făcut modificări de cod în aplicație.

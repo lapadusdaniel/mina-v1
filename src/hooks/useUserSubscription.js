@@ -29,10 +29,11 @@ export function useUserSubscription(uid) {
       case 'pro':
       case 'site':
       case 'customSlug':
-        return userPlan === 'Pro' || userPlan === 'Unlimited'
+        return userPlan === 'Pro' || userPlan === 'Studio'
+      case 'studio':
       case 'unlimited':
       case 'customDomain':
-        return userPlan === 'Unlimited'
+        return userPlan === 'Studio'
       default:
         return false
     }

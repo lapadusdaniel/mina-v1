@@ -3,6 +3,7 @@ import { getAppServices } from '../core/bootstrap/appBootstrap'
 import './PhotographerSite.css'
 
 const { sites: sitesService, media: mediaService } = getAppServices()
+const VALID_THEMES = ['luxos', 'minimal', 'indraznet', 'cald']
 
 // ── Helpers ──────────────────────────────────
 const normalizeUrl = (url) => {
@@ -198,9 +199,17 @@ export default function PhotographerSite({ previewData = null }) {
   useEffect(() => {
     if (previewData) {
       setSiteData(previewData)
-      return
+      return () => {
+        document.documentElement.removeAttribute('data-theme')
+      }
     }
-    if (!slug) { setError('Pagină negăsită.'); setLoading(false); return }
+    if (!slug) {
+      setError('Pagină negăsită.')
+      setLoading(false)
+      return () => {
+        document.documentElement.removeAttribute('data-theme')
+      }
+    }
 
     const load = async () => {
       try {
@@ -214,8 +223,13 @@ export default function PhotographerSite({ previewData = null }) {
 
         // Încarcă profilul
         const profileData = await sitesService.getProfile(data.uid)
-        if (profileData) setProfile(profileData)
-        else {
+        if (profileData) {
+          setProfile(profileData)
+          const theme = profileData?.theme
+          if (theme && VALID_THEMES.includes(theme)) {
+            document.documentElement.setAttribute('data-theme', theme)
+          }
+        } else {
           const legacy = await sitesService.getLegacySettings(data.uid)
           if (legacy) {
             setProfile((p) => ({
@@ -240,6 +254,10 @@ export default function PhotographerSite({ previewData = null }) {
       }
     }
     load()
+
+    return () => {
+      document.documentElement.removeAttribute('data-theme')
+    }
   }, [slug, previewData])
 
   // Încarcă imaginile din R2 când siteData e disponibil

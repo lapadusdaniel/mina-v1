@@ -39,10 +39,10 @@
    
    /* ── Butoane primare ── */
    .btn-primary {
-     font-family: var(--font-ui);
-     background-color: var(--black);
-     color: var(--white);
+     background: var(--theme-accent);
+     color: var(--theme-bg);
      border: none;
+     font-family: var(--theme-font-body);
      padding: 14px 36px;
      border-radius: 100px;
      cursor: pointer;
@@ -52,8 +52,8 @@
      transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
    }
    
-   .btn-primary:hover {
-     background-color: var(--gray-5);
+   .btn-primary:hover:not(:disabled) {
+     background: color-mix(in srgb, var(--theme-accent) 85%, white);
      transform: scale(1.02);
      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
    }
@@ -70,10 +70,10 @@
    
    /* ── Butoane secundare ── */
    .btn-secondary {
-     font-family: var(--font-ui);
-     background-color: transparent;
-     color: var(--black);
-     border: 1.5px solid var(--gray-2);
+     background: transparent;
+     color: var(--theme-text);
+     border: 1px solid var(--theme-border);
+     font-family: var(--theme-font-body);
      padding: 14px 36px;
      border-radius: 100px;
      cursor: pointer;
@@ -83,9 +83,9 @@
      transition: all var(--transition-fast);
    }
    
-   .btn-secondary:hover {
-     border-color: var(--black);
-     background-color: var(--off-white);
+   .btn-secondary:hover:not(:disabled) {
+     background: color-mix(in srgb, var(--theme-text) 5%, transparent);
+     border-color: color-mix(in srgb, var(--theme-accent) 50%, transparent);
    }
    
    /* ── Carduri features (Dashboard) ── */

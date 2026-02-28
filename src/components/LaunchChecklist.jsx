@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Circle, Copy } from 'lucide-react'
 
 const MANUAL_TASKS = [
   { id: 'checkout-pro', label: 'Am testat checkout Pro cap-coada' },
-  { id: 'checkout-unlimited', label: 'Am testat checkout Unlimited cap-coada' },
+  { id: 'checkout-studio', label: 'Am testat checkout Studio cap-coada' },
   { id: 'worker-delete', label: 'Am verificat ca delete galerie sterge fisierele din R2' },
   { id: 'qa-public', label: 'Am rulat QA public pe URL-ul live' },
 ]
@@ -69,17 +69,19 @@ export default function LaunchChecklist() {
     const firebaseAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || ''
     const workerUrl = import.meta.env.VITE_R2_WORKER_URL || ''
     const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
+    const stripeStarter = import.meta.env.VITE_STRIPE_PRICE_STARTER || ''
     const stripePro = import.meta.env.VITE_STRIPE_PRICE_PRO || ''
-    const stripeUnlimited = import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || ''
+    const stripeStudio = import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || ''
 
     const firebaseOk = Boolean(firebaseProjectId && firebaseAuthDomain)
     const workerOk = /^https:\/\//i.test(workerUrl)
-    const stripeConfigured = Boolean(stripeKey && stripePro && stripeUnlimited)
+    const stripeConfigured = Boolean(stripeKey && stripeStarter && stripePro && stripeStudio)
     const stripeLive =
       stripeConfigured &&
       stripeKey.startsWith('pk_live_') &&
+      stripeStarter.startsWith('price_') &&
       stripePro.startsWith('price_') &&
-      stripeUnlimited.startsWith('price_')
+      stripeStudio.startsWith('price_')
 
     return [
       {

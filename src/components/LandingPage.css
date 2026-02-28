@@ -534,9 +534,9 @@
    
    .fl-pricing-grid {
      display: grid;
-     grid-template-columns: repeat(3, 1fr);
+     grid-template-columns: repeat(4, 1fr);
      gap: 2px;
-     max-width: 960px;
+     max-width: 1120px;
      margin: 0 auto;
    }
    
@@ -642,7 +642,21 @@
    }
    
    .fl-plan-featured .fl-plan-features li { color: rgba(255,255,255,0.75); }
-   
+
+   .fl-plan-feature-muted { opacity: 0.45; }
+
+   .fl-plan-desc {
+     font-family: var(--font-ui);
+     font-size: 0.8rem;
+     font-weight: 300;
+     color: var(--gray-3);
+     line-height: 1.5;
+     margin-bottom: 32px;
+     opacity: 0.7;
+   }
+
+   .fl-plan-featured .fl-plan-desc { color: rgba(255,255,255,0.55); }
+
    .fl-btn-plan {
      width: 100%;
      font-family: var(--font-ui);

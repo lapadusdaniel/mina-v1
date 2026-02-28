@@ -23,7 +23,7 @@ const { auth: authService, galleries: galleriesService, media: mediaService } = 
 
 const PINNED_STORAGE_KEY = 'mina-pinned-galleries'
 const LEGACY_PINNED_STORAGE_KEY = 'fotolio-pinned-galleries'
-const PLAN_LIMITS_GB = { Free: 15, Pro: 500, Unlimited: 1000 }
+const PLAN_LIMITS_GB = { Free: 15, Starter: 200, Pro: 500, Studio: 1000, Unlimited: 1000 }
 const TRASH_AUTO_DELETE_DAYS = 30
 
 function readPinnedIdsFromStorage() {

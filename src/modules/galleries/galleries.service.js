@@ -8,10 +8,12 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
+  orderBy,
   query,
   setDoc,
   updateDoc,
   where,
+  limit as limitQuery,
 } from 'firebase/firestore'
 import {
   extractLegacySelection,
@@ -22,6 +24,28 @@ import {
 
 function mapDoc(snap) {
   return { id: snap.id, ...snap.data() }
+}
+
+function sanitizeClientMeta(meta = {}) {
+  const normalize = (value, maxLen) => String(value || '').trim().slice(0, maxLen)
+  return {
+    clientEmail: normalize(meta.clientEmail, 190),
+    clientPhone: normalize(meta.clientPhone, 40),
+    clientAdditionalInfo: normalize(meta.clientAdditionalInfo, 1000),
+    clientComment: normalize(meta.clientComment, 1000),
+  }
+}
+
+function sanitizeReviewPayload(payload = {}) {
+  const name = String(payload.name || '').trim().slice(0, 120)
+  const message = String(payload.message || '').trim().slice(0, 2000)
+  const ratingRaw = Number(payload.rating)
+  const rating = Number.isFinite(ratingRaw) ? Math.max(1, Math.min(5, Math.round(ratingRaw))) : null
+  return {
+    name,
+    message,
+    rating,
+  }
 }
 
 async function syncSelectionAggregates(db, galleryId) {
@@ -153,6 +177,10 @@ export function createGalleriesModule({ db }) {
           id: selectionSnap.id,
           clientId: data?.clientId || clientId,
           clientName: data?.clientName || normalizedName,
+          clientEmail: String(data?.clientEmail || ''),
+          clientPhone: String(data?.clientPhone || ''),
+          clientAdditionalInfo: String(data?.clientAdditionalInfo || ''),
+          clientComment: String(data?.clientComment || ''),
           keys: sanitizeKeys(data?.keys || []),
           count: Number(data?.count || 0),
           selectionTitle: data?.selectionTitle || '',
@@ -171,6 +199,10 @@ export function createGalleriesModule({ db }) {
         id: clientId,
         clientId,
         clientName: normalizedName,
+        clientEmail: '',
+        clientPhone: '',
+        clientAdditionalInfo: '',
+        clientComment: '',
         keys: legacyKeys,
         count: legacyKeys.length,
         selectionTitle: gallerySnap.data()?.numeSelectieClient || '',
@@ -191,6 +223,10 @@ export function createGalleriesModule({ db }) {
             id: d.id,
             clientId: data?.clientId || d.id,
             clientName: data?.clientName || d.id,
+            clientEmail: String(data?.clientEmail || ''),
+            clientPhone: String(data?.clientPhone || ''),
+            clientAdditionalInfo: String(data?.clientAdditionalInfo || ''),
+            clientComment: String(data?.clientComment || ''),
             keys,
             count: Number(data?.count || keys.length),
             selectionTitle: data?.selectionTitle || '',
@@ -222,6 +258,10 @@ export function createGalleriesModule({ db }) {
             id: toClientSelectionId(normalizedName) || normalizedName,
             clientId: toClientSelectionId(normalizedName) || normalizedName,
             clientName: normalizedName,
+            clientEmail: '',
+            clientPhone: '',
+            clientAdditionalInfo: '',
+            clientComment: '',
             keys: normalizedKeys,
             count: normalizedKeys.length,
             selectionTitle: galleryData?.numeSelectieClient || '',
@@ -244,7 +284,7 @@ export function createGalleriesModule({ db }) {
       return fromLegacy
     },
 
-    async saveClientSelection(galleryId, clientName, keys, selectionTitle = '') {
+    async saveClientSelection(galleryId, clientName, keys, selectionTitle = '', clientMeta = {}) {
       const normalizedName = normalizeClientName(clientName)
       if (!galleryId || !normalizedName) throw new Error('saveClientSelection: galleryId și clientName sunt obligatorii')
 
@@ -252,11 +292,13 @@ export function createGalleriesModule({ db }) {
       if (!clientId) throw new Error('saveClientSelection: clientId invalid')
 
       const cleanKeys = sanitizeKeys(keys)
+      const cleanMeta = sanitizeClientMeta(clientMeta)
       await setDoc(
         doc(db, 'gallerySelections', galleryId, 'clients', clientId),
         {
           clientId,
           clientName: normalizedName,
+          ...cleanMeta,
           keys: cleanKeys,
           count: cleanKeys.length,
           selectionTitle: selectionTitle || '',
@@ -271,7 +313,7 @@ export function createGalleriesModule({ db }) {
       } catch (_) {
       }
 
-      return { clientId, clientName: normalizedName, keys: cleanKeys }
+      return { clientId, clientName: normalizedName, ...cleanMeta, keys: cleanKeys }
     },
 
     async migrateLegacySelections(galleryId, { selectionTitle = '' } = {}) {
@@ -332,16 +374,73 @@ export function createGalleriesModule({ db }) {
       return { migratedClients, migratedPhotos }
     },
 
-    async addClientFavorite(galleryId, clientName, photoKey, selectionTitle = '') {
+    async addClientFavorite(galleryId, clientName, photoKey, selectionTitle = '', clientMeta = {}) {
       const current = await this.getClientSelection(galleryId, clientName)
       const merged = sanitizeKeys([...(current?.keys || []), photoKey])
-      return this.saveClientSelection(galleryId, clientName, merged, selectionTitle)
+      return this.saveClientSelection(
+        galleryId,
+        clientName,
+        merged,
+        selectionTitle,
+        {
+          clientEmail: clientMeta.clientEmail ?? current?.clientEmail ?? '',
+          clientPhone: clientMeta.clientPhone ?? current?.clientPhone ?? '',
+          clientAdditionalInfo: clientMeta.clientAdditionalInfo ?? current?.clientAdditionalInfo ?? '',
+          clientComment: clientMeta.clientComment ?? current?.clientComment ?? '',
+        }
+      )
     },
 
-    async removeClientFavorite(galleryId, clientName, photoKey, selectionTitle = '') {
+    async removeClientFavorite(galleryId, clientName, photoKey, selectionTitle = '', clientMeta = {}) {
       const current = await this.getClientSelection(galleryId, clientName)
       const filtered = sanitizeKeys((current?.keys || []).filter((k) => k !== photoKey))
-      return this.saveClientSelection(galleryId, clientName, filtered, selectionTitle)
+      return this.saveClientSelection(
+        galleryId,
+        clientName,
+        filtered,
+        selectionTitle,
+        {
+          clientEmail: clientMeta.clientEmail ?? current?.clientEmail ?? '',
+          clientPhone: clientMeta.clientPhone ?? current?.clientPhone ?? '',
+          clientAdditionalInfo: clientMeta.clientAdditionalInfo ?? current?.clientAdditionalInfo ?? '',
+          clientComment: clientMeta.clientComment ?? current?.clientComment ?? '',
+        }
+      )
+    },
+
+    async submitGalleryReview(galleryId, payload = {}) {
+      if (!galleryId) throw new Error('submitGalleryReview: galleryId este obligatoriu')
+      const clean = sanitizeReviewPayload(payload)
+      if (!clean.name) throw new Error('Numele este obligatoriu.')
+      if (!clean.message) throw new Error('Mesajul recenziei este obligatoriu.')
+
+      const data = {
+        name: clean.name,
+        message: clean.message,
+        createdAt: new Date(),
+      }
+      if (Number.isFinite(clean.rating)) data.rating = clean.rating
+
+      const ref = await addDoc(collection(db, 'galleryReviews', galleryId, 'items'), data)
+      return { id: ref.id, ...data }
+    },
+
+    async listGalleryReviews(galleryId, maxItems = 50) {
+      if (!galleryId) return []
+      const cappedLimit = Math.max(1, Math.min(100, Number(maxItems) || 50))
+      const reviewsRef = collection(db, 'galleryReviews', galleryId, 'items')
+      const reviewsQuery = query(reviewsRef, orderBy('createdAt', 'desc'), limitQuery(cappedLimit))
+      const snap = await getDocs(reviewsQuery)
+      return snap.docs.map((d) => {
+        const data = d.data() || {}
+        return {
+          id: d.id,
+          name: String(data.name || ''),
+          message: String(data.message || ''),
+          rating: Number.isFinite(Number(data.rating)) ? Number(data.rating) : null,
+          createdAt: data.createdAt || null,
+        }
+      })
     },
 
     async deleteGallery(galleryId) {

@@ -46,13 +46,16 @@ function statusClass(status) {
   return 'is-muted'
 }
 
-const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => {
+const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode = 'full' }) => {
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [openingPortal, setOpeningPortal] = useState(false)
   const [billingData, setBillingData] = useState(null)
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
-  const userPlan = userPlanProp ?? user?.plan ?? 'Free';
+  const normalizedRawPlan = String(userPlanProp ?? user?.plan ?? 'Free')
+  const userPlan = normalizedRawPlan === 'Unlimited' ? 'Studio' : normalizedRawPlan
+  const showPlans = mode === 'full' || mode === 'plansOnly'
+  const showBilling = mode === 'full' || mode === 'billingOnly'
 
   const loadBillingOverview = async () => {
     if (!user?.uid) return
@@ -162,35 +165,51 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
       id: 'free',
       name: 'Free',
       price: '0 lei',
-      features: ['15 GB Stocare Cloud', 'Galerii nelimitate', 'Branding de bază'],
+      features: ['15 GB stocare', '3 galerii active', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Fără site de prezentare'],
+      description: 'Perfect pentru a începe și a vedea cum funcționează Mina.',
       isCurrent: userPlan === 'Free',
       cta: 'Plan gratuit'
     },
     {
+      id: 'starter',
+      name: 'Starter',
+      price: '49 lei',
+      period: '/lună',
+      features: ['200 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
+      description: 'Pentru fotograful care livrează constant și vrea să arate profesional.',
+      isCurrent: userPlan === 'Starter',
+      cta: 'Alege Starter',
+      highlight: false
+    },
+    {
       id: 'pro',
       name: 'Pro',
-      price: '100 lei',
+      price: '99 lei',
       period: '/lună',
-      features: ['500 GB Stocare Cloud', 'Branding Personalizat', 'URL-uri Custom (slugs)', 'Suport Prioritar'],
+      features: ['500 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
+      description: 'Volumul și viteza de care ai nevoie în sezonul aglomerat.',
       isCurrent: userPlan === 'Pro',
-      cta: 'Treci la Pro',
+      cta: 'Alege Pro',
       highlight: true
     },
     {
-      id: 'unlimited',
-      name: 'Unlimited',
-      price: '150 lei',
+      id: 'studio',
+      name: 'Studio',
+      price: '149 lei',
       period: '/lună',
-      features: ['1 TB Stocare Cloud', 'Tot ce include Pro', 'Domeniu Personalizat', 'Suport WhatsApp'],
-      isCurrent: userPlan === 'Unlimited',
-      cta: 'Alege Unlimited',
+      features: ['1 TB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
+      description: 'Pentru cei care nu fac compromisuri. Arhivă, livrări masive, totul într-un singur loc.',
+      isCurrent: userPlan === 'Studio',
+      cta: 'Alege Studio',
       highlight: false
     }
   ];
 
   return (
     <div className="sub-wrapper">
-      <div className="sub-header">
+      {showPlans && (
+        <>
+          <div className="sub-header">
         <h2 className="sub-display-title">Alege planul potrivit <em>viziunii tale.</em></h2>
         <p className="sub-display-sub">Scalabilitate maximă pentru portofoliul tău profesional.</p>
       </div>
@@ -237,9 +256,13 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
             )
           })()
         ))}
-      </div>
+          </div>
+        </>
+      )}
 
-      <div className="sub-billing-grid">
+      {showBilling && (
+        <>
+          <div className="sub-billing-grid">
         <div className="sub-billing-card">
           <div className="sub-billing-head">
             <h3>Detalii cont</h3>
@@ -338,8 +361,10 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit }) => 
         </div>
       </div>
 
-      <BillingSettings user={user} />
-      <BillingHistory user={user} />
+          <BillingSettings user={user} />
+          <BillingHistory user={user} />
+        </>
+      )}
     </div>
   );
 };

@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "mina-v1-aea51"
+  },
+  "targets": {},
+  "etags": {
+    "mina-v1-aea51": {
+      "extensionInstances": {
+        "firestore-stripe-payments": "a1451e5d070fbd5bd26c2fd387d0712a46b0fec66ab85d03d0920512335f326c"
+      }
+    }
   }
 }

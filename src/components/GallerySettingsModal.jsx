@@ -80,9 +80,19 @@ export default function GallerySettingsModal({
   const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef(null)
   const initialSnapshotRef = useRef('')
+  const initializedModalKeyRef = useRef('')
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      initializedModalKeyRef.current = ''
+      return
+    }
+
+    const galleryId = galerie?.id || 'create'
+    const modalKey = `${mode}:${galleryId}`
+    if (initializedModalKeyRef.current === modalKey) return
+    initializedModalKeyRef.current = modalKey
+
     setActiveTab('main')
     const initialForm = buildGalleryFormState(galerie || null)
     setFormState(initialForm)
@@ -91,7 +101,7 @@ export default function GallerySettingsModal({
       ...initialForm,
       privacyPassword: '',
     })
-  }, [open, galerie, initialFiles])
+  }, [open, galerie?.id, mode, initialFiles])
 
   useEffect(() => {
     if (!open) return
@@ -194,14 +204,14 @@ export default function GallerySettingsModal({
 
             const [mediumFile, thumbFile] = await Promise.all([
               imageCompression(file, {
-                maxWidthOrHeight: 3200,
-                initialQuality: 0.92,
+                maxWidthOrHeight: 2048,
+                initialQuality: 0.85,
                 useWebWorker: true,
                 fileType: 'image/webp',
               }),
               imageCompression(file, {
-                maxWidthOrHeight: 1200,
-                initialQuality: 0.9,
+                maxWidthOrHeight: 720,
+                initialQuality: 0.88,
                 useWebWorker: true,
                 fileType: 'image/webp',
               }),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Lightbox, { useLightboxState } from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
@@ -8,10 +8,12 @@ import { getAppServices } from '../core/bootstrap/appBootstrap';
 import Masonry from 'react-masonry-css';
 import { ChevronDown, Share2, Download, Heart, Clock, Instagram, MessageCircle, Loader2 } from 'lucide-react';
 
+const VALID_THEMES = ['luxos', 'minimal', 'indraznet', 'cald'];
 const BATCH_SIZE = 24;
 const INITIAL_VISIBLE = 24;
 const SELECTION_NAME_STORAGE_KEY = 'mina_nume_client';
 const LEGACY_SELECTION_NAME_STORAGE_KEY = 'fotolio_nume_client';
+const GALLERY_UNLOCK_STORAGE_KEY_PREFIX = 'mina_gallery_unlock_';
 const LIGHTBOX_PRELOAD_OFFSETS = [0, -1, 1, -2, 2, -3, 3, -4, 4];
 
 const urlCache = new Map();
@@ -27,6 +29,16 @@ function persistSelectionName(name) {
   localStorage.setItem(SELECTION_NAME_STORAGE_KEY, name);
   // Keep writing legacy key too so old clients stay compatible.
   localStorage.setItem(LEGACY_SELECTION_NAME_STORAGE_KEY, name);
+}
+
+function getGalleryUnlockStorageKey(galleryId) {
+  return `${GALLERY_UNLOCK_STORAGE_KEY_PREFIX}${galleryId || ''}`;
+}
+
+async function sha256Hex(value) {
+  const raw = new TextEncoder().encode(String(value || ''));
+  const digest = await crypto.subtle.digest('SHA-256', raw);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function useIsMobile(breakpoint = 768) {
@@ -76,6 +88,8 @@ function LazyGalleryImage({
   accentColor,
   allowPhotoSelection = true,
   allowOriginalDownloads = true,
+  watermarkEnabled = false,
+  watermarkLabel = 'Mina',
 }) {
   const [url, setUrl] = useState(() => urlCache.get(`thumb:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -130,6 +144,11 @@ function LazyGalleryImage({
           />
         ) : (
           <div className="cg-item-placeholder" />
+        )}
+        {watermarkEnabled && (
+          <div className="cg-watermark" aria-hidden="true">
+            {watermarkLabel}
+          </div>
         )}
         <div className="cg-item-overlay">
           <div className="cg-item-actions">
@@ -268,7 +287,6 @@ const ClientGallery = () => {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const [lightboxOriginalUrls, setLightboxOriginalUrls] = useState({});
   const [lightboxMediumUrls, setLightboxMediumUrls] = useState({});
-  const [lightboxSessionSources, setLightboxSessionSources] = useState({});
   const [loading, setLoading] = useState(true);
   const [eroare, setEroare] = useState(null);
   const loadMoreRef = useRef(null);
@@ -276,11 +294,23 @@ const ClientGallery = () => {
   const [coverVisible, setCoverVisible] = useState(true);
   const [showNameModal, setShowNameModal] = useState(false);
   const [nameInputValue, setNameInputValue] = useState('');
+  const [emailInputValue, setEmailInputValue] = useState('');
+  const [phoneInputValue, setPhoneInputValue] = useState('');
+  const [additionalInfoInputValue, setAdditionalInfoInputValue] = useState('');
+  const [commentInputValue, setCommentInputValue] = useState('');
   const [selectionTitleInputValue, setSelectionTitleInputValue] = useState('');
   const [pendingFavAction, setPendingFavAction] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [lightboxDownloading, setLightboxDownloading] = useState(false);
   const [countPop, setCountPop] = useState(false);
+  const [privacyUnlocked, setPrivacyUnlocked] = useState(true);
+  const [privacyPasswordInput, setPrivacyPasswordInput] = useState('');
+  const [privacyError, setPrivacyError] = useState('');
+  const [reviewName, setReviewName] = useState('');
+  const [reviewText, setReviewText] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [reviewNudge, setReviewNudge] = useState(false);
 
   const [numeSelectie, setNumeSelectie] = useState(() => readStoredSelectionName());
   const [doarFavorite, setDoarFavorite] = useState(false);
@@ -291,21 +321,37 @@ const ClientGallery = () => {
   });
 
   const contentRef = useRef(null);
+  const reviewSectionRef = useRef(null);
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
-  const pozeAfisate = galerie ? (doarFavorite ? poze.filter((p) => galerie.favorite?.includes(p.key)) : poze) : [];
+  const pozeAfisate = useMemo(
+    () => (galerie ? (doarFavorite ? poze.filter((p) => galerie.favorite?.includes(p.key)) : poze) : []),
+    [galerie, doarFavorite, poze]
+  );
   const gallerySettings = galerie?.settings || {};
   const mainSettings = gallerySettings.main || {};
   const favoritesSettings = gallerySettings.favorites || {};
+  const reviewsSettings = gallerySettings.reviews || {};
   const contactsSettings = gallerySettings.contacts || {};
+  const privacySettings = gallerySettings.privacy || {};
 
   const allowOriginalDownloads = mainSettings.allowOriginalDownloads !== false;
+  const watermarkEnabled = mainSettings.watermarkEnabled === true;
   const allowPhotoSelection = favoritesSettings.allowPhotoSelection !== false;
+  const allowReviews = reviewsSettings.allowReviews === true;
+  const askReviewAfterDownload = reviewsSettings.askReviewAfterDownload === true;
+  const reviewMessage = String(reviewsSettings.reviewMessage || 'Lasă o recenzie dacă ți-au plăcut fotografiile.');
   const showShareButton = contactsSettings.showShareButton !== false;
   const showBusinessCardWidget = contactsSettings.showBusinessCardWidget !== false;
   const showNameWebsiteOnCover = contactsSettings.showNameWebsiteOnCover !== false;
+  const isPasswordProtected = privacySettings.passwordProtected === true && String(privacySettings.passwordHash || '').trim().length > 0;
+  const watermarkLabel = (profile?.brandName || 'Mina').slice(0, 64);
 
   const selectionTitle = favoritesSettings.favoritesName || galerie?.numeSelectieClient || 'Selecție';
+  const requiresEmail = favoritesSettings.requireEmail === true;
+  const requiresPhone = favoritesSettings.requirePhoneNumber === true;
+  const requiresAdditionalInfo = favoritesSettings.requireAdditionalInfo === true;
+  const allowSelectionComments = favoritesSettings.allowComments === true;
   const settingsLimitEnabled = favoritesSettings.limitSelectedPhotos === true;
   const settingsMaxSelected = Number(favoritesSettings.maxSelectedPhotos || 0);
   const limit = settingsLimitEnabled && settingsMaxSelected > 0
@@ -315,7 +361,6 @@ const ClientGallery = () => {
   const closeLightbox = useCallback(() => {
     setSelectedImage(null);
     setLightboxDownloading(false);
-    setLightboxSessionSources({});
   }, []);
 
   const preloadMediumForLightbox = useCallback(async (photoKey) => {
@@ -358,30 +403,62 @@ const ClientGallery = () => {
 
   const seedLightboxSources = useCallback((centerIndex) => {
     if (!Number.isInteger(centerIndex) || centerIndex < 0 || !pozeAfisate.length) return;
-
-    setLightboxSessionSources((prev) => {
-      const next = { ...prev };
-      let changed = false;
-
-      for (const offset of LIGHTBOX_PRELOAD_OFFSETS) {
-        const idx = centerIndex + offset;
-        if (idx < 0 || idx >= pozeAfisate.length) continue;
-
-        const key = pozeAfisate[idx]?.key;
-        if (!key || next[key]) continue;
-
-        const source = isMobile
-          ? (urlCache.get(`original:${key}`) || urlCache.get(`medium:${key}`) || urlCache.get(`thumb:${key}`) || '')
-          : (urlCache.get(`medium:${key}`) || urlCache.get(`original:${key}`) || urlCache.get(`thumb:${key}`) || '');
-
-        if (!source) continue;
-        next[key] = source;
-        changed = true;
+    for (const offset of LIGHTBOX_PRELOAD_OFFSETS) {
+      const idx = centerIndex + offset;
+      if (idx < 0 || idx >= pozeAfisate.length) continue;
+      const key = pozeAfisate[idx]?.key;
+      if (!key) continue;
+      if (!urlCache.get(`thumb:${key}`)) {
+        mediaService.getPhotoUrl(key, 'thumb').then((url) => urlCache.set(`thumb:${key}`, url)).catch(() => {});
       }
+    }
+  }, [pozeAfisate]);
 
-      return changed ? next : prev;
-    });
-  }, [isMobile, pozeAfisate]);
+  const resolveLightboxSrc = useCallback((key) => {
+    if (!key) return '';
+    if (isMobile) {
+      return (
+        lightboxOriginalUrls[key]
+        || urlCache.get(`original:${key}`)
+        || lightboxMediumUrls[key]
+        || urlCache.get(`medium:${key}`)
+        || urlCache.get(`thumb:${key}`)
+        || ''
+      );
+    }
+    return (
+      lightboxMediumUrls[key]
+      || urlCache.get(`medium:${key}`)
+      || lightboxOriginalUrls[key]
+      || urlCache.get(`original:${key}`)
+      || urlCache.get(`thumb:${key}`)
+      || ''
+    );
+  }, [isMobile, lightboxMediumUrls, lightboxOriginalUrls]);
+
+  const loadGalleryPhotos = useCallback(async (galleryData) => {
+    if (!galleryData?.id) {
+      setPoze([]);
+      setCoverThumbUrl(null);
+      setCoverMediumUrl(null);
+      return;
+    }
+
+    const pozeRaw = await mediaService.listGalleryPhotos(galleryData.id, galleryData.userId);
+    const pozeKeys = pozeRaw.map((p) => ({ key: p.key || p.Key, size: p.size })).filter((p) => p.key);
+    setPoze(pozeKeys);
+
+    if (pozeKeys[0]) {
+      const coverKey = pozeKeys[0].key;
+      mediaService.getPhotoUrl(coverKey, 'thumb').then((url) => {
+        setCoverThumbUrl(url);
+        urlCache.set(`thumb:${coverKey}`, url);
+      }).catch(() => {});
+    } else {
+      setCoverThumbUrl(null);
+      setCoverMediumUrl(null);
+    }
+  }, []);
 
   const formatDate = (val) => {
     if (!val) return null;
@@ -392,53 +469,104 @@ const ClientGallery = () => {
 
   useEffect(() => {
     const fetchDate = async () => {
+      setLoading(true);
+      setEroare(null);
       try {
         const dateGal = galleryId
           ? await galleriesService.getGalleryById(galleryId)
           : await galleriesService.getGalleryBySlug(slug);
-        if (!dateGal) { setEroare('Galeria nu a fost găsită.'); setLoading(false); return; }
+        if (!dateGal) {
+          setEroare('Galeria nu a fost găsită.');
+          setLoading(false);
+          return;
+        }
 
         if (dateGal.status === 'trash') throw new Error('Această galerie a fost ștearsă.');
         if (dateGal.statusActiv === false) throw new Error('Această galerie este inactivă.');
 
-        setGalerie({
+        const normalizedGallery = {
           ...dateGal,
           favorite: Array.isArray(dateGal?.favorite) ? dateGal.favorite : [],
-        });
+        };
+        setGalerie(normalizedGallery);
 
         if (dateGal.userId) {
+          const userId = dateGal.userId;
+
+          // Un singur call pentru profil — temă + branding
           try {
-            const d = await sitesService.getProfile(dateGal.userId);
-            if (d) {
+            const profileData = await sitesService.getProfile(userId);
+
+            // Aplică tema
+            const theme = profileData?.theme;
+            if (theme && VALID_THEMES.includes(theme)) {
+              document.documentElement.setAttribute('data-theme', theme);
+            }
+
+            // Setează branding
+            if (profileData) {
               let logoPreviewUrl = null;
-              if (d.logoUrl) { try { logoPreviewUrl = await mediaService.getBrandingAsset(d.logoUrl); } catch { } }
-              setProfile({ brandName: d.brandName || 'My Gallery', logoUrl: d.logoUrl || '', instagramUrl: d.instagramUrl || '', whatsappNumber: d.whatsappNumber || '', websiteUrl: d.websiteUrl || '', accentColor: d.accentColor || '#b8965a', logoPreviewUrl });
+              if (profileData.logoUrl) {
+                try { logoPreviewUrl = await mediaService.getBrandingAsset(profileData.logoUrl); } catch (_) {}
+              }
+              setProfile({
+                brandName: profileData.brandName || 'My Gallery',
+                logoUrl: profileData.logoUrl || '',
+                instagramUrl: profileData.instagramUrl || '',
+                whatsappNumber: profileData.whatsappNumber || '',
+                websiteUrl: profileData.websiteUrl || '',
+                accentColor: profileData.accentColor || '#b8965a',
+                logoPreviewUrl,
+              });
             } else {
-              const legacy = await sitesService.getLegacySettings(dateGal.userId);
+              const legacy = await sitesService.getLegacySettings(userId);
               if (legacy) {
-                const d = legacy;
-                setProfile((p) => ({ ...p, brandName: d.numeBrand || p.brandName, instagramUrl: d.instagram || '', websiteUrl: d.website || '' }));
+                setProfile((p) => ({
+                  ...p,
+                  brandName: legacy.numeBrand || p.brandName,
+                  instagramUrl: legacy.instagram || '',
+                  websiteUrl: legacy.website || '',
+                }));
               }
             }
-          } catch (e) { console.error(e); }
+          } catch (e) {
+            console.error(e);
+          }
         }
 
-        const pozeRaw = await mediaService.listGalleryPhotos(dateGal.id, dateGal.userId);
-        const pozeKeys = pozeRaw.map((p) => ({ key: p.key || p.Key, size: p.size })).filter((p) => p.key);
-        setPoze(pozeKeys);
+        const needsPassword = normalizedGallery?.settings?.privacy?.passwordProtected === true
+          && String(normalizedGallery?.settings?.privacy?.passwordHash || '').trim().length > 0;
 
-        if (pozeKeys[0]) {
-          const coverKey = pozeKeys[0].key;
-          mediaService.getPhotoUrl(coverKey, 'thumb').then((url) => { setCoverThumbUrl(url); urlCache.set(`thumb:${coverKey}`, url); }).catch(() => {});
+        if (needsPassword) {
+          let unlocked = false;
+          try {
+            const savedHash = sessionStorage.getItem(getGalleryUnlockStorageKey(normalizedGallery.id)) || '';
+            unlocked = savedHash === String(normalizedGallery?.settings?.privacy?.passwordHash || '');
+          } catch (_) {
+            unlocked = false;
+          }
+          setPrivacyUnlocked(unlocked);
+          if (!unlocked) {
+            setPoze([]);
+            setCoverThumbUrl(null);
+            setCoverMediumUrl(null);
+            setLoading(false);
+            return;
+          }
+        } else {
+          setPrivacyUnlocked(true);
         }
+
+        await loadGalleryPhotos(normalizedGallery);
       } catch (err) {
         setEroare(err.message || 'Eroare la încărcare.');
       } finally {
         setLoading(false);
       }
     };
+
     if (slug || galleryId) fetchDate();
-  }, [slug, galleryId]);
+  }, [slug, galleryId, loadGalleryPhotos]);
 
   useEffect(() => {
     if (!galerie?.id || !numeSelectie) return;
@@ -456,6 +584,10 @@ const ClientGallery = () => {
           : (fallbackLegacy.length > 0 ? fallbackLegacy : fallbackCurrent);
 
         setGalerie(prev => prev ? ({ ...prev, favorite: Array.from(new Set(keys)) }) : prev);
+        setEmailInputValue(String(selection?.clientEmail || ''));
+        setPhoneInputValue(String(selection?.clientPhone || ''));
+        setAdditionalInfoInputValue(String(selection?.clientAdditionalInfo || ''));
+        setCommentInputValue(String(selection?.clientComment || ''));
       } catch (_) {
       }
     };
@@ -477,6 +609,15 @@ const ClientGallery = () => {
   }, [galerie, profile.brandName]);
 
   useEffect(() => {
+    if (!galerie?.id) return;
+    setPrivacyPasswordInput('');
+    setPrivacyError('');
+    setReviewSubmitted(false);
+    setReviewText('');
+    setReviewName((prev) => prev || readStoredSelectionName() || '');
+  }, [galerie?.id]);
+
+  useEffect(() => {
     const el = loadMoreRef.current;
     if (!el || pozeAfisate.length === 0) return;
     const io = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, pozeAfisate.length)); }, { rootMargin: '200px', threshold: 0 });
@@ -495,9 +636,6 @@ const ClientGallery = () => {
       void preloadMediumForLightbox(key);
       if (isMobile) {
         void preloadOriginalForLightbox(key);
-      }
-      if (!urlCache.get(`thumb:${key}`)) {
-        mediaService.getPhotoUrl(key, 'thumb').then((url) => urlCache.set(`thumb:${key}`, url)).catch(() => {});
       }
     });
   }, [isMobile, lightboxOpen, lightboxIndex, pozeAfisate, preloadMediumForLightbox, preloadOriginalForLightbox, seedLightboxSources]);
@@ -537,11 +675,30 @@ const ClientGallery = () => {
   const handleFavoriteClick = (pozaKey) => {
     if (!allowPhotoSelection) return;
     if (!numeSelectie) { setPendingFavAction(pozaKey); setShowNameModal(true); }
-    else { executeFavoriteToggle(pozaKey, numeSelectie); }
+    else {
+      executeFavoriteToggle(pozaKey, numeSelectie, {
+        clientEmail: emailInputValue,
+        clientPhone: phoneInputValue,
+        clientAdditionalInfo: additionalInfoInputValue,
+        clientComment: commentInputValue,
+      });
+    }
   };
 
   const handleSaveName = async () => {
     if (!nameInputValue.trim()) return;
+    if (requiresEmail && !emailInputValue.trim()) {
+      alert('Email-ul este obligatoriu pentru această galerie.');
+      return;
+    }
+    if (requiresPhone && !phoneInputValue.trim()) {
+      alert('Numărul de telefon este obligatoriu pentru această galerie.');
+      return;
+    }
+    if (requiresAdditionalInfo && !additionalInfoInputValue.trim()) {
+      alert('Completează câmpul de informații adiționale.');
+      return;
+    }
     const cleanName = nameInputValue.trim();
     persistSelectionName(cleanName);
     setNumeSelectie(cleanName);
@@ -551,20 +708,46 @@ const ClientGallery = () => {
       setGalerie(prev => (prev ? { ...prev, numeSelectieClient: titleToSave } : prev));
     }
     setSelectionTitleInputValue('');
-    if (pendingFavAction) { executeFavoriteToggle(pendingFavAction, cleanName); setPendingFavAction(null); }
+    if (pendingFavAction) {
+      executeFavoriteToggle(pendingFavAction, cleanName, {
+        clientEmail: emailInputValue,
+        clientPhone: phoneInputValue,
+        clientAdditionalInfo: additionalInfoInputValue,
+        clientComment: commentInputValue,
+      });
+      setPendingFavAction(null);
+    }
   };
 
-  const executeFavoriteToggle = async (pozaKey, numeClient) => {
+  const executeFavoriteToggle = async (pozaKey, numeClient, metaOverride = null) => {
     if (!allowPhotoSelection || !galerie?.id || !numeClient) return;
     const latestSelection = await galleriesService.getClientSelection(galerie.id, numeClient).catch(() => null);
     const currentFav = Array.isArray(latestSelection?.keys)
       ? latestSelection.keys
       : (Array.isArray(galerie?.favorite) ? galerie.favorite : []);
     const isFav = currentFav.includes(pozaKey);
+    const clientMeta = {
+      clientEmail: String(metaOverride?.clientEmail ?? latestSelection?.clientEmail ?? emailInputValue ?? '').trim(),
+      clientPhone: String(metaOverride?.clientPhone ?? latestSelection?.clientPhone ?? phoneInputValue ?? '').trim(),
+      clientAdditionalInfo: String(metaOverride?.clientAdditionalInfo ?? latestSelection?.clientAdditionalInfo ?? additionalInfoInputValue ?? '').trim(),
+      clientComment: String(metaOverride?.clientComment ?? latestSelection?.clientComment ?? commentInputValue ?? '').trim(),
+    };
+    if (requiresEmail && !clientMeta.clientEmail) {
+      setShowNameModal(true);
+      return;
+    }
+    if (requiresPhone && !clientMeta.clientPhone) {
+      setShowNameModal(true);
+      return;
+    }
+    if (requiresAdditionalInfo && !clientMeta.clientAdditionalInfo) {
+      setShowNameModal(true);
+      return;
+    }
     try {
       const title = selectionTitle;
       if (isFav) {
-        await galleriesService.removeClientFavorite(galerie.id, numeClient, pozaKey, title);
+        await galleriesService.removeClientFavorite(galerie.id, numeClient, pozaKey, title, clientMeta);
         const next = currentFav.filter(k => k !== pozaKey);
         setGalerie(prev => ({ ...prev, favorite: next }));
       } else {
@@ -572,7 +755,7 @@ const ClientGallery = () => {
           alert(`Ai atins limita de ${limit} fotografii pentru această selecție.`);
           return;
         }
-        await galleriesService.addClientFavorite(galerie.id, numeClient, pozaKey, title);
+        await galleriesService.addClientFavorite(galerie.id, numeClient, pozaKey, title, clientMeta);
         const next = Array.from(new Set([...currentFav, pozaKey]));
         setGalerie(prev => ({ ...prev, favorite: next }));
         setCountPop(true);
@@ -593,7 +776,75 @@ const ClientGallery = () => {
       } catch (e) { console.error(e); }
     }
     setDownloadingAll(false);
+    if (allowReviews && askReviewAfterDownload) {
+      setReviewNudge(true);
+      setTimeout(() => setReviewNudge(false), 1800);
+      reviewSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
+
+  const handleUnlockGallery = useCallback(async () => {
+    if (!galerie?.id || !isPasswordProtected) return;
+    const typedPassword = String(privacyPasswordInput || '').trim();
+    if (!typedPassword) {
+      setPrivacyError('Introdu parola galeriei.');
+      return;
+    }
+
+    try {
+      const enteredHash = await sha256Hex(typedPassword);
+      const expectedHash = String(galerie?.settings?.privacy?.passwordHash || '');
+      if (!expectedHash || enteredHash !== expectedHash) {
+        setPrivacyError('Parolă incorectă.');
+        return;
+      }
+
+      try {
+        sessionStorage.setItem(getGalleryUnlockStorageKey(galerie.id), expectedHash);
+      } catch (_) {
+      }
+
+      setPrivacyError('');
+      setPrivacyUnlocked(true);
+      setLoading(true);
+      await loadGalleryPhotos(galerie);
+    } catch (_) {
+      setPrivacyError('Nu am putut verifica parola. Încearcă din nou.');
+    } finally {
+      setLoading(false);
+    }
+  }, [galerie, isPasswordProtected, loadGalleryPhotos, privacyPasswordInput]);
+
+  const handleSubmitReview = useCallback(async (event) => {
+    event.preventDefault();
+    if (!allowReviews || !galerie?.id || reviewSubmitting) return;
+
+    const cleanName = String(reviewName || '').trim();
+    const cleanMessage = String(reviewText || '').trim();
+    if (!cleanName) {
+      alert('Introdu numele tău.');
+      return;
+    }
+    if (!cleanMessage) {
+      alert('Scrie mesajul recenziei.');
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      await galleriesService.submitGalleryReview(galerie.id, {
+        name: cleanName,
+        message: cleanMessage,
+      });
+      setReviewSubmitted(true);
+      setReviewText('');
+    } catch (error) {
+      console.error(error);
+      alert(error?.message || 'Nu am putut salva recenzia.');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }, [allowReviews, galerie?.id, reviewName, reviewSubmitting, reviewText]);
 
   // Lightbox plugins — no Thumbnails on mobile (they stack vertically and break layout)
   const lightboxPlugins = isMobile ? [Zoom] : [Zoom, Thumbnails];
@@ -621,6 +872,46 @@ const ClientGallery = () => {
   }
 
   if (!galerie) return null;
+
+  if (isPasswordProtected && !privacyUnlocked) {
+    return (
+      <div className="cg-root">
+        <div className="cg-privacy-shell">
+          <div className="cg-privacy-card">
+            <p className="cg-privacy-brand">Mina</p>
+            <h2 className="cg-privacy-title">Galerie protejată</h2>
+            <p className="cg-privacy-subtitle">Introdu parola primită de la fotograf pentru a vedea galeria.</p>
+            <input
+              type="password"
+              value={privacyPasswordInput}
+              onChange={(e) => {
+                setPrivacyPasswordInput(e.target.value);
+                if (privacyError) setPrivacyError('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleUnlockGallery();
+                }
+              }}
+              className="cg-privacy-input"
+              placeholder="Parolă galerie"
+              autoFocus
+            />
+            {privacyError ? <p className="cg-privacy-error">{privacyError}</p> : null}
+            <div className="cg-privacy-actions">
+              <button type="button" className="cg-privacy-btn cg-privacy-btn--ghost" onClick={() => navigate('/')}>
+                Acasă
+              </button>
+              <button type="button" className="cg-privacy-btn" onClick={handleUnlockGallery}>
+                Deschide galeria
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const coverImageUrl = galerie.coverUrl || coverMediumUrl || coverThumbUrl;
   const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverMediumUrl;
@@ -754,7 +1045,7 @@ const ClientGallery = () => {
           ) : (
             <>
               <Masonry
-                breakpointCols={{ default: 3, 1100: 3, 900: 2, 640: 2, 340: 1 }}
+                breakpointCols={{ default: 4, 1320: 3, 900: 2, 640: 2, 340: 1 }}
                 className="cg-masonry"
                 columnClassName="cg-masonry-col"
               >
@@ -767,22 +1058,20 @@ const ClientGallery = () => {
                     accentColor={profile.accentColor}
                     allowPhotoSelection={allowPhotoSelection}
                     allowOriginalDownloads={allowOriginalDownloads}
-                    onClick={async () => {
+                    watermarkEnabled={watermarkEnabled}
+                    watermarkLabel={watermarkLabel}
+                    onClick={() => {
                       const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
                       if (nextIndex < 0) return;
 
-                      if (isMobile && !urlCache.get(`original:${poza.key}`)) {
-                        await Promise.race([
-                          preloadOriginalForLightbox(poza.key),
-                          new Promise((resolve) => setTimeout(resolve, 700)),
-                        ]);
-                      } else if (!urlCache.get(`medium:${poza.key}`)) {
-                        await preloadMediumForLightbox(poza.key);
-                      }
-
-                      seedLightboxSources(nextIndex);
                       setSelectedImage(nextIndex >= 0 ? nextIndex : 0);
                       setLightboxDownloading(false);
+                      seedLightboxSources(nextIndex);
+                      if (isMobile) {
+                        void preloadOriginalForLightbox(poza.key);
+                      } else {
+                        void preloadMediumForLightbox(poza.key);
+                      }
                     }}
                   />
                 ))}
@@ -793,7 +1082,7 @@ const ClientGallery = () => {
 
               <Lightbox
                 open={lightboxOpen}
-                className="mina-lightbox"
+                className={`mina-lightbox ${watermarkEnabled ? 'mina-lightbox--watermark' : ''}`}
                 close={closeLightbox}
                 index={lightboxIndex}
                 on={{
@@ -804,28 +1093,19 @@ const ClientGallery = () => {
                   click: ({ target }) => { if (target === 'backdrop') closeLightbox(); },
                 }}
                 slides={pozeAfisate.map((p) => ({
-                  src: lightboxSessionSources[p.key]
-                    || (isMobile
-                    ? (
-                      lightboxOriginalUrls[p.key]
-                      || urlCache.get(`original:${p.key}`)
-                      || lightboxMediumUrls[p.key]
-                      || urlCache.get(`medium:${p.key}`)
-                      || ''
-                    )
-                    : (
-                      lightboxMediumUrls[p.key]
-                      || urlCache.get(`medium:${p.key}`)
-                      || lightboxOriginalUrls[p.key]
-                      || urlCache.get(`original:${p.key}`)
-                      || ''
-                    )),
+                  src: resolveLightboxSrc(p.key),
                 }))}
                 plugins={lightboxPlugins}
                 controller={{ closeOnBackdropClick: true, closeOnPullDown: true }}
                 styles={{
                   button: { filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))' },
-                  root: { position: 'fixed', inset: 0, zIndex: 10000, backgroundColor: '#000' },
+                  root: {
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 10000,
+                    backgroundColor: '#000',
+                    '--mina-watermark-text': `"${String(watermarkLabel || 'Mina').replace(/"/g, '\\"')}"`,
+                  },
                   container: { position: 'fixed', inset: 0, backgroundColor: '#000' },
                 }}
                 carousel={{ finite: false }}
@@ -871,6 +1151,42 @@ const ClientGallery = () => {
           )}
         </div>
         </>
+
+        {allowReviews && (
+          <section ref={reviewSectionRef} className={`cg-reviews ${reviewNudge ? 'cg-reviews--nudge' : ''}`}>
+            <h3 className="cg-reviews-title">Recenzie</h3>
+            <p className="cg-reviews-message">{reviewMessage}</p>
+
+            {reviewSubmitted ? (
+              <p className="cg-reviews-success">Mulțumim pentru feedback. Recenzia a fost trimisă.</p>
+            ) : (
+              <form className="cg-reviews-form" onSubmit={handleSubmitReview}>
+                <input
+                  type="text"
+                  value={reviewName}
+                  onChange={(e) => setReviewName(e.target.value)}
+                  className="cg-reviews-input"
+                  placeholder="Numele tău"
+                />
+                <textarea
+                  rows="4"
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  className="cg-reviews-textarea"
+                  placeholder="Scrie recenzia ta"
+                />
+                <button
+                  type="submit"
+                  className="cg-reviews-btn"
+                  disabled={reviewSubmitting}
+                  style={{ background: profile.accentColor || '#1d1d1f' }}
+                >
+                  {reviewSubmitting ? 'Se trimite...' : 'Trimite recenzia'}
+                </button>
+              </form>
+            )}
+          </section>
+        )}
 
         {/* Footer Brand */}
         <footer className="cg-footer">
@@ -927,6 +1243,56 @@ const ClientGallery = () => {
                   className="cg-modal-input"
                 />
               </div>
+              {(requiresEmail || emailInputValue) && (
+                <div className="cg-modal-field">
+                  <label className="cg-modal-label">Email {requiresEmail ? '(obligatoriu)' : '(opțional)'}</label>
+                  <input
+                    type="email"
+                    placeholder="Ex: client@email.com"
+                    value={emailInputValue}
+                    onChange={(e) => setEmailInputValue(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+                    className="cg-modal-input"
+                  />
+                </div>
+              )}
+              {(requiresPhone || phoneInputValue) && (
+                <div className="cg-modal-field">
+                  <label className="cg-modal-label">Telefon {requiresPhone ? '(obligatoriu)' : '(opțional)'}</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 07xxxxxxxx"
+                    value={phoneInputValue}
+                    onChange={(e) => setPhoneInputValue(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+                    className="cg-modal-input"
+                  />
+                </div>
+              )}
+              {(requiresAdditionalInfo || additionalInfoInputValue) && (
+                <div className="cg-modal-field">
+                  <label className="cg-modal-label">Informații adiționale {requiresAdditionalInfo ? '(obligatoriu)' : '(opțional)'}</label>
+                  <textarea
+                    rows="3"
+                    placeholder="Ex: cod comandă, preferințe etc."
+                    value={additionalInfoInputValue}
+                    onChange={(e) => setAdditionalInfoInputValue(e.target.value)}
+                    className="cg-modal-input"
+                  />
+                </div>
+              )}
+              {allowSelectionComments && (
+                <div className="cg-modal-field">
+                  <label className="cg-modal-label">Comentariu (opțional)</label>
+                  <textarea
+                    rows="3"
+                    placeholder="Mesaj pentru fotograf"
+                    value={commentInputValue}
+                    onChange={(e) => setCommentInputValue(e.target.value)}
+                    className="cg-modal-input"
+                  />
+                </div>
+              )}
               {!favoritesSettings?.favoritesName && !galerie?.numeSelectieClient && (
                 <div className="cg-modal-field">
                   <label className="cg-modal-label">Numele selecției (opțional)</label>
@@ -1112,6 +1478,90 @@ const ClientGallery = () => {
           margin: 0;
           max-width: 360px;
         }
+        .cg-privacy-shell {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          background: #f5f5f7;
+        }
+        .cg-privacy-card {
+          width: 100%;
+          max-width: 420px;
+          background: #fff;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 18px;
+          box-shadow: 0 18px 48px rgba(0,0,0,0.08);
+          padding: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .cg-privacy-brand {
+          font-family: 'DM Serif Display', Georgia, serif;
+          font-style: italic;
+          color: #1d1d1f;
+          font-size: 1.25rem;
+          margin: 0;
+        }
+        .cg-privacy-title {
+          margin: 0;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 1.15rem;
+          font-weight: 600;
+          color: #1d1d1f;
+        }
+        .cg-privacy-subtitle {
+          margin: 0 0 8px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          line-height: 1.45;
+          color: #60636a;
+        }
+        .cg-privacy-input {
+          width: 100%;
+          border: 1px solid #dddde3;
+          border-radius: 11px;
+          height: 44px;
+          padding: 0 14px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          outline: none;
+          background: #fff;
+        }
+        .cg-privacy-input:focus {
+          border-color: #b8965a;
+          box-shadow: 0 0 0 3px rgba(184,150,90,0.15);
+        }
+        .cg-privacy-error {
+          margin: 2px 0 0;
+          font-family: 'DM Sans', sans-serif;
+          color: #b91c1c;
+          font-size: 13px;
+        }
+        .cg-privacy-actions {
+          margin-top: 6px;
+          display: flex;
+          gap: 10px;
+        }
+        .cg-privacy-btn {
+          border: none;
+          border-radius: 999px;
+          height: 42px;
+          padding: 0 18px;
+          background: #1d1d1f;
+          color: #fff;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .cg-privacy-btn--ghost {
+          background: #f1f2f6;
+          color: #222;
+          font-weight: 500;
+        }
 
         /* ── Toolbar ── */
         .cg-toolbar {
@@ -1244,6 +1694,23 @@ const ClientGallery = () => {
           opacity: 0;
           transition: opacity 0.25s ease;
         }
+        .cg-watermark {
+          position: absolute;
+          inset: auto 8px 8px auto;
+          pointer-events: none;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 11px;
+          letter-spacing: 0.03em;
+          color: rgba(255,255,255,0.9);
+          background: rgba(0,0,0,0.28);
+          border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 999px;
+          padding: 3px 8px;
+          z-index: 2;
+          backdrop-filter: blur(3px);
+          -webkit-backdrop-filter: blur(3px);
+          text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+        }
         .cg-item:hover .cg-item-overlay { opacity: 1; }
         .cg-item-actions { display: flex; gap: 8px; }
         .cg-action-btn {
@@ -1264,6 +1731,84 @@ const ClientGallery = () => {
         }
         .cg-action-btn:hover { background: rgba(255,255,255,0.28); transform: scale(1.06); }
         .cg-action-btn--active { color: #b8965a !important; }
+
+        /* ── Reviews ── */
+        .cg-reviews {
+          max-width: 760px;
+          margin: 40px auto 0;
+          padding: 24px;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 16px;
+          background: #fff;
+          box-shadow: 0 10px 24px rgba(0,0,0,0.03);
+          transition: box-shadow 0.25s ease, transform 0.25s ease;
+        }
+        .cg-reviews--nudge {
+          box-shadow: 0 0 0 3px rgba(184,150,90,0.2), 0 14px 30px rgba(0,0,0,0.07);
+          transform: translateY(-2px);
+        }
+        .cg-reviews-title {
+          margin: 0;
+          font-family: 'DM Serif Display', Georgia, serif;
+          font-size: 1.6rem;
+          font-weight: 400;
+          color: #1d1d1f;
+        }
+        .cg-reviews-message {
+          margin: 10px 0 18px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          color: #555a62;
+          line-height: 1.5;
+        }
+        .cg-reviews-form {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .cg-reviews-input,
+        .cg-reviews-textarea {
+          width: 100%;
+          border: 1px solid #dddde3;
+          border-radius: 11px;
+          padding: 11px 13px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          outline: none;
+          background: #fff;
+        }
+        .cg-reviews-input:focus,
+        .cg-reviews-textarea:focus {
+          border-color: #b8965a;
+          box-shadow: 0 0 0 3px rgba(184,150,90,0.15);
+        }
+        .cg-reviews-textarea {
+          min-height: 110px;
+          resize: vertical;
+        }
+        .cg-reviews-btn {
+          align-self: flex-start;
+          border: none;
+          border-radius: 999px;
+          height: 42px;
+          padding: 0 18px;
+          color: #fff;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .cg-reviews-btn:disabled {
+          opacity: 0.65;
+          cursor: wait;
+        }
+        .cg-reviews-success {
+          margin: 0;
+          color: #0b7a3d;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+        }
 
         /* ── Footer ── */
         .cg-footer {
@@ -1482,6 +2027,26 @@ const ClientGallery = () => {
         .mina-lightbox .yarl__toolbar {
           padding-top: max(4px, env(safe-area-inset-top, 0px)) !important;
         }
+        .mina-lightbox--watermark .yarl__slide {
+          position: relative;
+        }
+        .mina-lightbox--watermark .yarl__slide::after {
+          content: var(--mina-watermark-text, "Mina");
+          position: absolute;
+          right: 16px;
+          bottom: 16px;
+          z-index: 4;
+          color: rgba(255,255,255,0.92);
+          background: rgba(0,0,0,0.32);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 999px;
+          padding: 6px 12px;
+          font-size: 12px;
+          font-family: 'DM Sans', sans-serif;
+          letter-spacing: 0.04em;
+          text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+          pointer-events: none;
+        }
         @media (max-width: 768px) {
           .yarl__slide_image {
             object-fit: contain !important;
@@ -1489,6 +2054,17 @@ const ClientGallery = () => {
           }
           .yarl__toolbar {
             padding: 4px 8px !important;
+          }
+          .mina-lightbox--watermark .yarl__slide::after {
+            right: 10px;
+            bottom: 10px;
+            padding: 5px 10px;
+            font-size: 11px;
+          }
+          .cg-reviews {
+            margin-top: 24px;
+            padding: 18px;
+            border-radius: 12px;
           }
         }
       `}</style>
