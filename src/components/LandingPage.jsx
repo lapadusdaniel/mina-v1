@@ -11,7 +11,6 @@ function LandingPage({ user }) {
     if (galerieSlug) navigate(`/${galerieSlug}`, { replace: true })
   }, [galerieSlug, navigate])
 
-  // Scroll reveal
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -39,7 +38,6 @@ function LandingPage({ user }) {
         </button>
         <nav className="fl-nav">
           <a href="#features">Funcționalități</a>
-          <a href="#despre">Despre</a>
           <a href="#preturi">Prețuri</a>
           <a href="#contact">Contact</a>
         </nav>
@@ -59,13 +57,13 @@ function LandingPage({ user }) {
 
         {/* ── HERO ── */}
         <section className="fl-hero">
-          <p className="fl-hero-eyebrow">Pentru fotografi profesioniști</p>
+          <p className="fl-hero-eyebrow">Platformă pentru fotografi din România</p>
           <h1 className="fl-hero-title">
-            Galerii care lasă<br />
-            <em>fotografia să vorbească.</em>
+            Livrează galerii profesionale.<br />
+            <em>Fără să te gândești la spațiu.</em>
           </h1>
           <p className="fl-hero-sub">
-            Tot ce ai nevoie ca fotograf — galerii pentru clienți, stocare sigură, branding personalizat — fără complicații tehnice.
+            Stochezi, trimiți un link, gata. Clientul vede fotografiile într-o galerie elegantă — tu te ocupi de ce contează.
           </p>
           <div className="fl-hero-actions">
             <button className="fl-btn-cta" onClick={() => navigate('/register')}>
@@ -84,7 +82,7 @@ function LandingPage({ user }) {
             <div className="fl-strip-photo" data-label="Portret" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400&q=80&auto=format&fit=crop)' }} />
             <div className="fl-strip-photo" data-label="Familie" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1511895426328-dc8714191011?w=400&q=80&auto=format&fit=crop)' }} />
             <div className="fl-strip-photo" data-label="Eveniment" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=400&q=80&auto=format&fit=crop)' }} />
-            <div className="fl-strip-photo" data-label="Commercial" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400&q=80&auto=format&fit=crop)' }} />
+            <div className="fl-strip-photo" data-label="Portret" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400&q=80&auto=format&fit=crop)' }} />
           </div>
         </div>
 
@@ -102,14 +100,14 @@ function LandingPage({ user }) {
               <span className="fl-feature-icon">🖼</span>
               <h3 className="fl-feature-title">Galerii pentru clienți</h3>
               <p className="fl-feature-desc">
-                Creează galerii personalizate pentru fiecare client. Link unic, acces instant, experiență elegantă.
+                Creezi galeria, trimiți linkul, clientul vede și alege favoritele. Experiență clară, fără confuzie.
               </p>
             </div>
             <div className="fl-feature-card fl-reveal" style={{ transitionDelay: '0.1s' }}>
               <span className="fl-feature-icon">☁️</span>
               <h3 className="fl-feature-title">Stocare sigură și rapidă</h3>
               <p className="fl-feature-desc">
-                Fotografiile tale sunt stocate pe infrastructură de nivel enterprise — disponibile oricând, oriunde.
+                Fotografiile tale sunt păstrate în siguranță și disponibile oricând ai nevoie de ele.
               </p>
             </div>
             <div className="fl-feature-card fl-reveal" style={{ transitionDelay: '0.2s' }}>
@@ -122,39 +120,6 @@ function LandingPage({ user }) {
           </div>
         </section>
 
-        {/* ── DESPRE ── */}
-        <section id="despre" className="fl-despre">
-          <div className="fl-despre-inner">
-            <div className="fl-reveal">
-              <p className="fl-despre-label">Despre Mina</p>
-              <h2 className="fl-despre-title">
-                Creat de un fotograf,<br />
-                <em>pentru fotografi.</em>
-              </h2>
-              <p className="fl-despre-text">
-                Știm cât de mult timp se pierde cu soluții tehnice complicate — link-uri care nu merg, servere care se blochează, formatări care distrug munca ta.
-              </p>
-              <p className="fl-despre-text" style={{ marginTop: '20px' }}>
-                Credem că fotograful trebuie să fie prezent la eveniment, alături de oaspeți — nu blocat în fața monitorului gestionând stocări nesigure. Am construit Mina pentru a fi rapid, intuitiv și invizibil.
-              </p>
-              <p className="fl-despre-text" style={{ marginTop: '20px' }}>
-                Fără clișee, fără promisiuni goale. Doar un instrument care funcționează.
-              </p>
-            </div>
-            <div className="fl-despre-visual fl-reveal" style={{ transitionDelay: '0.15s' }}>
-              <div className="fl-despre-visual-inner" />
-              <span className="fl-despre-visual-icon">📷</span>
-              <div className="fl-despre-badge">
-                <span className="fl-despre-badge-icon">✦</span>
-                <div className="fl-despre-badge-text">
-                  <div className="fl-despre-badge-title">Made în România</div>
-                  <div className="fl-despre-badge-sub">Cu atenție la fiecare detaliu</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* ── PRICING ── */}
         <section id="preturi" className="fl-pricing">
           <div className="fl-pricing-header fl-reveal">
@@ -162,11 +127,10 @@ function LandingPage({ user }) {
             <h2 className="fl-section-title">
               Simplu și <em>transparent.</em>
             </h2>
-            <p className="fl-pricing-sub">Fără surprize. Plătești doar pentru ce folosești.</p>
+            <p className="fl-pricing-sub">Alegi planul potrivit pentru volumul tău de lucru.</p>
           </div>
 
           <div className="fl-pricing-grid">
-            {/* Free */}
             <div className="fl-plan fl-reveal">
               <h3 className="fl-plan-name">Free</h3>
               <p className="fl-plan-storage">15 GB stocare</p>
@@ -181,20 +145,17 @@ function LandingPage({ user }) {
                 <li>Selecții favorite pentru clienți</li>
                 <li className="fl-plan-feature-muted">Fără site de prezentare</li>
               </ul>
-              <p className="fl-plan-desc">Perfect pentru a începe și a vedea cum funcționează Mina.</p>
+              <p className="fl-plan-desc">Pentru început, fără card.</p>
               <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
                 Începe gratuit
               </button>
             </div>
 
-            {/* Starter */}
             <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.1s' }}>
               <h3 className="fl-plan-name">Starter</h3>
               <p className="fl-plan-storage">200 GB stocare</p>
               <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">
-                  49 lei<span>/lună</span>
-                </span>
+                <span className="fl-plan-price-amount">49 lei<span>/lună</span></span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
@@ -204,21 +165,18 @@ function LandingPage({ user }) {
                 <li>Selecții favorite pentru clienți</li>
                 <li>Site de prezentare inclus</li>
               </ul>
-              <p className="fl-plan-desc">Pentru fotograful care livrează constant și vrea să arate profesional.</p>
+              <p className="fl-plan-desc">Pentru fotograful care livrează constant.</p>
               <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
                 Alege Starter
               </button>
             </div>
 
-            {/* Pro */}
             <div className="fl-plan fl-plan-featured fl-reveal" style={{ transitionDelay: '0.2s' }}>
               <span className="fl-plan-badge">Recomandat</span>
               <h3 className="fl-plan-name">Pro</h3>
               <p className="fl-plan-storage">500 GB stocare</p>
               <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">
-                  99 lei<span>/lună</span>
-                </span>
+                <span className="fl-plan-price-amount">99 lei<span>/lună</span></span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
@@ -228,34 +186,45 @@ function LandingPage({ user }) {
                 <li>Selecții favorite pentru clienți</li>
                 <li>Site de prezentare inclus</li>
               </ul>
-              <p className="fl-plan-desc">Volumul și viteza de care ai nevoie în sezonul aglomerat.</p>
+              <p className="fl-plan-desc">Volumul de care ai nevoie în sezon.</p>
               <button className="fl-btn-plan fl-btn-plan-gold" onClick={() => navigate('/register')}>
                 Alege Pro
               </button>
             </div>
 
-            {/* Studio */}
             <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.3s' }}>
               <h3 className="fl-plan-name">Studio</h3>
-              <p className="fl-plan-storage">1 TB stocare</p>
+              <p className="fl-plan-storage">2 TB stocare</p>
               <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">
-                  149 lei<span>/lună</span>
-                </span>
+                <span className="fl-plan-price-amount">149 lei<span>/lună</span></span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
-                <li>1 TB stocare</li>
+                <li>2 TB stocare</li>
                 <li>Galerii nelimitate</li>
                 <li>Galerii protejate cu parolă</li>
                 <li>Selecții favorite pentru clienți</li>
                 <li>Site de prezentare inclus</li>
               </ul>
-              <p className="fl-plan-desc">Pentru cei care nu fac compromisuri. Arhivă, livrări masive, totul într-un singur loc.</p>
+              <p className="fl-plan-desc">Pentru volum mare, fără compromisuri.</p>
               <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
                 Alege Studio
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* ── CTA FINAL ── */}
+        <section className="fl-cta-final fl-reveal">
+          <div className="fl-cta-final-inner">
+            <h2 className="fl-section-title">
+              Livrare profesionistă.<br />
+              <em>Simplu.</em>
+            </h2>
+            <p className="fl-cta-final-sub">Creat în România, de un fotograf.</p>
+            <button className="fl-btn-cta" onClick={() => navigate('/register')}>
+              Începe gratuit
+            </button>
           </div>
         </section>
 
@@ -299,7 +268,6 @@ function LandingPage({ user }) {
           </div>
           <div className="fl-footer-col">
             <h4>Companie</h4>
-            <a href="#despre">Despre noi</a>
             <a href="#contact">Contact</a>
           </div>
           <div className="fl-footer-col">
@@ -311,7 +279,7 @@ function LandingPage({ user }) {
         </div>
         <div className="fl-footer-bottom">
           <span className="fl-footer-copy">© 2026 Mina. Toate drepturile rezervate.</span>
-          <span className="fl-footer-made">Construit cu React & Cloudflare ✦</span>
+          <span className="fl-footer-made">Construit în România ✦</span>
         </div>
       </footer>
 

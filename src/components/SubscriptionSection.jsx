@@ -197,7 +197,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
       name: 'Studio',
       price: '149 lei',
       period: '/lună',
-      features: ['1 TB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
+      features: ['2 TB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
       description: 'Pentru cei care nu fac compromisuri. Arhivă, livrări masive, totul într-un singur loc.',
       isCurrent: userPlan === 'Studio',
       cta: 'Alege Studio',

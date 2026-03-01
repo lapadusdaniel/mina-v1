@@ -9,7 +9,7 @@ const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
 const PLAN_STORAGE_BY_NAME = Object.freeze({
   Starter: 200,
   Pro: 500,
-  Studio: 1000,
+  Studio: 2000,
 })
 
 function sanitize(value) {

@@ -86,7 +86,7 @@ function ChangePlanModal({ user, onClose, onSave }) {
               <option value="Free">Free (15 GB)</option>
               <option value="Starter">Starter (200 GB)</option>
               <option value="Pro">Pro (500 GB)</option>
-              <option value="Studio">Studio (1 TB)</option>
+              <option value="Studio">Studio (2 TB)</option>
             </select>
           </div>
           <div style={{ padding: '12px 14px', background: '#f5f5f7', borderRadius: '10px', fontSize: '12.5px', fontWeight: 300, color: '#6e6e73' }}>

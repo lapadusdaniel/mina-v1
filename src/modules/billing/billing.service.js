@@ -19,7 +19,7 @@ export const STORAGE_LIMITS = {
   Free: 15,
   Starter: 200,
   Pro: 500,
-  Studio: 1000,
+  Studio: 2000,
 }
 
 export const BILLING_TYPES = {
