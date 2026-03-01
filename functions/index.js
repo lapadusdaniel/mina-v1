@@ -1,9 +1,11 @@
+const functionsV1 = require('firebase-functions/v1')
 const admin = require('firebase-admin')
 const Stripe = require('stripe')
 const logger = require('firebase-functions/logger')
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { defineSecret } = require('firebase-functions/params')
 const { SmartBillService } = require('./src/services/smartbill.service')
+const { createEmailService } = require('./src/services/email.service')
 
 if (!admin.apps.length) {
   admin.initializeApp()
@@ -18,6 +20,10 @@ const SMARTBILL_USERNAME = defineSecret('SMARTBILL_USERNAME')
 const SMARTBILL_TOKEN = defineSecret('SMARTBILL_TOKEN')
 const SMARTBILL_CIF = defineSecret('SMARTBILL_CIF')
 const SMARTBILL_SERIES_NAME = defineSecret('SMARTBILL_SERIES_NAME')
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
+
+const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
+const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
   starter: 'price_1T5srU1ax2jGrLZHgpdKCPnm',
@@ -228,10 +234,16 @@ async function buildPaymentData(stripe, session, event) {
       const total = toMajorAmount(item.amount_total ?? item.amount_subtotal)
       const unitPrice = quantity > 0 ? Number((total / quantity).toFixed(2)) : total
 
+      const priceId =
+        typeof item.price === 'string'
+          ? item.price
+          : String(item.price?.id || '').trim() || null
+
       return {
         name: String(item.description || 'Abonament Mina').slice(0, 180),
         quantity,
         unitPrice,
+        priceId,
       }
     })
   } catch (err) {
@@ -250,6 +262,7 @@ async function buildPaymentData(stripe, session, event) {
         name: String(session.metadata?.planName || 'Abonament Mina').slice(0, 180),
         quantity: 1,
         unitPrice: amount,
+        priceId: String(session.metadata?.priceId || session.metadata?.stripePriceId || '').trim() || null,
       },
     ]
   }
@@ -258,6 +271,7 @@ async function buildPaymentData(stripe, session, event) {
     amount,
     currency,
     lineItems,
+    primaryPriceId: lineItems.find((item) => item?.priceId)?.priceId || null,
     description: lineItems[0]?.name || 'Abonament Mina',
     stripeEventId: event.id,
     stripeSessionId: session.id || null,
@@ -266,6 +280,20 @@ async function buildPaymentData(stripe, session, event) {
     stripeCustomerId: session.customer || null,
     paidAt: session.created ? new Date(session.created * 1000).toISOString() : new Date().toISOString(),
   }
+}
+
+
+function getEmailService() {
+  return createEmailService({
+    apiKey: String(RESEND_API_KEY.value() || process.env.RESEND_API_KEY || '').trim(),
+    fromEmail: MINA_EMAIL_FROM,
+    dashboardUrl: MINA_DASHBOARD_URL,
+    priceIds: {
+      starter: String(process.env.STRIPE_PRICE_STARTER || '').trim() || FALLBACK_STRIPE_PRICE_IDS.starter,
+      pro: String(process.env.STRIPE_PRICE_PRO || '').trim() || FALLBACK_STRIPE_PRICE_IDS.pro,
+      studio: String(process.env.STRIPE_PRICE_STUDIO || '').trim() || FALLBACK_STRIPE_PRICE_IDS.studio,
+    },
+  })
 }
 
 async function acquireEventLock(event, uid, sessionId) {
@@ -420,6 +448,28 @@ async function handleCheckoutSessionCompleted(event) {
       { merge: true }
     )
 
+  try {
+    const paymentEmailResult = await getEmailService().sendPaymentSuccessEmail({
+      uid,
+      customerEmail,
+      session,
+      paymentData,
+      userData,
+    })
+
+    logger.info('Payment success email processed', {
+      uid,
+      eventId: event.id,
+      ...paymentEmailResult,
+    })
+  } catch (emailError) {
+    logger.error('Payment success email failed', {
+      uid,
+      eventId: event.id,
+      message: emailError?.message || String(emailError),
+    })
+  }
+
   await markEvent(event.id, {
     status: 'processed',
     uid,
@@ -444,6 +494,28 @@ async function handleCheckoutSessionCompleted(event) {
     },
   }
 }
+
+
+exports.sendWelcomeEmail = functionsV1
+  .region('europe-west1')
+  .runWith({ secrets: ['RESEND_API_KEY'] })
+  .auth.user()
+  .onCreate(async (user) => {
+    try {
+      const result = await getEmailService().sendWelcomeEmail(user)
+      logger.info('sendWelcomeEmail finished', {
+        uid: user.uid,
+        ...result,
+      })
+      return null
+    } catch (error) {
+      logger.error('sendWelcomeEmail failed', {
+        uid: user.uid,
+        message: error?.message || String(error),
+      })
+      return null
+    }
+  })
 
 exports.createCheckoutSession = onCall(
   {
@@ -606,6 +678,7 @@ exports.onStripeWebhook = onRequest(
       SMARTBILL_TOKEN,
       SMARTBILL_CIF,
       SMARTBILL_SERIES_NAME,
+      RESEND_API_KEY,
     ],
   },
   async (req, res) => {

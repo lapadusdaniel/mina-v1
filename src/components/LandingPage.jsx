@@ -80,21 +80,11 @@ function LandingPage({ user }) {
         {/* ── PHOTO STRIP ── */}
         <div className="fl-strip">
           <div className="fl-strip-inner">
-            <div className="fl-strip-photo" data-label="Nuntă">
-              <span className="fl-strip-icon">🕊</span>
-            </div>
-            <div className="fl-strip-photo" data-label="Portret">
-              <span className="fl-strip-icon">◯</span>
-            </div>
-            <div className="fl-strip-photo" data-label="Familie">
-              <span className="fl-strip-icon">❤</span>
-            </div>
-            <div className="fl-strip-photo" data-label="Eveniment">
-              <span className="fl-strip-icon">✦</span>
-            </div>
-            <div className="fl-strip-photo" data-label="Commercial">
-              <span className="fl-strip-icon">◈</span>
-            </div>
+            <div className="fl-strip-photo" data-label="Nuntă" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1519741497674-611481863552?w=400&q=80&auto=format&fit=crop)' }} />
+            <div className="fl-strip-photo" data-label="Portret" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400&q=80&auto=format&fit=crop)' }} />
+            <div className="fl-strip-photo" data-label="Familie" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1511895426328-dc8714191011?w=400&q=80&auto=format&fit=crop)' }} />
+            <div className="fl-strip-photo" data-label="Eveniment" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=400&q=80&auto=format&fit=crop)' }} />
+            <div className="fl-strip-photo" data-label="Commercial" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400&q=80&auto=format&fit=crop)' }} />
           </div>
         </div>
 
@@ -103,7 +93,8 @@ function LandingPage({ user }) {
           <div className="fl-features-header fl-reveal">
             <p className="fl-eyebrow">Funcționalități</p>
             <h2 className="fl-section-title">
-              Construit pentru <em>fotografi,</em><br />nu pentru IT-iști.
+              Construit de fotografi,<br />
+              <em>pentru fotografi.</em>
             </h2>
           </div>
           <div className="fl-features-grid">
@@ -116,9 +107,9 @@ function LandingPage({ user }) {
             </div>
             <div className="fl-feature-card fl-reveal" style={{ transitionDelay: '0.1s' }}>
               <span className="fl-feature-icon">☁️</span>
-              <h3 className="fl-feature-title">Stocare pe Cloudflare</h3>
+              <h3 className="fl-feature-title">Stocare sigură și rapidă</h3>
               <p className="fl-feature-desc">
-                Fotografiile tale sunt stocate sigur pe infrastructura Cloudflare — rapidă, fiabilă, globală.
+                Fotografiile tale sunt stocate pe infrastructură de nivel enterprise — disponibile oricând, oriunde.
               </p>
             </div>
             <div className="fl-feature-card fl-reveal" style={{ transitionDelay: '0.2s' }}>
