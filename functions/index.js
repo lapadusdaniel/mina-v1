@@ -35,6 +35,7 @@ const SUPPORTED_STRIPE_EVENTS = new Set([
   'checkout.session.completed',
   'customer.subscription.deleted',
   'invoice.payment_failed',
+  'charge.dispute.created',
 ])
 
 const PLAN_BY_PRICE_ID = Object.freeze({
@@ -840,6 +841,101 @@ async function handleInvoicePaymentFailed(event) {
   }
 }
 
+async function handleChargeDisputeCreated(event) {
+  const dispute = event.data?.object || {}
+  const stripeCustomerId = String(dispute.customer || '').trim()
+  if (!stripeCustomerId) {
+    throw new Error('charge.dispute.created missing customer id')
+  }
+
+  const resolved = await resolveUidFromStripeCustomerId(stripeCustomerId)
+  const uid = resolved.uid
+  if (!uid) {
+    throw new Error('charge.dispute.created unresolved uid for customer: ' + stripeCustomerId)
+  }
+
+  const lockState = await acquireEventLock(event, uid, String(dispute.id || '').trim() || null)
+  if (lockState === 'processed') {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'already_processed',
+      uid,
+    }
+  }
+
+  if (lockState === 'processing') {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'already_processing',
+      uid,
+    }
+  }
+
+  const userRef = db.collection('users').doc(uid)
+  const userSnap = await userRef.get()
+  if (!userSnap.exists) {
+    throw new Error('User not found for uid: ' + uid)
+  }
+
+  const userData = userSnap.data() || {}
+  const customerEmail = await resolveCustomerEmail({
+    session: {
+      customer: stripeCustomerId,
+    },
+    userData,
+    uid,
+  })
+
+  await userRef.set(
+    {
+      subscriptionStatus: 'disputed',
+      disputeCreatedAt: serverTimestamp(),
+      stripeCustomerId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  )
+
+  try {
+    const result = await getEmailService().sendDisputeEmail({
+      customerEmail,
+    })
+
+    logger.info('Dispute email processed', {
+      uid,
+      eventId: event.id,
+      ...result,
+    })
+  } catch (emailError) {
+    logger.error('Dispute email failed', {
+      uid,
+      eventId: event.id,
+      message: emailError?.message || String(emailError),
+    })
+  }
+
+  await markEvent(event.id, {
+    status: 'processed',
+    uid,
+    uidSource: resolved.source,
+    stripeCustomerId,
+    subscriptionStatus: 'disputed',
+    stripeDisputeId: String(dispute.id || '').trim() || null,
+    stripeChargeId: String(dispute.charge || '').trim() || null,
+  })
+
+  return {
+    ok: true,
+    skipped: false,
+    uid,
+    uidSource: resolved.source,
+    stripeCustomerId,
+  }
+}
+
+
 exports.sendWelcomeEmail = functionsV1
   .region('europe-west1')
   .runWith({ secrets: ['RESEND_API_KEY'] })
@@ -1070,6 +1166,8 @@ exports.onStripeWebhook = onRequest(
         result = await handleCustomerSubscriptionDeleted(event)
       } else if (event.type === 'invoice.payment_failed') {
         result = await handleInvoicePaymentFailed(event)
+      } else if (event.type === 'charge.dispute.created') {
+        result = await handleChargeDisputeCreated(event)
       } else {
         result = {
           ok: true,

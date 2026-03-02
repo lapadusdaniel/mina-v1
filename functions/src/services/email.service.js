@@ -192,6 +192,28 @@ function buildPaymentFailedEmailHtml(userEmail, planName, customerPortalUrl) {
   `
 }
 
+
+function buildDisputeEmailHtml(userEmail) {
+  const safeEmail = escapeHtml(userEmail || '')
+
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
+      <h2 style="margin:0 0 12px">Plată contestată</h2>
+      <p style="margin:0 0 12px">Salut, ${safeEmail || 'Fotograf'}</p>
+      <p style="margin:0 0 8px">
+        O plată asociată abonamentului tău a fost contestată în Stripe.
+      </p>
+      <p style="margin:0 0 8px">
+        Contul tău este temporar restricționat până la clarificarea disputei.
+      </p>
+      <p style="margin:0 0 18px">
+        Pentru suport, contactează-ne la <a href="mailto:hello@cloudbymina.com">hello@cloudbymina.com</a>.
+      </p>
+      <p style="margin:0;color:#666">Echipa Mina</p>
+    </div>
+  `
+}
+
 function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } = {}) {
   const key = sanitize(apiKey)
   if (!key) {
@@ -304,11 +326,32 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
   }
 
 
+  async function sendDisputeEmail({ customerEmail } = {}) {
+    const email = normalizeEmail(customerEmail)
+    if (!email) {
+      return { skipped: true, reason: 'missing_email' }
+    }
+
+    await resend.emails.send({
+      from: fromEmail,
+      to: [email],
+      subject: 'Plată contestată • Mina',
+      html: buildDisputeEmailHtml(email),
+    })
+
+    return {
+      skipped: false,
+      email,
+    }
+  }
+
+
   return {
     sendWelcomeEmail,
     sendPaymentSuccessEmail,
     sendSubscriptionCanceledEmail,
     sendPaymentFailedEmail,
+    sendDisputeEmail,
   }
 }
 
