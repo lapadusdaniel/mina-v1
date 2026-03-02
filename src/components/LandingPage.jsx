@@ -128,18 +128,19 @@ function LandingPage({ user }) {
               Simplu și <em>transparent.</em>
             </h2>
             <p className="fl-pricing-sub">Alegi planul potrivit pentru volumul tău de lucru.</p>
+            <p className="fl-pricing-sub">Add-on 500 GB: 49 lei/lună.</p>
           </div>
 
           <div className="fl-pricing-grid">
             <div className="fl-plan fl-reveal">
               <h3 className="fl-plan-name">Free</h3>
-              <p className="fl-plan-storage">15 GB stocare</p>
+              <p className="fl-plan-storage">30 GB stocare</p>
               <div className="fl-plan-price">
                 <span className="fl-plan-price-amount">0 lei</span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
-                <li>15 GB stocare</li>
+                <li>30 GB stocare</li>
                 <li>3 galerii active</li>
                 <li>Galerii protejate cu parolă</li>
                 <li>Selecții favorite pentru clienți</li>
@@ -153,13 +154,13 @@ function LandingPage({ user }) {
 
             <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.1s' }}>
               <h3 className="fl-plan-name">Starter</h3>
-              <p className="fl-plan-storage">200 GB stocare</p>
+              <p className="fl-plan-storage">150 GB stocare</p>
               <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">49 lei<span>/lună</span></span>
+                <span className="fl-plan-price-amount">39 lei<span>/lună</span></span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
-                <li>200 GB stocare</li>
+                <li>150 GB stocare</li>
                 <li>Galerii nelimitate</li>
                 <li>Galerii protejate cu parolă</li>
                 <li>Selecții favorite pentru clienți</li>
@@ -174,13 +175,13 @@ function LandingPage({ user }) {
             <div className="fl-plan fl-plan-featured fl-reveal" style={{ transitionDelay: '0.2s' }}>
               <span className="fl-plan-badge">Recomandat</span>
               <h3 className="fl-plan-name">Pro</h3>
-              <p className="fl-plan-storage">500 GB stocare</p>
+              <p className="fl-plan-storage">600 GB stocare</p>
               <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">99 lei<span>/lună</span></span>
+                <span className="fl-plan-price-amount">79 lei<span>/lună</span></span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">
-                <li>500 GB stocare</li>
+                <li>600 GB stocare</li>
                 <li>Galerii nelimitate</li>
                 <li>Galerii protejate cu parolă</li>
                 <li>Selecții favorite pentru clienți</li>
@@ -196,7 +197,7 @@ function LandingPage({ user }) {
               <h3 className="fl-plan-name">Studio</h3>
               <p className="fl-plan-storage">2 TB stocare</p>
               <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">149 lei<span>/lună</span></span>
+                <span className="fl-plan-price-amount">129 lei<span>/lună</span></span>
               </div>
               <div className="fl-plan-divider" />
               <ul className="fl-plan-features">

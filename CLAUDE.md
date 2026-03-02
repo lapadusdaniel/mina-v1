@@ -200,7 +200,7 @@ mina-v1/
 |------|--------|------|
 | `billing.getCurrentPlan()` | ❌ Neimplementat | Aruncă eroare explicită |
 | Formular contact Landing Page | ❌ Nefuncțional | Doar `preventDefault()` |
-| Prețuri în UI | ⚠️ Greșite | Afișează 100/150 lei, corect: 49/99/149 lei |
+| Prețuri în UI | ⚠️ Greșite | Afișează valori vechi, corect: 39/79/129 lei |
 | Domeniu `cloudbymina.com` | ⚠️ Neconectat | Cumpărat, nepublicat |
 | Email tranzacțional | ❌ Lipsă | Niciun fotograf nu primește confirmare sau link galerie |
 | GDPR / T&C | ❌ Lipsă | Obligatoriu pentru lansare |
@@ -323,7 +323,7 @@ galerii/{galleryId}/thumbnails/{file}
 
 ### Blocker pentru lansare:
 1. Implementează `billing.getCurrentPlan()`
-2. Actualizează prețurile în UI: 49 / 99 / 149 lei
+2. Actualizează prețurile în UI: 39 / 79 / 129 lei
 3. Adaugă email tranzacțional (confirmare înregistrare + link galerie)
 4. GDPR — Termeni și Condiții
 5. Conectează domeniul `cloudbymina.com`

@@ -165,7 +165,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
       id: 'free',
       name: 'Free',
       price: '0 lei',
-      features: ['15 GB stocare', '3 galerii active', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Fără site de prezentare'],
+      features: ['30 GB stocare', '3 galerii active', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Fără site de prezentare'],
       description: 'Perfect pentru a începe și a vedea cum funcționează Mina.',
       isCurrent: userPlan === 'Free',
       cta: 'Plan gratuit'
@@ -173,9 +173,9 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
     {
       id: 'starter',
       name: 'Starter',
-      price: '49 lei',
+      price: '39 lei',
       period: '/lună',
-      features: ['200 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
+      features: ['150 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
       description: 'Pentru fotograful care livrează constant și vrea să arate profesional.',
       isCurrent: userPlan === 'Starter',
       cta: 'Alege Starter',
@@ -184,9 +184,9 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
     {
       id: 'pro',
       name: 'Pro',
-      price: '99 lei',
+      price: '79 lei',
       period: '/lună',
-      features: ['500 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
+      features: ['600 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
       description: 'Volumul și viteza de care ai nevoie în sezonul aglomerat.',
       isCurrent: userPlan === 'Pro',
       cta: 'Alege Pro',
@@ -195,7 +195,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
     {
       id: 'studio',
       name: 'Studio',
-      price: '149 lei',
+      price: '129 lei',
       period: '/lună',
       features: ['2 TB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
       description: 'Pentru cei care nu fac compromisuri. Arhivă, livrări masive, totul într-un singur loc.',
@@ -212,6 +212,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
           <div className="sub-header">
         <h2 className="sub-display-title">Alege planul potrivit <em>viziunii tale.</em></h2>
         <p className="sub-display-sub">Scalabilitate maximă pentru portofoliul tău profesional.</p>
+        <p className="sub-display-sub">Add-on 500 GB disponibil: 49 lei/lună.</p>
       </div>
 
       <div className="sub-pricing-grid">

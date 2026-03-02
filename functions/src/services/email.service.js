@@ -1,14 +1,14 @@
 const { Resend } = require('resend')
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
-  starter: 'price_1T5srU1ax2jGrLZHgpdKCPnm',
-  pro: 'price_1T5ssF1ax2jGrLZHNR9EjINy',
-  studio: 'price_1T5ssk1ax2jGrLZHZ0Lxitgp',
+  starter: 'price_1T6a3S1ax2jGrLZHmevohZWA',
+  pro: 'price_1T6a4F1ax2jGrLZH92vUsGzE',
+  studio: 'price_1T6a501ax2jGrLZHgLBbkzT4',
 })
 
 const PLAN_STORAGE_BY_NAME = Object.freeze({
-  Starter: 200,
-  Pro: 500,
+  Starter: 150,
+  Pro: 600,
   Studio: 2000,
 })
 
@@ -79,16 +79,16 @@ function resolvePlanForPaymentEmail({ session = {}, paymentData = {}, priceIds =
 
   const amount = Number(paymentData.amount)
   if (Number.isFinite(amount)) {
-    if (amount === 49) return 'Starter'
-    if (amount === 99) return 'Pro'
-    if (amount === 149) return 'Studio'
+    if (amount === 39) return 'Starter'
+    if (amount === 79) return 'Pro'
+    if (amount === 129) return 'Studio'
   }
 
   return 'Starter'
 }
 
 function getStorageLimitForPlan(planName) {
-  return PLAN_STORAGE_BY_NAME[planName] || 200
+  return PLAN_STORAGE_BY_NAME[planName] || 150
 }
 
 function buildWelcomeEmailHtml({ displayName = '', dashboardUrl = '' } = {}) {
@@ -112,7 +112,7 @@ function buildWelcomeEmailHtml({ displayName = '', dashboardUrl = '' } = {}) {
   `
 }
 
-function buildPaymentSuccessEmailHtml({ displayName = '', planName = 'Starter', storageLimitGb = 200, dashboardUrl = '' } = {}) {
+function buildPaymentSuccessEmailHtml({ displayName = '', planName = 'Starter', storageLimitGb = 150, dashboardUrl = '' } = {}) {
   const safeDisplayName = escapeHtml(displayName || 'Fotograf')
   const safePlanName = escapeHtml(planName)
   const safeStorage = escapeHtml(`${storageLimitGb} GB`)

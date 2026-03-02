@@ -10,7 +10,7 @@
  *   - GET/LIST public doar pe căi controlate (galerii + branding).
  *   - PUT/DELETE necesită Firebase ID token valid.
  *   - PUT/DELETE pe galerii validează ownership în Firestore (galerii/{id}.userId == uid).
- *   - PUT pe galerii validează quota de stocare (plan Free/Pro/Unlimited) înainte de upload.
+ *   - PUT pe galerii validează quota de stocare (plan Free/Starter/Pro/Studio) înainte de upload.
  *   - PUT/DELETE pe branding validează `branding/{uid}/...`.
  */
 
@@ -36,13 +36,15 @@ const QUOTA_CACHE_TTL_MS = 15 * 1000
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing'])
 const PLAN_PRIORITY = {
   Free: 0,
-  Pro: 1,
-  Unlimited: 2,
+  Starter: 1,
+  Pro: 2,
+  Studio: 3,
 }
 const DEFAULT_STORAGE_LIMITS_GB = {
-  Free: 15,
-  Pro: 500,
-  Unlimited: 1000,
+  Free: 30,
+  Starter: 150,
+  Pro: 600,
+  Studio: 2000,
 }
 
 function corsHeaders() {
@@ -241,8 +243,9 @@ async function checkRateLimit(request, env) {
 
 function normalizePlan(raw) {
   const normalized = String(raw || '').trim().toLowerCase()
-  if (normalized === 'unlimited') return 'Unlimited'
+  if (normalized === 'studio' || normalized === 'unlimited') return 'Studio'
   if (normalized === 'pro') return 'Pro'
+  if (normalized === 'starter') return 'Starter'
   if (normalized === 'free') return 'Free'
   return ''
 }
@@ -256,7 +259,8 @@ function parseNumber(raw, fallback) {
 function storageLimitBytesForPlan(plan, env) {
   const normalizedPlan = normalizePlan(plan) || 'Free'
   const envKey = `STORAGE_LIMIT_${normalizedPlan.toUpperCase()}_GB`
-  const limitGb = parseNumber(env?.[envKey], DEFAULT_STORAGE_LIMITS_GB[normalizedPlan])
+  const legacyEnvKey = normalizedPlan === 'Studio' ? 'STORAGE_LIMIT_UNLIMITED_GB' : null
+  const limitGb = parseNumber(env?.[envKey] ?? (legacyEnvKey ? env?.[legacyEnvKey] : undefined), DEFAULT_STORAGE_LIMITS_GB[normalizedPlan])
   return Math.floor(limitGb * 1024 * 1024 * 1024)
 }
 
@@ -269,15 +273,21 @@ function parseCommaSeparatedSet(rawValue) {
 }
 
 function getConfiguredPriceIds(env) {
+  const starter = new Set([
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER_IDS),
+  ])
   const pro = new Set([
     ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO),
     ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_IDS),
   ])
-  const unlimited = new Set([
+  const studio = new Set([
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO_IDS),
     ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED),
     ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED_IDS),
   ])
-  return { pro, unlimited }
+  return { starter, pro, studio }
 }
 
 function pickMaxPlan(currentPlan, candidatePlan) {
@@ -379,8 +389,9 @@ function inferPlanFromSubscription(docData, env) {
   if (!priceId) return 'Free'
 
   const configured = getConfiguredPriceIds(env)
-  if (configured.unlimited.has(priceId)) return 'Unlimited'
+  if (configured.studio.has(priceId)) return 'Studio'
   if (configured.pro.has(priceId)) return 'Pro'
+  if (configured.starter.has(priceId)) return 'Starter'
 
   const priceObj = parseSubscriptionPriceObject(docData)
   const fromLabels = normalizePlan(
@@ -401,8 +412,9 @@ function inferPlanFromSubscription(docData, env) {
     ?? docData?.unit_amount_decimal
   )
   if (Number.isFinite(unitAmount)) {
-    if (unitAmount >= 15000) return 'Unlimited'
-    if (unitAmount >= 10000) return 'Pro'
+    if (unitAmount >= 12900) return 'Studio'
+    if (unitAmount >= 7900) return 'Pro'
+    if (unitAmount >= 3900) return 'Starter'
   }
 
   // Unknown active subscription: default to Pro to avoid false hard-blocking paid users.

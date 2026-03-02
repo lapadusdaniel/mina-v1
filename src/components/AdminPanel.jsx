@@ -19,14 +19,14 @@ function hasAdminAccess(user) {
 }
 
 const PLAN_PRICES = {
-  [import.meta.env.VITE_STRIPE_PRICE_STARTER || 'price_1T5srU1ax2jGrLZHgpdKCPnm']: 'Starter',
-  [import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T5ssF1ax2jGrLZHNR9EjINy']: 'Pro',
-  [import.meta.env.VITE_STRIPE_PRICE_STUDIO || 'price_1T5ssk1ax2jGrLZHZ0Lxitgp']: 'Studio',
+  [import.meta.env.VITE_STRIPE_PRICE_STARTER || 'price_1T6a3S1ax2jGrLZHmevohZWA']: 'Starter',
+  [import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T6a4F1ax2jGrLZH92vUsGzE']: 'Pro',
+  [import.meta.env.VITE_STRIPE_PRICE_STUDIO || 'price_1T6a501ax2jGrLZHgLBbkzT4']: 'Studio',
 }
 
-const STRIPE_PRICE_STARTER = import.meta.env.VITE_STRIPE_PRICE_STARTER || 'price_1T5srU1ax2jGrLZHgpdKCPnm'
-const STRIPE_PRICE_PRO = import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T5ssF1ax2jGrLZHNR9EjINy'
-const STRIPE_PRICE_STUDIO = import.meta.env.VITE_STRIPE_PRICE_STUDIO || 'price_1T5ssk1ax2jGrLZHZ0Lxitgp'
+const STRIPE_PRICE_STARTER = import.meta.env.VITE_STRIPE_PRICE_STARTER || 'price_1T6a3S1ax2jGrLZHmevohZWA'
+const STRIPE_PRICE_PRO = import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T6a4F1ax2jGrLZH92vUsGzE'
+const STRIPE_PRICE_STUDIO = import.meta.env.VITE_STRIPE_PRICE_STUDIO || 'price_1T6a501ax2jGrLZHgLBbkzT4'
 
 // ── Helpers ───────────────────────────────────
 const formatDate = (val) => {
@@ -83,9 +83,9 @@ function ChangePlanModal({ user, onClose, onSave }) {
           <div className="ap-modal-field">
             <label>Plan nou</label>
             <select className="ap-modal-select" value={plan} onChange={e => setPlan(e.target.value)}>
-              <option value="Free">Free (15 GB)</option>
-              <option value="Starter">Starter (200 GB)</option>
-              <option value="Pro">Pro (500 GB)</option>
+              <option value="Free">Free (30 GB)</option>
+              <option value="Starter">Starter (150 GB)</option>
+              <option value="Pro">Pro (600 GB)</option>
               <option value="Studio">Studio (2 TB)</option>
             </select>
           </div>

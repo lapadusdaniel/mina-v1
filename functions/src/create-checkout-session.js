@@ -3,9 +3,9 @@ const logger = require('firebase-functions/logger')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
-  starter: 'price_1T5srU1ax2jGrLZHgpdKCPnm',
-  pro: 'price_1T5ssF1ax2jGrLZHNR9EjINy',
-  studio: 'price_1T5ssk1ax2jGrLZHZ0Lxitgp',
+  starter: 'price_1T6a3S1ax2jGrLZHmevohZWA',
+  pro: 'price_1T6a4F1ax2jGrLZH92vUsGzE',
+  studio: 'price_1T6a501ax2jGrLZHgLBbkzT4',
 })
 
 function sanitizePriceId(value) {

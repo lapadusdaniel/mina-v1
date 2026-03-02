@@ -5,6 +5,7 @@ export const STRIPE_PRICES = {
   starter: (import.meta.env.VITE_STRIPE_PRICE_STARTER || '').trim(),
   pro: (import.meta.env.VITE_STRIPE_PRICE_PRO || '').trim(),
   studio: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
+  addon: (import.meta.env.VITE_STRIPE_PRICE_ADDON || '').trim(),
   unlimited: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
 }
 
@@ -12,13 +13,14 @@ export const PLAN_PRICES = {
   STARTER: STRIPE_PRICES.starter,
   PRO: STRIPE_PRICES.pro,
   STUDIO: STRIPE_PRICES.studio,
+  ADDON: STRIPE_PRICES.addon,
   UNLIMITED: STRIPE_PRICES.studio,
 }
 
 export const STORAGE_LIMITS = {
-  Free: 15,
-  Starter: 200,
-  Pro: 500,
+  Free: 30,
+  Starter: 150,
+  Pro: 600,
   Studio: 2000,
 }
 

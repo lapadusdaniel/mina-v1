@@ -23,7 +23,7 @@ const { auth: authService, galleries: galleriesService, media: mediaService } = 
 
 const PINNED_STORAGE_KEY = 'mina-pinned-galleries'
 const LEGACY_PINNED_STORAGE_KEY = 'fotolio-pinned-galleries'
-const PLAN_LIMITS_GB = { Free: 15, Starter: 200, Pro: 500, Studio: 2000, Unlimited: 2000 }
+const PLAN_LIMITS_GB = { Free: 30, Starter: 150, Pro: 600, Studio: 2000, Unlimited: 2000 }
 const TRASH_AUTO_DELETE_DAYS = 30
 
 function readPinnedIdsFromStorage() {
@@ -596,7 +596,7 @@ export default function AdminGalleryTable({
   const totalPoze = galerii.reduce((sum, g) => sum + (g?.poze || 0), 0)
   const totalStorageBytes = galerii.reduce((sum, g) => sum + Number(g?.storageBytes || 0), 0)
   const planName = userPlanProp ?? user?.plan ?? 'Free'
-  const planLimitGB = storageLimitProp ?? PLAN_LIMITS_GB[planName] ?? 15
+  const planLimitGB = storageLimitProp ?? PLAN_LIMITS_GB[planName] ?? 30
   const storageUsedGB = Number((totalStorageBytes / (1024 * 1024 * 1024)).toFixed(2))
   const storagePercent = Math.min(100, (storageUsedGB / planLimitGB) * 100)
 

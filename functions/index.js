@@ -26,9 +26,9 @@ const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
-  starter: 'price_1T5srU1ax2jGrLZHgpdKCPnm',
-  pro: 'price_1T5ssF1ax2jGrLZHNR9EjINy',
-  studio: 'price_1T5ssk1ax2jGrLZHZ0Lxitgp',
+  starter: 'price_1T6a3S1ax2jGrLZHmevohZWA',
+  pro: 'price_1T6a4F1ax2jGrLZH92vUsGzE',
+  studio: 'price_1T6a501ax2jGrLZHgLBbkzT4',
 })
 
 const SUPPORTED_STRIPE_EVENTS = new Set([
@@ -81,9 +81,9 @@ function resolvePlanFromPriceId(priceId) {
 function resolvePlanFromAmount(amountMinorUnits) {
   const amount = Number(amountMinorUnits)
   if (!Number.isFinite(amount)) return ''
-  if (amount === 4900) return 'Starter'
-  if (amount === 9900) return 'Pro'
-  if (amount === 14900) return 'Studio'
+  if (amount === 3900) return 'Starter'
+  if (amount === 7900) return 'Pro'
+  if (amount === 12900) return 'Studio'
   return ''
 }
 
