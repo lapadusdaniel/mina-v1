@@ -31,6 +31,18 @@ const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
   studio: 'price_1T5ssk1ax2jGrLZHZ0Lxitgp',
 })
 
+const SUPPORTED_STRIPE_EVENTS = new Set([
+  'checkout.session.completed',
+  'customer.subscription.deleted',
+  'invoice.payment_failed',
+])
+
+const PLAN_BY_PRICE_ID = Object.freeze({
+  [FALLBACK_STRIPE_PRICE_IDS.starter]: 'Starter',
+  [FALLBACK_STRIPE_PRICE_IDS.pro]: 'Pro',
+  [FALLBACK_STRIPE_PRICE_IDS.studio]: 'Studio',
+})
+
 function sanitizePriceId(value) {
   return String(value || '').trim()
 }
@@ -40,6 +52,75 @@ function getAllowedCheckoutPriceIds() {
   const pro = sanitizePriceId(process.env.STRIPE_PRICE_PRO) || FALLBACK_STRIPE_PRICE_IDS.pro
   const studio = sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio
   return new Set([starter, pro, studio].filter(Boolean))
+}
+
+function normalizePlanName(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return ''
+  if (normalized.includes('studio') || normalized.includes('unlimited')) return 'Studio'
+  if (normalized.includes('pro')) return 'Pro'
+  if (normalized.includes('starter')) return 'Starter'
+  if (normalized.includes('free')) return 'Free'
+  return ''
+}
+
+function resolvePlanFromPriceId(priceId) {
+  const id = sanitizePriceId(priceId)
+  if (!id) return ''
+
+  const envMap = {
+    [sanitizePriceId(process.env.STRIPE_PRICE_STARTER) || FALLBACK_STRIPE_PRICE_IDS.starter]: 'Starter',
+    [sanitizePriceId(process.env.STRIPE_PRICE_PRO) || FALLBACK_STRIPE_PRICE_IDS.pro]: 'Pro',
+    [sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio]: 'Studio',
+  }
+
+  return envMap[id] || PLAN_BY_PRICE_ID[id] || ''
+}
+
+function resolvePlanFromAmount(amountMinorUnits) {
+  const amount = Number(amountMinorUnits)
+  if (!Number.isFinite(amount)) return ''
+  if (amount === 4900) return 'Starter'
+  if (amount === 9900) return 'Pro'
+  if (amount === 14900) return 'Studio'
+  return ''
+}
+
+function resolvePlanNameFromStripePayload({ session = {}, invoice = {}, userData = {} } = {}) {
+  const priceIdsFromInvoice = (invoice.lines?.data || []).map(
+    (line) => line?.price?.id || line?.pricing?.price_details?.price || ''
+  )
+  const priceCandidates = [
+    session.metadata?.priceId,
+    session.metadata?.stripePriceId,
+    ...priceIdsFromInvoice,
+  ]
+
+  for (const priceId of priceCandidates) {
+    const byPriceId = resolvePlanFromPriceId(priceId)
+    if (byPriceId) return byPriceId
+  }
+
+  const nameCandidates = [
+    session.metadata?.planName,
+    session.metadata?.plan,
+    ...(invoice.lines?.data || []).map((line) => line?.description),
+    userData.plan,
+    userData.subscriptionPlan,
+    userData.currentPlan,
+  ]
+
+  for (const value of nameCandidates) {
+    const byName = normalizePlanName(value)
+    if (byName) return byName
+  }
+
+  const byAmount = resolvePlanFromAmount(
+    invoice.amount_due ?? invoice.amount_paid ?? session.amount_total
+  )
+  if (byAmount) return byAmount
+
+  return 'Starter'
 }
 
 function sanitizeRedirectUrl(value, fieldName) {
@@ -127,18 +208,33 @@ async function resolveUidFromSessionFallback(session = {}) {
 
   const stripeCustomerId = String(session.customer || '').trim()
   if (stripeCustomerId) {
-    const customerFields = ['stripeId', 'customer_id', 'stripeCustomerId', 'stripe_customer_id']
+    const customerFields = ['stripeCustomerId', 'stripe_customer_id', 'stripeId', 'customer_id']
 
     for (const field of customerFields) {
-      const snap = await db
+      const usersSnap = await db
+        .collection('users')
+        .where(field, '==', stripeCustomerId)
+        .limit(1)
+        .get()
+
+      if (!usersSnap.empty) {
+        return {
+          uid: usersSnap.docs[0].id,
+          source: `users.${field}`,
+        }
+      }
+    }
+
+    for (const field of customerFields) {
+      const customersSnap = await db
         .collection('customers')
         .where(field, '==', stripeCustomerId)
         .limit(1)
         .get()
 
-      if (!snap.empty) {
+      if (!customersSnap.empty) {
         return {
-          uid: snap.docs[0].id,
+          uid: customersSnap.docs[0].id,
           source: `customers.${field}`,
         }
       }
@@ -186,6 +282,17 @@ async function resolveUidFromSessionFallback(session = {}) {
   return {
     uid: '',
     source: 'unresolved',
+  }
+}
+
+async function resolveUidFromStripeCustomerId(stripeCustomerId) {
+  const candidate = String(stripeCustomerId || '').trim()
+  if (!candidate) return { uid: '', source: 'missing_customer_id' }
+
+  const resolved = await resolveUidFromSessionFallback({ customer: candidate })
+  return {
+    uid: String(resolved.uid || '').trim(),
+    source: resolved.source || 'unresolved',
   }
 }
 
@@ -394,6 +501,23 @@ async function handleCheckoutSessionCompleted(event) {
   }
 
   const userData = userSnap.data() || {}
+
+  const stripeCustomerId = String(session.customer || '').trim()
+  if (stripeCustomerId && stripeCustomerId !== String(userData.stripeCustomerId || '').trim()) {
+    await userRef.set(
+      {
+        stripeCustomerId,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+
+    logger.info('Stored stripeCustomerId on user profile', {
+      uid,
+      stripeCustomerId,
+    })
+  }
+
   const billingDetails = userData.billingDetails
   if (!billingDetails) {
     throw new Error(`Missing billingDetails for uid: ${uid}`)
@@ -495,6 +619,226 @@ async function handleCheckoutSessionCompleted(event) {
   }
 }
 
+
+
+async function handleCustomerSubscriptionDeleted(event) {
+  const subscription = event.data?.object || {}
+  const stripeCustomerId = String(subscription.customer || '').trim()
+  if (!stripeCustomerId) {
+    throw new Error('customer.subscription.deleted missing customer id')
+  }
+
+  const resolved = await resolveUidFromStripeCustomerId(stripeCustomerId)
+  const uid = resolved.uid
+  if (!uid) {
+    throw new Error('customer.subscription.deleted unresolved uid for customer: ' + stripeCustomerId)
+  }
+
+  const lockState = await acquireEventLock(event, uid, String(subscription.id || '').trim() || null)
+  if (lockState === 'processed') {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'already_processed',
+      uid,
+    }
+  }
+
+  if (lockState === 'processing') {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'already_processing',
+      uid,
+    }
+  }
+
+  const userRef = db.collection('users').doc(uid)
+  const userSnap = await userRef.get()
+  if (!userSnap.exists) {
+    throw new Error('User not found for uid: ' + uid)
+  }
+
+  const userData = userSnap.data() || {}
+  const planName =
+    normalizePlanName(userData.plan || userData.subscriptionPlan || userData.currentPlan) ||
+    normalizePlanName(subscription.items?.data?.[0]?.price?.nickname) || 'Plan activ'
+
+  const customerEmail = await resolveCustomerEmail({
+    session: {
+      customer: stripeCustomerId,
+      customer_email: subscription.customer_email || '',
+    },
+    userData,
+    uid,
+  })
+
+  await userRef.set(
+    {
+      plan: 'free',
+      subscriptionStatus: 'canceled',
+      subscriptionCanceledAt: serverTimestamp(),
+      stripeCustomerId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  )
+
+  try {
+    const result = await getEmailService().sendSubscriptionCanceledEmail({
+      customerEmail,
+      planName,
+    })
+
+    logger.info('Subscription canceled email processed', {
+      uid,
+      eventId: event.id,
+      ...result,
+    })
+  } catch (emailError) {
+    logger.error('Subscription canceled email failed', {
+      uid,
+      eventId: event.id,
+      message: emailError?.message || String(emailError),
+    })
+  }
+
+  await markEvent(event.id, {
+    status: 'processed',
+    uid,
+    uidSource: resolved.source,
+    stripeCustomerId,
+    subscriptionStatus: 'canceled',
+    stripeSubscriptionId: String(subscription.id || '').trim() || null,
+  })
+
+  return {
+    ok: true,
+    skipped: false,
+    uid,
+    uidSource: resolved.source,
+    stripeCustomerId,
+  }
+}
+
+async function handleInvoicePaymentFailed(event) {
+  const stripe = new Stripe(STRIPE_SECRET_KEY.value(), {
+    apiVersion: '2024-06-20',
+  })
+
+  const invoice = event.data?.object || {}
+  const stripeCustomerId = String(invoice.customer || '').trim()
+  if (!stripeCustomerId) {
+    throw new Error('invoice.payment_failed missing customer id')
+  }
+
+  const resolved = await resolveUidFromStripeCustomerId(stripeCustomerId)
+  const uid = resolved.uid
+  if (!uid) {
+    throw new Error('invoice.payment_failed unresolved uid for customer: ' + stripeCustomerId)
+  }
+
+  const lockState = await acquireEventLock(event, uid, String(invoice.id || '').trim() || null)
+  if (lockState === 'processed') {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'already_processed',
+      uid,
+    }
+  }
+
+  if (lockState === 'processing') {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'already_processing',
+      uid,
+    }
+  }
+
+  const userRef = db.collection('users').doc(uid)
+  const userSnap = await userRef.get()
+  if (!userSnap.exists) {
+    throw new Error('User not found for uid: ' + uid)
+  }
+
+  const userData = userSnap.data() || {}
+  const planName = resolvePlanNameFromStripePayload({ invoice, userData })
+
+  const customerEmail = await resolveCustomerEmail({
+    session: {
+      customer: stripeCustomerId,
+      customer_email: invoice.customer_email || '',
+    },
+    userData,
+    uid,
+  })
+
+  let customerPortalUrl = ''
+  try {
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: MINA_DASHBOARD_URL,
+    })
+    customerPortalUrl = String(portalSession?.url || '').trim()
+  } catch (portalError) {
+    logger.warn('Stripe customer portal session could not be created', {
+      uid,
+      eventId: event.id,
+      stripeCustomerId,
+      message: portalError?.message || String(portalError),
+    })
+  }
+
+  await userRef.set(
+    {
+      subscriptionStatus: 'past_due',
+      paymentFailedAt: serverTimestamp(),
+      stripeCustomerId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  )
+
+  try {
+    const result = await getEmailService().sendPaymentFailedEmail({
+      customerEmail,
+      planName,
+      customerPortalUrl,
+    })
+
+    logger.info('Payment failed email processed', {
+      uid,
+      eventId: event.id,
+      ...result,
+    })
+  } catch (emailError) {
+    logger.error('Payment failed email failed', {
+      uid,
+      eventId: event.id,
+      message: emailError?.message || String(emailError),
+    })
+  }
+
+  await markEvent(event.id, {
+    status: 'processed',
+    uid,
+    uidSource: resolved.source,
+    stripeCustomerId,
+    subscriptionStatus: 'past_due',
+    stripeInvoiceId: String(invoice.id || '').trim() || null,
+  })
+
+  return {
+    ok: true,
+    skipped: false,
+    uid,
+    uidSource: resolved.source,
+    stripeCustomerId,
+    customerPortalUrl: customerPortalUrl || null,
+  }
+}
 
 exports.sendWelcomeEmail = functionsV1
   .region('europe-west1')
@@ -709,7 +1053,7 @@ exports.onStripeWebhook = onRequest(
       return
     }
 
-    if (event.type !== 'checkout.session.completed') {
+    if (!SUPPORTED_STRIPE_EVENTS.has(event.type)) {
       res.status(200).json({
         received: true,
         ignored: true,
@@ -719,7 +1063,21 @@ exports.onStripeWebhook = onRequest(
     }
 
     try {
-      const result = await handleCheckoutSessionCompleted(event)
+      let result
+      if (event.type === 'checkout.session.completed') {
+        result = await handleCheckoutSessionCompleted(event)
+      } else if (event.type === 'customer.subscription.deleted') {
+        result = await handleCustomerSubscriptionDeleted(event)
+      } else if (event.type === 'invoice.payment_failed') {
+        result = await handleInvoicePaymentFailed(event)
+      } else {
+        result = {
+          ok: true,
+          ignored: true,
+          reason: 'unsupported_event',
+        }
+      }
+
       res.status(200).json({
         received: true,
         ...result,

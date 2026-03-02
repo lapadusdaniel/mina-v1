@@ -140,6 +140,58 @@ function buildPaymentSuccessEmailHtml({ displayName = '', planName = 'Starter', 
   `
 }
 
+
+function buildSubscriptionCanceledEmailHtml(userEmail, planName) {
+  const safeEmail = escapeHtml(userEmail || '')
+  const safePlanName = escapeHtml(planName || 'abonament activ')
+
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
+      <h2 style="margin:0 0 12px">Abonamentul tău Mina a expirat</h2>
+      <p style="margin:0 0 12px">Salut, ${safeEmail || 'Fotograf'}</p>
+      <p style="margin:0 0 8px">
+        Abonamentul <strong>${safePlanName}</strong> a fost anulat din Stripe.
+      </p>
+      <p style="margin:0 0 8px">
+        Fotografiile tale rămân păstrate în siguranță încă 90 de zile.
+      </p>
+      <p style="margin:0 0 18px">
+        Poți reactiva oricând un plan direct din dashboard-ul Mina.
+      </p>
+      <p style="margin:0;color:#666">Echipa Mina</p>
+    </div>
+  `
+}
+
+function buildPaymentFailedEmailHtml(userEmail, planName, customerPortalUrl) {
+  const safeEmail = escapeHtml(userEmail || '')
+  const safePlanName = escapeHtml(planName || 'abonament activ')
+  const safeCustomerPortalUrl = escapeHtml(customerPortalUrl || '')
+
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
+      <h2 style="margin:0 0 12px">Plata abonamentului a eșuat</h2>
+      <p style="margin:0 0 12px">Salut, ${safeEmail || 'Fotograf'}</p>
+      <p style="margin:0 0 8px">
+        Nu am putut procesa plata pentru planul <strong>${safePlanName}</strong>.
+      </p>
+      <p style="margin:0 0 8px">
+        Ai la dispoziție 7 zile să actualizezi metoda de plată, fără să pierzi accesul curent.
+      </p>
+      ${
+        safeCustomerPortalUrl
+          ? `<p style="margin:0 0 18px">
+              <a href="${safeCustomerPortalUrl}" style="display:inline-block;padding:10px 16px;background:#111111;color:#ffffff;text-decoration:none;border-radius:8px">
+                Actualizează metoda de plată
+              </a>
+            </p>`
+          : ''
+      }
+      <p style="margin:0;color:#666">Echipa Mina</p>
+    </div>
+  `
+}
+
 function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } = {}) {
   const key = sanitize(apiKey)
   if (!key) {
@@ -205,9 +257,58 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
     }
   }
 
+
+  async function sendSubscriptionCanceledEmail({ customerEmail, planName = 'Plan activ' } = {}) {
+    const email = normalizeEmail(customerEmail)
+    if (!email) {
+      return { skipped: true, reason: 'missing_email' }
+    }
+
+    await resend.emails.send({
+      from: fromEmail,
+      to: [email],
+      subject: 'Abonament anulat • Mina',
+      html: buildSubscriptionCanceledEmailHtml(email, planName),
+    })
+
+    return {
+      skipped: false,
+      email,
+      planName,
+    }
+  }
+
+  async function sendPaymentFailedEmail({
+    customerEmail,
+    planName = 'Plan activ',
+    customerPortalUrl = '',
+  } = {}) {
+    const email = normalizeEmail(customerEmail)
+    if (!email) {
+      return { skipped: true, reason: 'missing_email' }
+    }
+
+    await resend.emails.send({
+      from: fromEmail,
+      to: [email],
+      subject: 'Plată eșuată • Mina',
+      html: buildPaymentFailedEmailHtml(email, planName, customerPortalUrl),
+    })
+
+    return {
+      skipped: false,
+      email,
+      planName,
+      customerPortalUrl: sanitize(customerPortalUrl),
+    }
+  }
+
+
   return {
     sendWelcomeEmail,
     sendPaymentSuccessEmail,
+    sendSubscriptionCanceledEmail,
+    sendPaymentFailedEmail,
   }
 }
 
