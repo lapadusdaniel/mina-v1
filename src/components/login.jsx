@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { sendPasswordResetEmail } from 'firebase/auth'
+import { Link } from 'react-router-dom'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { auth } from '../firebase'
 
@@ -101,17 +102,22 @@ function Login({ onLogin, onSwitchToRegister }) {
       <div style={{ width: '100%', maxWidth: '380px' }}>
 
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <h1 style={{
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontStyle: 'italic',
-            fontWeight: 400,
-            fontSize: '1.75rem',
-            color: '#1d1d1f',
-            letterSpacing: '0.01em',
-            margin: '0 0 8px',
-          }}>
-            Mina
-          </h1>
+          <Link
+            to="/"
+            style={{
+              display: 'inline-block',
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontWeight: 300,
+              fontSize: '2.2rem',
+              color: '#1d1d1f',
+              letterSpacing: '0.03em',
+              textDecoration: 'none',
+              margin: '0 0 8px',
+              lineHeight: 1,
+            }}
+          >
+            MINA
+          </Link>
           <p style={{
             fontSize: '15px',
             fontWeight: 300,
