@@ -6,7 +6,7 @@ import { Zoom, Thumbnails } from 'yet-another-react-lightbox/plugins';
 import 'yet-another-react-lightbox/plugins/thumbnails.css';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
 import Masonry from 'react-masonry-css';
-import { ChevronDown, Share2, Download, Heart, Clock, Instagram, MessageCircle, Loader2 } from 'lucide-react';
+import { ChevronDown, Share2, Download, Heart, Instagram, MessageCircle, Loader2 } from 'lucide-react';
 
 const VALID_THEMES = ['luxos', 'minimal', 'indraznet', 'cald'];
 const BATCH_SIZE = 24;
@@ -316,7 +316,7 @@ const ClientGallery = () => {
   const [doarFavorite, setDoarFavorite] = useState(false);
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [profile, setProfile] = useState({
-    brandName: 'My Gallery', logoUrl: '', instagramUrl: '', whatsappNumber: '',
+    brandName: '', logoUrl: '', instagramUrl: '', whatsappNumber: '',
     websiteUrl: '', accentColor: '#b8965a', logoPreviewUrl: null
   });
 
@@ -460,13 +460,6 @@ const ClientGallery = () => {
     }
   }, []);
 
-  const formatDate = (val) => {
-    if (!val) return null;
-    const date = typeof val?.toDate === 'function' ? val.toDate() : new Date(val);
-    if (isNaN(date.getTime())) return null;
-    return date.toLocaleDateString('ro-RO', { year: 'numeric', month: 'long', day: 'numeric' });
-  };
-
   useEffect(() => {
     const fetchDate = async () => {
       setLoading(true);
@@ -510,7 +503,7 @@ const ClientGallery = () => {
                 try { logoPreviewUrl = await mediaService.getBrandingAsset(profileData.logoUrl); } catch (_) {}
               }
               setProfile({
-                brandName: profileData.brandName || 'My Gallery',
+                brandName: profileData.brandName || '',
                 logoUrl: profileData.logoUrl || '',
                 instagramUrl: profileData.instagramUrl || '',
                 whatsappNumber: profileData.whatsappNumber || '',
@@ -605,8 +598,9 @@ const ClientGallery = () => {
   }, [poze]);
 
   useEffect(() => {
-    if (galerie) { document.title = `${galerie.nume} | ${profile.brandName || 'My Gallery'}`; }
-  }, [galerie, profile.brandName]);
+    if (!galerie?.nume) return;
+    document.title = galerie.nume;
+  }, [galerie?.nume]);
 
   useEffect(() => {
     if (!galerie?.id) return;
@@ -916,7 +910,6 @@ const ClientGallery = () => {
   const coverImageUrl = galerie.coverUrl || coverMediumUrl || coverThumbUrl;
   const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverMediumUrl;
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
-  const dataExpirareText = formatDate(galerie.dataExpirare);
   const favCount = galerie?.favorite?.length ?? 0;
   const isExpired = isGalleryExpired(galerie);
 
@@ -948,10 +941,10 @@ const ClientGallery = () => {
 
         <div className="cg-cover-overlay">
           {/* Brand logo */}
-          {showNameWebsiteOnCover && (
+          {showNameWebsiteOnCover && (profile.logoPreviewUrl || profile.brandName) && (
             <div className="cg-cover-brand">
               {profile.logoPreviewUrl ? (
-                <img src={profile.logoPreviewUrl} alt={profile.brandName} className="cg-cover-logo" />
+                <img src={profile.logoPreviewUrl} alt={profile.brandName || 'Logo'} className="cg-cover-logo" />
               ) : (
                 <span className="cg-cover-brand-name">{profile.brandName}</span>
               )}
@@ -961,7 +954,6 @@ const ClientGallery = () => {
           {/* Title */}
           <div className="cg-cover-center">
             <h1 className="cg-cover-title">{galerie.nume}</h1>
-            {galerie.categoria && <p className="cg-cover-meta">{galerie.categoria}</p>}
             <button onClick={handleEnterGallery} className="cg-cover-btn">
               Deschide galeria
               <ChevronDown size={16} strokeWidth={1.5} />
@@ -981,55 +973,55 @@ const ClientGallery = () => {
         <>
         {/* Sticky Toolbar */}
         <div className="cg-toolbar">
-          {/* Stânga: Selecție */}
           <div className="cg-toolbar-left">
-            {allowPhotoSelection && (
-              <button
-                onClick={() => setDoarFavorite(!doarFavorite)}
-                className={`cg-fav-toggle ${doarFavorite ? 'cg-fav-toggle--active' : ''}`}
-                style={{ '--accent': profile.accentColor || '#b8965a' }}
-              >
-                <Heart
-                  size={18}
-                  strokeWidth={1.5}
-                  fill={doarFavorite ? (profile.accentColor || '#b8965a') : 'none'}
-                  style={{ color: doarFavorite ? (profile.accentColor || '#b8965a') : '#86868b' }}
-                />
-                <span className={countPop ? 'cg-count-pop' : ''}>
-                  {limit != null ? (
-                    <span className="cg-fav-badge" style={{ '--accent': profile.accentColor || '#b8965a', '--active': favCount >= limit ? '1' : '0' }}>
-                      {favCount} / {limit}
-                    </span>
-                  ) : (
-                    <>{selectionTitle}: <strong>{favCount}</strong></>
-                  )}
-                </span>
-              </button>
-            )}
+            <button
+              type="button"
+              className="cg-tab-all"
+              onClick={() => setDoarFavorite(false)}
+              aria-current="page"
+            >
+              Toate fotografiile
+            </button>
           </div>
 
-          {/* Dreapta: Actions */}
           <div className="cg-toolbar-right">
-            {dataExpirareText && (
-              <div className="cg-toolbar-expire">
-                <Clock size={14} strokeWidth={1.5} />
-                <span>Expiră: {dataExpirareText}</span>
-              </div>
+            {allowPhotoSelection && (
+              <button
+                type="button"
+                onClick={() => setDoarFavorite(!doarFavorite)}
+                className={`cg-toolbar-btn cg-toolbar-btn--favorites ${doarFavorite ? 'cg-toolbar-btn--active' : ''}`}
+                aria-pressed={doarFavorite}
+              >
+                <Heart
+                  size={16}
+                  strokeWidth={1.6}
+                  fill={doarFavorite ? (profile.accentColor || '#1d1d1f') : 'none'}
+                  style={{ color: doarFavorite ? (profile.accentColor || '#1d1d1f') : '#1d1d1f' }}
+                />
+                <span>Favorites</span>
+                {favCount > 0 && (
+                  <span className={`cg-toolbar-fav-badge ${countPop ? 'cg-count-pop' : ''}`}>
+                    ({favCount})
+                  </span>
+                )}
+              </button>
             )}
+
             {showShareButton && (
-              <button onClick={handleShare} className="cg-toolbar-btn">
-                <Share2 size={16} strokeWidth={1.5} />
+              <button type="button" onClick={handleShare} className="cg-toolbar-btn">
+                <Share2 size={16} strokeWidth={1.6} />
                 <span>Share</span>
               </button>
             )}
+
             {allowOriginalDownloads && (
               <button
+                type="button"
                 onClick={handleDownload}
                 disabled={downloadingAll}
-                className="cg-toolbar-download"
-                style={{ background: profile.accentColor || '#1d1d1f' }}
+                className="cg-toolbar-btn cg-toolbar-btn--download"
               >
-                <Download size={16} strokeWidth={1.5} />
+                <Download size={16} strokeWidth={1.6} />
                 <span>{downloadingAll ? 'Se descarcă...' : 'Descarcă'}</span>
               </button>
             )}
@@ -1568,91 +1560,83 @@ const ClientGallery = () => {
           position: sticky;
           top: 0;
           z-index: 40;
-          background: rgba(255,255,255,0.9);
-          backdrop-filter: saturate(180%) blur(20px);
-          -webkit-backdrop-filter: saturate(180%) blur(20px);
-          border-bottom: 1px solid rgba(0,0,0,0.07);
+          background: #fff;
+          border-bottom: 1px solid rgba(0,0,0,0.1);
           padding: 0 40px;
-          height: 52px;
+          min-height: 64px;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 20px;
+          gap: 18px;
         }
         .cg-toolbar-left {
           display: flex;
-          align-items: center;
-          gap: 16px;
+          align-items: flex-end;
+          height: 100%;
         }
-        .cg-fav-toggle {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: none;
+        .cg-tab-all {
           border: none;
+          background: none;
           cursor: pointer;
           font-family: 'DM Sans', sans-serif;
           font-size: 14px;
-          font-weight: 400;
-          color: #3a3a3c;
-          padding: 6px 0;
-          transition: color 0.15s;
-        }
-        .cg-fav-toggle strong { font-weight: 500; }
-        .cg-fav-badge {
-          padding: 3px 10px;
-          border-radius: 100px;
-          background: rgba(0,0,0,0.07);
-          font-size: 12.5px;
           font-weight: 500;
+          color: #1d1d1f;
+          padding: 20px 0 16px;
+          margin: 0;
+          position: relative;
+          letter-spacing: 0.01em;
+        }
+        .cg-tab-all::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: -1px;
+          height: 2px;
+          background: #1d1d1f;
+          border-radius: 999px;
         }
         .cg-toolbar-right {
           display: flex;
           align-items: center;
-          gap: 20px;
-        }
-        .cg-toolbar-expire {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 12.5px;
-          font-weight: 300;
-          color: #a1a1a6;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
         }
         .cg-toolbar-btn {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 6px;
-          background: none;
-          border: none;
+          gap: 8px;
+          background: #fff;
+          border: 1px solid rgba(0,0,0,0.1);
+          border-radius: 999px;
           cursor: pointer;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 13.5px;
-          font-weight: 400;
-          color: #3a3a3c;
-          padding: 0;
-          transition: color 0.15s;
-        }
-        .cg-toolbar-btn:hover { color: #1d1d1f; }
-        .cg-toolbar-download {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          padding: 8px 18px;
-          border: none;
-          border-radius: 100px;
-          color: #fff;
           font-family: 'DM Sans', sans-serif;
           font-size: 13.5px;
           font-weight: 500;
-          cursor: pointer;
-          transition: opacity 0.15s, transform 0.15s;
-          letter-spacing: 0.01em;
+          color: #1d1d1f;
+          padding: 9px 14px;
+          transition: background 0.15s, border-color 0.15s, color 0.15s;
           white-space: nowrap;
         }
-        .cg-toolbar-download:hover { opacity: 0.88; transform: scale(1.02); }
-        .cg-toolbar-download:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+        .cg-toolbar-btn:hover {
+          background: #f7f7f7;
+          border-color: rgba(0,0,0,0.2);
+        }
+        .cg-toolbar-btn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .cg-toolbar-btn--active {
+          background: #f3f3f3;
+          border-color: rgba(0,0,0,0.28);
+        }
+        .cg-toolbar-fav-badge {
+          font-size: 12px;
+          font-weight: 600;
+          color: #6a6a70;
+        }
 
         /* ── Gallery ── */
         .cg-gallery { padding: 48px 40px 0; }
@@ -1973,10 +1957,9 @@ const ClientGallery = () => {
 
         /* ── Tablet ── */
         @media (max-width: 900px) {
-          .cg-toolbar { padding: 0 20px; gap: 12px; height: 48px; }
-          .cg-gallery { padding: 32px 16px 0; }
+          .cg-toolbar { padding: 0 16px; min-height: 58px; }
+          .cg-gallery { padding: 28px 16px 0; }
           .cg-footer { padding: 48px 20px 40px; }
-          .cg-toolbar-expire { display: none; }
           .cg-masonry { margin-left: -10px; }
           .cg-masonry-col { padding-left: 10px; }
           .cg-masonry-col > div { margin-bottom: 10px; }
@@ -1993,10 +1976,10 @@ const ClientGallery = () => {
           .cg-cover-title { font-size: 2rem; }
           .cg-cover-btn { font-size: 14px; padding: 11px 22px; }
           .cg-cover-overlay { padding: 24px 20px 32px; }
-          .cg-toolbar { padding: 0 14px; height: 46px; }
-          .cg-toolbar-btn span { display: none; }
-          .cg-toolbar-download span { display: none; }
-          .cg-toolbar-download { padding: 8px 12px; }
+          .cg-toolbar { padding: 0 12px; min-height: 52px; }
+          .cg-toolbar-btn { padding: 8px 10px; }
+          .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
+          .cg-toolbar-fav-badge { display: inline; }
           .cg-gallery { padding: 20px 8px 0; }
           .cg-masonry { margin-left: -8px; }
           .cg-masonry-col { padding-left: 8px; }
