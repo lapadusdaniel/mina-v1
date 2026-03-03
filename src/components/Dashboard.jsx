@@ -45,9 +45,9 @@ const SIDEBAR_TABS = [
 const TRASH_RETENTION_DAYS = 30
 const ACTIVE_GALLERY_STORAGE_KEY = 'mina_active_gallery_id'
 const MEDIUM_MAX_DIMENSION = 2048
-const MEDIUM_QUALITY = 0.85
-const THUMB_MAX_DIMENSION = 720
-const THUMB_QUALITY = 0.88
+const MEDIUM_QUALITY = 0.90
+const THUMB_MAX_DIMENSION = 800
+const THUMB_QUALITY = 0.92
 
 function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const navigate = useNavigate()
@@ -348,14 +348,12 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           maxWidthOrHeight: MEDIUM_MAX_DIMENSION,
           fileType: 'image/webp',
           initialQuality: MEDIUM_QUALITY,
-          maxSizeMB: 2.5,
           useWebWorker: true,
         })
         const thumbFile = await imageCompression(mediumFile || file, {
           maxWidthOrHeight: THUMB_MAX_DIMENSION,
           fileType: 'image/webp',
           initialQuality: THUMB_QUALITY,
-          maxSizeMB: 0.35,
           useWebWorker: true,
         })
 

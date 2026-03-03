@@ -205,13 +205,13 @@ export default function GallerySettingsModal({
             const [mediumFile, thumbFile] = await Promise.all([
               imageCompression(file, {
                 maxWidthOrHeight: 2048,
-                initialQuality: 0.85,
+                initialQuality: 0.90,
                 useWebWorker: true,
                 fileType: 'image/webp',
               }),
               imageCompression(file, {
-                maxWidthOrHeight: 720,
-                initialQuality: 0.88,
+                maxWidthOrHeight: 800,
+                initialQuality: 0.92,
                 useWebWorker: true,
                 fileType: 'image/webp',
               }),
