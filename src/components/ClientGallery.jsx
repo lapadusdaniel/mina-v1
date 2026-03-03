@@ -849,7 +849,15 @@ const ClientGallery = () => {
   if (loading) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff', fontFamily: "'DM Sans', sans-serif" }}>
-        <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontStyle: 'italic', fontSize: '1.5rem', color: '#1d1d1f', margin: '0 0 12px' }}>Mina</p>
+        <p style={{ margin: '0 0 12px' }}><span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span></p>
         <p style={{ fontSize: '13px', color: '#a1a1a6', fontWeight: 300 }}>Se încarcă galeria...</p>
       </div>
     );
@@ -858,7 +866,15 @@ const ClientGallery = () => {
   if (eroare) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f5f5f7', fontFamily: "'DM Sans', sans-serif", textAlign: 'center', padding: '40px' }}>
-        <p style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontStyle: 'italic', fontSize: '1.5rem', color: '#1d1d1f', margin: '0 0 16px' }}>Mina</p>
+        <p style={{ margin: '0 0 16px' }}><span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span></p>
         <p style={{ fontSize: '15px', color: '#3a3a3c', fontWeight: 400, margin: '0 0 8px' }}>{eroare}</p>
         <button onClick={() => navigate('/')} style={{ marginTop: '20px', padding: '12px 28px', background: '#1d1d1f', color: '#fff', border: 'none', borderRadius: '100px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px' }}>Acasă</button>
       </div>
@@ -872,7 +888,15 @@ const ClientGallery = () => {
       <div className="cg-root">
         <div className="cg-privacy-shell">
           <div className="cg-privacy-card">
-            <p className="cg-privacy-brand">Mina</p>
+            <p className="cg-privacy-brand"><span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span></p>
             <h2 className="cg-privacy-title">Galerie protejată</h2>
             <p className="cg-privacy-subtitle">Introdu parola primită de la fotograf pentru a vedea galeria.</p>
             <input

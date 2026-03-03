@@ -277,7 +277,15 @@ export default function PhotographerSite({ previewData = null }) {
   if (loading) {
     return (
       <div className="ps-loading">
-        <p className="ps-loading-logo">Mina</p>
+        <p className="ps-loading-logo"><span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span></p>
         <p className="ps-loading-text">Se încarcă...</p>
       </div>
     )
@@ -286,7 +294,15 @@ export default function PhotographerSite({ previewData = null }) {
   if (error) {
     return (
       <div className="ps-error">
-        <p className="ps-loading-logo">Mina</p>
+        <p className="ps-loading-logo"><span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span></p>
         <p className="ps-error-title">{error}</p>
         <p className="ps-error-sub">Verifică adresa și încearcă din nou.</p>
       </div>

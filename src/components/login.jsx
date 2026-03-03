@@ -106,17 +106,20 @@ function Login({ onLogin, onSwitchToRegister }) {
             to="/"
             style={{
               display: 'inline-block',
-              fontFamily: "'Cormorant Garamond', Georgia, serif",
-              fontWeight: 300,
-              fontSize: '2.2rem',
-              color: '#1d1d1f',
-              letterSpacing: '0.03em',
-              textDecoration: 'none',
               margin: '0 0 8px',
               lineHeight: 1,
+              textDecoration: 'none',
             }}
           >
-            MINA
+            <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span>
           </Link>
           <p style={{
             fontSize: '15px',

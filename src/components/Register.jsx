@@ -116,16 +116,16 @@ function Register({ onRegister, onSwitchToLogin }) {
 
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-          <h1 style={{
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontStyle: 'italic',
-            fontWeight: 400,
-            fontSize: '1.75rem',
-            color: '#1d1d1f',
-            letterSpacing: '0.01em',
-            margin: '0 0 8px',
-          }}>
-            Mina
+          <h1 style={{ margin: '0 0 8px' }}>
+            <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span>
           </h1>
           <p style={{
             fontSize: '15px',

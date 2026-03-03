@@ -22,12 +22,16 @@ function FullscreenLoader() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontFamily: "'DM Serif Display', Georgia, serif",
-      fontStyle: 'italic',
-      fontSize: '1.5rem',
-      color: '#1d1d1f',
     }}>
-      Mina
+      <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span>
     </div>
   )
 }
@@ -75,13 +79,18 @@ function SlugRouter() {
           }
         `}</style>
         <p style={{
-          fontStyle: 'italic',
-          fontSize: '1.5rem',
-          color: '#1d1d1f',
           margin: 0,
           animation: 'minaLogoPulse 1.8s ease-in-out infinite',
         }}>
-          Mina
+          <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span>
         </p>
       </div>
     )
@@ -135,12 +144,16 @@ function App() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: "'DM Serif Display', Georgia, serif",
-        fontStyle: 'italic',
-        fontSize: '1.5rem',
-        color: '#1d1d1f',
       }}>
-        Mina
+        <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span>
       </div>
     )
   }

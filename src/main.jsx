@@ -24,8 +24,16 @@ function renderStartupError(error) {
         borderRadius: '14px',
         padding: '22px',
       }}>
-        <p style={{ margin: 0, fontFamily: "'DM Serif Display', Georgia, serif", fontStyle: 'italic', fontSize: '1.5rem', color: '#1d1d1f' }}>
-          Mina
+        <p style={{ margin: 0 }}>
+          <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span>
         </p>
         <p style={{ margin: '14px 0 8px', fontSize: '16px', color: '#1d1d1f', fontWeight: 600 }}>
           Configurare lipsă sau invalidă

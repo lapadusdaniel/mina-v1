@@ -913,7 +913,15 @@ export default function AdminPanel({ user }) {
     <div className="ap-root">
       <header className="ap-topbar">
         <div className="ap-topbar-left">
-          <a href="/dashboard" className="ap-logo">Mina</a>
+          <a href="/dashboard" className="ap-logo"><span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span></a>
           <span className="ap-badge">Admin</span>
         </div>
         <div className="ap-topbar-right">

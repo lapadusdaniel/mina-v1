@@ -34,7 +34,15 @@ function LandingPage({ user }) {
       {/* ── HEADER ── */}
       <header className="fl-header">
         <button className="fl-logo" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          Mina
+          <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span>
         </button>
         <nav className="fl-nav">
           <a href="#features">Funcționalități</a>
@@ -256,7 +264,15 @@ function LandingPage({ user }) {
       <footer className="fl-footer">
         <div className="fl-footer-top">
           <div>
-            <div className="fl-footer-logo">Mina</div>
+            <div className="fl-footer-logo"><span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  fontStyle: 'normal',
+  textDecoration: 'none'
+}}>MINA</span></div>
             <p className="fl-footer-tagline">
               Galerii profesionale pentru fotografi.<br />
               Made with ♥ în România.

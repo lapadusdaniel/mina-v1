@@ -519,7 +519,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   fontWeight: 300,
   fontSize: '2.2rem',
   letterSpacing: '0.15em',
-  color: '#1d1d1f',
+  color: '#ffffff',
+  fontStyle: 'normal',
   textDecoration: 'none'
 }}>MINA</span>
         </h1>
