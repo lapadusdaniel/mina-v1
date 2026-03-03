@@ -514,7 +514,14 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           if (location.pathname === '/settings') navigate('/dashboard?tab=galerii')
           else setSearchParams({ tab: 'galerii' })
         })}>
-          Mina
+          <span style={{
+  fontFamily: "'Cormorant Garamond', Georgia, serif",
+  fontWeight: 300,
+  fontSize: '2.2rem',
+  letterSpacing: '0.15em',
+  color: '#1d1d1f',
+  textDecoration: 'none'
+}}>MINA</span>
         </h1>
       </div>
       {SIDEBAR_TABS.map(({ key, label, icon: Icon }) => (
