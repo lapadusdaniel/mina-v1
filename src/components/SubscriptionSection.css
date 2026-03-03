@@ -137,6 +137,92 @@
     color: #000;
   }
 
+  .sub-addon-card {
+    margin-top: 14px;
+    border: 1px solid #ececf1;
+    border-radius: 14px;
+    padding: 12px;
+    background: #fafafc;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sub-addon-card.is-active {
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.08);
+  }
+
+  .pro-featured .sub-addon-card {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .sub-addon-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .sub-addon-head h4 {
+    margin: 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: inherit;
+  }
+
+  .sub-addon-head span {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    opacity: 0.85;
+  }
+
+  .sub-addon-text {
+    margin: 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: inherit;
+    opacity: 0.85;
+  }
+
+  .sub-addon-btn {
+    width: 100%;
+    border-radius: 999px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 10px 12px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+  }
+
+  .sub-addon-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .sub-addon-btn-solid {
+    background: #111111;
+    color: #ffffff;
+    border-color: #111111;
+  }
+
+  .sub-addon-btn-outline {
+    background: transparent;
+    color: #1d1d1f;
+    border-color: #d2d2d7;
+  }
+
+  .pro-featured .sub-addon-btn-outline {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
   .sub-billing-grid {
     margin-top: 20px;
     display: grid;

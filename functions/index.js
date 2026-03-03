@@ -29,6 +29,7 @@ const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
   starter: 'price_1T6a3S1ax2jGrLZHmevohZWA',
   pro: 'price_1T6a4F1ax2jGrLZH92vUsGzE',
   studio: 'price_1T6a501ax2jGrLZHgLBbkzT4',
+  addon: 'price_1T6a5e1ax2jGrLZHbnDNHkwM',
 })
 
 const SUPPORTED_STRIPE_EVENTS = new Set([
@@ -42,6 +43,7 @@ const PLAN_BY_PRICE_ID = Object.freeze({
   [FALLBACK_STRIPE_PRICE_IDS.starter]: 'Starter',
   [FALLBACK_STRIPE_PRICE_IDS.pro]: 'Pro',
   [FALLBACK_STRIPE_PRICE_IDS.studio]: 'Studio',
+  [FALLBACK_STRIPE_PRICE_IDS.addon]: 'Studio',
 })
 
 function sanitizePriceId(value) {
@@ -53,6 +55,95 @@ function getAllowedCheckoutPriceIds() {
   const pro = sanitizePriceId(process.env.STRIPE_PRICE_PRO) || FALLBACK_STRIPE_PRICE_IDS.pro
   const studio = sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio
   return new Set([starter, pro, studio].filter(Boolean))
+}
+
+function getStudioPriceId() {
+  return sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio
+}
+
+function getAddonPriceId() {
+  return sanitizePriceId(process.env.STRIPE_PRICE_ADDON) || FALLBACK_STRIPE_PRICE_IDS.addon
+}
+
+function extractPrimarySubscriptionPriceId(subscription = {}) {
+  const items = subscription.items?.data
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      const candidate = sanitizePriceId(item?.price?.id || item?.price || item?.priceId)
+      if (candidate) return candidate
+    }
+  }
+
+  return sanitizePriceId(subscription.price?.id || subscription.price || subscription.priceId)
+}
+
+function isAddonCheckoutSession(session = {}) {
+  return String(session?.metadata?.type || '').trim().toLowerCase() === 'addon'
+}
+
+function isStudioPlanName(value) {
+  return normalizePlanName(value) === 'Studio'
+}
+
+async function hasStudioPlanInFirestore(uid) {
+  const normalizedUid = String(uid || '').trim()
+  if (!normalizedUid) return false
+
+  const [userSnap, overrideSnap, subsSnap] = await Promise.all([
+    db.collection('users').doc(normalizedUid).get(),
+    db.collection('adminOverrides').doc(normalizedUid).get(),
+    db.collection('customers').doc(normalizedUid).collection('subscriptions').get(),
+  ])
+
+  const userData = userSnap.exists ? (userSnap.data() || {}) : {}
+  if (isStudioPlanName(userData.plan) || isStudioPlanName(userData.subscriptionPlan) || isStudioPlanName(userData.currentPlan)) {
+    return true
+  }
+
+  const overrideData = overrideSnap.exists ? (overrideSnap.data() || {}) : {}
+  if (isStudioPlanName(overrideData.plan)) {
+    return true
+  }
+
+  const studioPriceId = getStudioPriceId()
+  for (const subDoc of subsSnap.docs) {
+    const sub = subDoc.data() || {}
+    const status = String(sub.status || '').trim().toLowerCase()
+    if (!['active', 'trialing'].includes(status)) continue
+
+    const priceId = extractPrimarySubscriptionPriceId(sub)
+    if (priceId && priceId === studioPriceId) return true
+
+    if (
+      isStudioPlanName(sub.plan)
+      || isStudioPlanName(sub.role)
+      || isStudioPlanName(sub.metadata?.plan)
+      || isStudioPlanName(sub.metadata?.tier)
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function verifyRequestAuth(req) {
+  const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim()
+  if (!authHeader.startsWith('Bearer ')) {
+    throw new HttpsError('unauthenticated', 'Lipsește token-ul de autentificare.')
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim()
+  if (!token) {
+    throw new HttpsError('unauthenticated', 'Token invalid.')
+  }
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(token)
+    return String(decoded?.uid || '').trim()
+  } catch (err) {
+    throw new HttpsError('unauthenticated', 'Token invalid sau expirat.')
+  }
 }
 
 function normalizePlanName(value) {
@@ -73,6 +164,7 @@ function resolvePlanFromPriceId(priceId) {
     [sanitizePriceId(process.env.STRIPE_PRICE_STARTER) || FALLBACK_STRIPE_PRICE_IDS.starter]: 'Starter',
     [sanitizePriceId(process.env.STRIPE_PRICE_PRO) || FALLBACK_STRIPE_PRICE_IDS.pro]: 'Pro',
     [sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio]: 'Studio',
+    [sanitizePriceId(process.env.STRIPE_PRICE_ADDON) || FALLBACK_STRIPE_PRICE_IDS.addon]: 'Studio',
   }
 
   return envMap[id] || PLAN_BY_PRICE_ID[id] || ''
@@ -537,6 +629,22 @@ async function handleCheckoutSessionCompleted(event) {
   const paymentData = await buildPaymentData(stripe, session, event)
   paymentData.customerEmail = customerEmail
 
+  const isAddonCheckout = isAddonCheckoutSession(session)
+  const addonPriceId = sanitizePriceId(session.metadata?.priceId || paymentData.primaryPriceId || getAddonPriceId()) || getAddonPriceId()
+
+  if (isAddonCheckout) {
+    await userRef.set(
+      {
+        addonActive: true,
+        addonPriceId,
+        addonSubscriptionId: String(paymentData.stripeSubscriptionId || session.subscription || '').trim() || null,
+        addonActivatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+  }
+
   const smartBillService = new SmartBillService({
     username: SMARTBILL_USERNAME.value(),
     token: SMARTBILL_TOKEN.value(),
@@ -573,26 +681,28 @@ async function handleCheckoutSessionCompleted(event) {
       { merge: true }
     )
 
-  try {
-    const paymentEmailResult = await getEmailService().sendPaymentSuccessEmail({
-      uid,
-      customerEmail,
-      session,
-      paymentData,
-      userData,
-    })
+  if (!isAddonCheckout) {
+    try {
+      const paymentEmailResult = await getEmailService().sendPaymentSuccessEmail({
+        uid,
+        customerEmail,
+        session,
+        paymentData,
+        userData,
+      })
 
-    logger.info('Payment success email processed', {
-      uid,
-      eventId: event.id,
-      ...paymentEmailResult,
-    })
-  } catch (emailError) {
-    logger.error('Payment success email failed', {
-      uid,
-      eventId: event.id,
-      message: emailError?.message || String(emailError),
-    })
+      logger.info('Payment success email processed', {
+        uid,
+        eventId: event.id,
+        ...paymentEmailResult,
+      })
+    } catch (emailError) {
+      logger.error('Payment success email failed', {
+        uid,
+        eventId: event.id,
+        message: emailError?.message || String(emailError),
+      })
+    }
   }
 
   await markEvent(event.id, {
@@ -603,6 +713,9 @@ async function handleCheckoutSessionCompleted(event) {
     invoiceSeries: invoice.series,
     invoiceNumber: invoice.number,
     invoiceUrl: invoice.url || null,
+    checkoutType: isAddonCheckout ? 'addon' : 'plan',
+    addonActive: isAddonCheckout ? true : undefined,
+    addonPriceId: isAddonCheckout ? addonPriceId : undefined,
   })
 
   return {
@@ -611,6 +724,8 @@ async function handleCheckoutSessionCompleted(event) {
     uid,
     uidSource: resolved.source,
     sessionId: session.id,
+    checkoutType: isAddonCheckout ? 'addon' : 'plan',
+    addonActive: isAddonCheckout ? true : undefined,
     invoice: {
       id: invoiceDocId,
       series: invoice.series,
@@ -665,6 +780,43 @@ async function handleCustomerSubscriptionDeleted(event) {
     normalizePlanName(userData.plan || userData.subscriptionPlan || userData.currentPlan) ||
     normalizePlanName(subscription.items?.data?.[0]?.price?.nickname) || 'Plan activ'
 
+  const deletedPriceId = extractPrimarySubscriptionPriceId(subscription)
+  const addonPriceId = getAddonPriceId()
+  const isAddonCancellation = Boolean(deletedPriceId && deletedPriceId === addonPriceId)
+
+  if (isAddonCancellation) {
+    await userRef.set(
+      {
+        addonActive: false,
+        addonSubscriptionId: null,
+        addonCanceledAt: serverTimestamp(),
+        stripeCustomerId,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+
+    await markEvent(event.id, {
+      status: 'processed',
+      uid,
+      uidSource: resolved.source,
+      stripeCustomerId,
+      stripeSubscriptionId: String(subscription.id || '').trim() || null,
+      stripePriceId: deletedPriceId || null,
+      addonActive: false,
+      addonCancellation: true,
+    })
+
+    return {
+      ok: true,
+      skipped: false,
+      uid,
+      uidSource: resolved.source,
+      stripeCustomerId,
+      addonCancellation: true,
+    }
+  }
+
   const customerEmail = await resolveCustomerEmail({
     session: {
       customer: stripeCustomerId,
@@ -679,6 +831,8 @@ async function handleCustomerSubscriptionDeleted(event) {
       plan: 'free',
       subscriptionStatus: 'canceled',
       subscriptionCanceledAt: serverTimestamp(),
+      addonActive: false,
+      addonSubscriptionId: null,
       stripeCustomerId,
       updatedAt: serverTimestamp(),
     },
@@ -711,6 +865,7 @@ async function handleCustomerSubscriptionDeleted(event) {
     stripeCustomerId,
     subscriptionStatus: 'canceled',
     stripeSubscriptionId: String(subscription.id || '').trim() || null,
+    stripePriceId: deletedPriceId || null,
   })
 
   return {
@@ -719,6 +874,7 @@ async function handleCustomerSubscriptionDeleted(event) {
     uid,
     uidSource: resolved.source,
     stripeCustomerId,
+    addonCancellation: false,
   }
 }
 
@@ -1001,6 +1157,8 @@ exports.createCheckoutSession = onCall(
       metadata: {
         uid,
         firebase_uid: uid,
+        priceId,
+        type: 'plan',
       },
     })
 
@@ -1018,6 +1176,111 @@ exports.createCheckoutSession = onCall(
       url: session.url,
       sessionId: session.id,
     }
+  }
+)
+
+exports.createAddonCheckoutSession = onRequest(
+  {
+    region: 'us-central1',
+    maxInstances: 20,
+    cors: true,
+    secrets: [STRIPE_EXTENSION_API_KEY, STRIPE_SECRET_KEY],
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method Not Allowed' })
+      return
+    }
+
+    let uid
+    try {
+      uid = await verifyRequestAuth(req)
+    } catch (authError) {
+      const code = authError instanceof HttpsError ? authError.code : 'unauthenticated'
+      const message = authError?.message || 'Neautorizat.'
+      res.status(code === 'permission-denied' ? 403 : 401).json({ error: message })
+      return
+    }
+
+    const payload = req.body && typeof req.body === 'object'
+      ? req.body
+      : (() => {
+          try {
+            return JSON.parse(Buffer.from(req.rawBody || '').toString('utf8') || '{}')
+          } catch (_) {
+            return {}
+          }
+        })()
+
+    const requestedUid = String(payload?.uid || '').trim() || uid
+    if (!requestedUid || requestedUid !== uid) {
+      res.status(403).json({ error: 'UID invalid pentru sesiunea curentă.' })
+      return
+    }
+
+    const priceId = sanitizePriceId(payload?.priceId)
+    const addonPriceId = getAddonPriceId()
+    if (!priceId || priceId !== addonPriceId) {
+      res.status(400).json({ error: 'Price ID invalid pentru add-on.' })
+      return
+    }
+
+    const hasStudioPlan = await hasStudioPlanInFirestore(uid)
+    if (!hasStudioPlan) {
+      res.status(403).json({ error: 'Add-on disponibil doar pentru conturile cu plan Studio.' })
+      return
+    }
+
+    let successUrl
+    let cancelUrl
+    try {
+      successUrl = sanitizeRedirectUrl(payload?.successUrl || `${MINA_DASHBOARD_URL}?payment=success&addon=1`, 'successUrl')
+      cancelUrl = sanitizeRedirectUrl(payload?.cancelUrl || `${MINA_DASHBOARD_URL}?payment=cancel&addon=1`, 'cancelUrl')
+    } catch (urlError) {
+      res.status(400).json({ error: urlError?.message || 'URL invalid.' })
+      return
+    }
+
+    const stripeKey = getCheckoutStripeKey()
+    if (!stripeKey) {
+      res.status(500).json({ error: 'Cheia Stripe nu este configurată pe server.' })
+      return
+    }
+
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: '2024-06-20',
+    })
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: addonPriceId, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      allow_promotion_codes: false,
+      client_reference_id: uid,
+      metadata: {
+        uid,
+        firebase_uid: uid,
+        priceId: addonPriceId,
+        type: 'addon',
+      },
+    })
+
+    if (!session?.url) {
+      res.status(500).json({ error: 'Stripe nu a returnat URL-ul de checkout.' })
+      return
+    }
+
+    logger.info('createAddonCheckoutSession success', {
+      uid,
+      priceId: addonPriceId,
+      sessionId: session.id,
+    })
+
+    res.status(200).json({
+      url: session.url,
+      sessionId: session.id,
+    })
   }
 )
 

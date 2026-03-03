@@ -49,6 +49,8 @@ function statusClass(status) {
 const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode = 'full' }) => {
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [openingPortal, setOpeningPortal] = useState(false)
+  const [activatingAddon, setActivatingAddon] = useState(false)
+  const [deactivatingAddon, setDeactivatingAddon] = useState(false)
   const [billingData, setBillingData] = useState(null)
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
@@ -110,6 +112,12 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
 
   const payments = billingData?.payments || []
   const activeSubscription = billingData?.activeSubscription || null
+  const activeAddonSubscription = billingData?.activeAddonSubscription || null
+  const addonSubscriptionId = activeAddonSubscription?.id || billingData?.addonSubscriptionId || null
+  const addonActive = Boolean(billingData?.addonActive)
+  const effectiveStorageLimit = Number.isFinite(Number(billingData?.effectiveStorageLimit))
+    ? Number(billingData.effectiveStorageLimit)
+    : Number(storageLimit || 0)
   const overridePlan = billingData?.overridePlan || null
   const hasManualOverride = Boolean(overridePlan)
   const canCancelAtPeriodEnd = Boolean(
@@ -157,6 +165,68 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
       console.error('Eroare portal Stripe:', err)
       alert(`Nu pot deschide portalul Stripe.\nDetalii: ${String(err?.message || 'necunoscut')}`)
       setOpeningPortal(false)
+    }
+  }
+
+  const handleActivateAddon = async () => {
+    if (!user?.uid || userPlan !== 'Studio' || addonActive) return
+
+    setActivatingAddon(true)
+    try {
+      const url = await billingService.startAddonCheckout({
+        uid: user.uid,
+        successUrl: window.location.origin + '/dashboard?tab=abonament&addon=success',
+        cancelUrl: window.location.origin + '/dashboard?tab=abonament&addon=cancel',
+      })
+
+      if (url) {
+        window.location.assign(url)
+      } else {
+        setActivatingAddon(false)
+      }
+    } catch (err) {
+      console.error('Eroare activare add-on:', err)
+      alert('Nu s-a putut iniția checkout-ul pentru add-on.\nDetalii: ' + String(err?.message || 'necunoscut'))
+      setActivatingAddon(false)
+    }
+  }
+
+  const handleDeactivateAddon = async () => {
+    if (!addonActive) return
+
+    const returnUrl = window.location.origin + '/dashboard?tab=abonament&addon=updated'
+    const flowData = addonSubscriptionId
+      ? {
+          type: 'subscription_cancel',
+          subscription_cancel: {
+            subscription: addonSubscriptionId,
+          },
+          after_completion: {
+            type: 'redirect',
+            redirect: {
+              return_url: returnUrl,
+            },
+          },
+        }
+      : null
+
+    setDeactivatingAddon(true)
+    try {
+      let portalUrl = ''
+      try {
+        portalUrl = await billingService.createPortalLink({
+          returnUrl,
+          flowData,
+        })
+      } catch {
+        portalUrl = await billingService.createPortalLink({ returnUrl })
+      }
+
+      window.location.assign(portalUrl)
+    } catch (err) {
+      console.error('Eroare dezactivare add-on:', err)
+      alert('Nu pot deschide portalul Stripe pentru add-on.\nDetalii: ' + String(err?.message || 'necunoscut'))
+      setDeactivatingAddon(false)
     }
   }
 
@@ -253,6 +323,47 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                 Pentru plan Free, anulezi întâi abonamentul curent la final de perioadă.
               </p>
             )}
+
+            {plan.id === 'studio' && (
+              <div className={`sub-addon-card ${addonActive ? 'is-active' : ''}`}>
+                <div className="sub-addon-head">
+                  <h4>Storage Add-on 500 GB</h4>
+                  <span>{addonActive ? 'Activ' : '49 lei/lună'}</span>
+                </div>
+
+                {addonActive ? (
+                  <p className="sub-addon-text">Add-on activ — 2.5 TB total stocare.</p>
+                ) : (
+                  <p className="sub-addon-text">
+                    Extinzi instant planul Studio de la 2 TB la 2.5 TB.
+                  </p>
+                )}
+
+                {plan.isCurrent ? (
+                  addonActive ? (
+                    <button
+                      type="button"
+                      className="sub-addon-btn sub-addon-btn-outline"
+                      onClick={handleDeactivateAddon}
+                      disabled={deactivatingAddon || activatingAddon || openingPortal}
+                    >
+                      {deactivatingAddon ? 'Se deschide portalul Stripe...' : 'Dezactivează'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="sub-addon-btn sub-addon-btn-solid"
+                      onClick={handleActivateAddon}
+                      disabled={activatingAddon || deactivatingAddon || Boolean(loadingPlan)}
+                    >
+                      {activatingAddon ? 'Se încarcă...' : 'Activează'}
+                    </button>
+                  )
+                ) : (
+                  <p className="sub-muted">Disponibil doar pentru conturile cu plan Studio.</p>
+                )}
+              </div>
+            )}
           </div>
             )
           })()
@@ -286,7 +397,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
             </div>
             <div className="sub-kv-row">
               <span>Limită stocare</span>
-              <strong>{Number(storageLimit || 0)} GB</strong>
+              <strong>{effectiveStorageLimit} GB</strong>
             </div>
             <div className="sub-kv-row">
               <span>Email cont</span>
@@ -307,6 +418,10 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
             <div className="sub-kv-row">
               <span>Anulare la final perioadă</span>
               <strong>{activeSubscription?.cancelAtPeriodEnd ? 'Da' : 'Nu'}</strong>
+            </div>
+            <div className="sub-kv-row">
+              <span>Add-on storage</span>
+              <strong>{addonActive ? 'Activ (+500 GB)' : 'Inactiv'}</strong>
             </div>
           </div>
 

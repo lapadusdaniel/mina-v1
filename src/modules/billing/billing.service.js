@@ -1,11 +1,12 @@
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, limit as limitTo } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
+import { auth } from '../../firebase'
 
 export const STRIPE_PRICES = {
   starter: (import.meta.env.VITE_STRIPE_PRICE_STARTER || '').trim(),
   pro: (import.meta.env.VITE_STRIPE_PRICE_PRO || '').trim(),
   studio: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
-  addon: (import.meta.env.VITE_STRIPE_PRICE_ADDON || '').trim(),
+  addon: (import.meta.env.VITE_STRIPE_PRICE_ADDON || 'price_1T6a5e1ax2jGrLZHbnDNHkwM').trim(),
   unlimited: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
 }
 
@@ -41,6 +42,7 @@ export const DEFAULT_BILLING_DETAILS = {
 }
 
 const VALID_STATUSES = ['active', 'trialing']
+const STUDIO_ADDON_STORAGE_BONUS_GB = 500
 
 function sanitizeText(value, maxLen) {
   return String(value || '').trim().slice(0, maxLen)
@@ -212,6 +214,23 @@ function normalizePlanName(value) {
   return 'Free'
 }
 
+function getEffectiveStorageLimit(plan, addonActive = false) {
+  const normalizedPlan = normalizePlanName(plan)
+  const baseLimit = STORAGE_LIMITS[normalizedPlan] ?? STORAGE_LIMITS.Free
+  if (normalizedPlan === 'Studio' && addonActive) {
+    return baseLimit + STUDIO_ADDON_STORAGE_BONUS_GB
+  }
+  return baseLimit
+}
+
+function getAddonCheckoutFunctionUrl() {
+  const explicit = String(import.meta.env.VITE_CREATE_ADDON_CHECKOUT_URL || '').trim()
+  if (explicit) return explicit
+  const projectId = String(import.meta.env.VITE_FIREBASE_PROJECT_ID || '').trim()
+  if (!projectId) return ''
+  return 'https://us-central1-' + projectId + '.cloudfunctions.net/createAddonCheckoutSession'
+}
+
 export function createBillingModule({ db, functions }) {
   const createCheckoutSessionCallable =
     functions ? httpsCallable(functions, 'createCheckoutSession') : null
@@ -259,21 +278,93 @@ export function createBillingModule({ db, functions }) {
       return url
     },
 
+    async startAddonCheckout({
+      uid,
+      successUrl,
+      cancelUrl,
+    }) {
+      if (!uid) throw new Error('billing.startAddonCheckout: uid este obligatoriu')
+
+      const price = STRIPE_PRICES.addon
+      if (!price) {
+        throw new Error(
+          'Config Stripe lipsă pentru add-on. ' +
+          'Setează în .env: VITE_STRIPE_PRICE_ADDON, apoi rebuild + deploy.'
+        )
+      }
+
+      const endpoint = getAddonCheckoutFunctionUrl()
+      if (!endpoint) {
+        throw new Error('Checkout add-on indisponibil: URL-ul funcției nu este configurat.')
+      }
+
+      const user = auth?.currentUser
+      if (!user) {
+        throw new Error('Trebuie să fii autentificat pentru activarea add-on-ului.')
+      }
+
+      const idToken = await user.getIdToken()
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + idToken,
+        },
+        body: JSON.stringify({
+          uid,
+          priceId: price,
+          successUrl,
+          cancelUrl,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const serverMessage = String(payload?.error || '').trim()
+        throw new Error(serverMessage || ('Checkout add-on indisponibil (' + response.status + ').'))
+      }
+
+      const url = String(payload?.url || '').trim()
+      if (!url) {
+        throw new Error('Checkout add-on indisponibil: serverul nu a returnat URL-ul Stripe.')
+      }
+
+      return url
+    },
+
     watchUserPlan(uid, onChange) {
       if (!uid) {
-        onChange({ plan: 'Free', storageLimit: STORAGE_LIMITS.Free })
+        onChange({
+          plan: 'Free',
+          addonActive: false,
+          storageLimit: getEffectiveStorageLimit('Free', false),
+        })
         return () => {}
       }
 
       let unsubStripe = null
+      let currentPlan = 'Free'
+      let currentAddonActive = false
+
+      const emitChange = () => {
+        onChange({
+          plan: currentPlan,
+          addonActive: currentAddonActive,
+          storageLimit: getEffectiveStorageLimit(currentPlan, currentAddonActive),
+        })
+      }
+
+      const unsubUser = onSnapshot(doc(db, 'users', uid), (userSnap) => {
+        const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
+        currentAddonActive = Boolean(userData.addonActive)
+        emitChange()
+      })
 
       const unsubOverride = onSnapshot(doc(db, 'adminOverrides', uid), (overrideSnap) => {
         if (overrideSnap.exists() && overrideSnap.data().plan) {
           const overridePlan = normalizePlanName(overrideSnap.data().plan)
-          onChange({
-            plan: overridePlan,
-            storageLimit: STORAGE_LIMITS[overridePlan] || STORAGE_LIMITS.Free,
-          })
+          currentPlan = overridePlan
+          emitChange()
 
           if (unsubStripe) {
             unsubStripe()
@@ -285,7 +376,7 @@ export function createBillingModule({ db, functions }) {
         if (!unsubStripe) {
           const subsRef = collection(db, 'customers', uid, 'subscriptions')
           unsubStripe = onSnapshot(subsRef, (snapshot) => {
-            let plan = 'Free'
+            let nextPlan = 'Free'
             snapshot.docs.forEach((docSnap) => {
               const data = docSnap.data()
               const status = (data?.status || '').toLowerCase()
@@ -293,20 +384,19 @@ export function createBillingModule({ db, functions }) {
 
               const priceId = getPriceIdFromSubscription(data)
               const derived = priceIdToPlan(priceId)
-              if (derived === 'Studio') plan = 'Studio'
-              else if (derived === 'Pro' && plan !== 'Studio') plan = 'Pro'
-              else if (derived === 'Starter' && plan !== 'Studio' && plan !== 'Pro') plan = 'Starter'
+              if (derived === 'Studio') nextPlan = 'Studio'
+              else if (derived === 'Pro' && nextPlan !== 'Studio') nextPlan = 'Pro'
+              else if (derived === 'Starter' && nextPlan !== 'Studio' && nextPlan !== 'Pro') nextPlan = 'Starter'
             })
 
-            onChange({
-              plan,
-              storageLimit: STORAGE_LIMITS[plan] ?? STORAGE_LIMITS.Free,
-            })
+            currentPlan = nextPlan
+            emitChange()
           })
         }
       })
 
       return () => {
+        if (unsubUser) unsubUser()
         if (unsubOverride) unsubOverride()
         if (unsubStripe) unsubStripe()
       }
@@ -315,7 +405,8 @@ export function createBillingModule({ db, functions }) {
     async getBillingOverview(uid) {
       if (!uid) throw new Error('billing.getBillingOverview: uid este obligatoriu')
 
-      const [overrideSnap, subsSnap, sessionsSnap] = await Promise.all([
+      const [userSnap, overrideSnap, subsSnap, sessionsSnap] = await Promise.all([
+        getDoc(doc(db, 'users', uid)),
         getDoc(doc(db, 'adminOverrides', uid)),
         getDocs(collection(db, 'customers', uid, 'subscriptions')),
         getDocs(collection(db, 'customers', uid, 'checkout_sessions')),
@@ -343,7 +434,21 @@ export function createBillingModule({ db, functions }) {
       )
 
       const activeSubscription =
-        subscriptions.find((sub) => VALID_STATUSES.includes(sub.status)) || null
+        subscriptions.find((sub) => VALID_STATUSES.includes(sub.status) && sub.priceId !== PLAN_PRICES.ADDON) || null
+
+      const activeAddonSubscription =
+        subscriptions.find((sub) =>
+          VALID_STATUSES.includes(sub.status) && sub.priceId && sub.priceId === PLAN_PRICES.ADDON
+        ) || null
+
+      const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
+      const addonActive = Boolean(userData.addonActive)
+      const addonPriceId = sanitizeText(userData.addonPriceId || PLAN_PRICES.ADDON, 120) || PLAN_PRICES.ADDON
+      const resolvedPlan = activeSubscription?.plan
+        || (overrideSnap.exists() ? normalizePlanName(overrideSnap.data()?.plan) : null)
+        || normalizePlanName(userData.plan)
+        || 'Free'
+      const effectiveStorageLimit = getEffectiveStorageLimit(resolvedPlan, addonActive)
 
       const subscriptionFallback = subscriptions
         .filter((sub) => VALID_STATUSES.includes(sub.status) || sub.status === 'canceled')
@@ -356,6 +461,11 @@ export function createBillingModule({ db, functions }) {
 
       return {
         overridePlan: overrideSnap.exists() ? normalizePlanName(overrideSnap.data()?.plan) : null,
+        addonActive,
+        addonPriceId: addonPriceId || null,
+        activeAddonSubscription,
+        addonSubscriptionId: sanitizeText(userData.addonSubscriptionId, 160) || null,
+        effectiveStorageLimit,
         activeSubscription,
         subscriptions: subscriptions.slice(0, 12),
         payments: payments.slice(0, 20),

@@ -46,6 +46,7 @@ const DEFAULT_STORAGE_LIMITS_GB = {
   Pro: 600,
   Studio: 2000,
 }
+const STUDIO_ADDON_BONUS_GB = 500
 
 function corsHeaders() {
   return {
@@ -256,12 +257,22 @@ function parseNumber(raw, fallback) {
   return value
 }
 
-function storageLimitBytesForPlan(plan, env) {
+function storageLimitBytesForPlan(plan, env, addonActive = false) {
   const normalizedPlan = normalizePlan(plan) || 'Free'
   const envKey = `STORAGE_LIMIT_${normalizedPlan.toUpperCase()}_GB`
   const legacyEnvKey = normalizedPlan === 'Studio' ? 'STORAGE_LIMIT_UNLIMITED_GB' : null
-  const limitGb = parseNumber(env?.[envKey] ?? (legacyEnvKey ? env?.[legacyEnvKey] : undefined), DEFAULT_STORAGE_LIMITS_GB[normalizedPlan])
-  return Math.floor(limitGb * 1024 * 1024 * 1024)
+  const limitGb = parseNumber(
+    env?.[envKey] ?? (legacyEnvKey ? env?.[legacyEnvKey] : undefined),
+    DEFAULT_STORAGE_LIMITS_GB[normalizedPlan]
+  )
+
+  let effectiveLimitGb = limitGb
+  if (normalizedPlan === 'Studio' && addonActive) {
+    const addonBonusGb = parseNumber(env?.STUDIO_ADDON_BONUS_GB, STUDIO_ADDON_BONUS_GB)
+    effectiveLimitGb += addonBonusGb
+  }
+
+  return Math.floor(effectiveLimitGb * 1024 * 1024 * 1024)
 }
 
 function parseCommaSeparatedSet(rawValue) {
@@ -609,8 +620,10 @@ async function resolveUserPlan({ uid, idToken, env }) {
   return 'Free'
 }
 
-async function readUserStorageUsedBytes({ uid, idToken, env }) {
-  if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID) return 0
+async function readUserStorageState({ uid, idToken, env }) {
+  if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID) {
+    return { usedBytes: 0, addonActive: false }
+  }
   const userDoc = await fetchFirestoreDocByPath({
     projectId: env.FIREBASE_PROJECT_ID,
     docPath: `users/${uid}`,
@@ -623,11 +636,20 @@ async function readUserStorageUsedBytes({ uid, idToken, env }) {
     userData.storageUsedBytes,
     userData.storageBytesUsed,
   ]
+
+  let usedBytes = 0
   for (const value of fields) {
     const parsed = toNonNegativeInteger(value, -1)
-    if (parsed >= 0) return parsed
+    if (parsed >= 0) {
+      usedBytes = parsed
+      break
+    }
   }
-  return 0
+
+  return {
+    usedBytes,
+    addonActive: Boolean(userData.addonActive),
+  }
 }
 
 async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadBytes, env }) {
@@ -653,11 +675,13 @@ async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadByt
   }
 
   const plan = await resolveUserPlan({ uid, idToken: authContext.idToken, env })
-  const limitBytes = storageLimitBytesForPlan(plan, env)
-  const usedBytes = await readUserStorageUsedBytes({ uid, idToken: authContext.idToken, env })
+  const storageState = await readUserStorageState({ uid, idToken: authContext.idToken, env })
+  const usedBytes = storageState.usedBytes
+  const addonActive = storageState.addonActive
+  const limitBytes = storageLimitBytesForPlan(plan, env, addonActive)
 
   if (usedBytes + uploadBytes > limitBytes) {
-    writeCachedQuota(uid, { usedBytes, limitBytes, plan })
+    writeCachedQuota(uid, { usedBytes, limitBytes, plan, addonActive })
     return {
       ok: false,
       status: 403,
@@ -669,6 +693,7 @@ async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadByt
     usedBytes: usedBytes + uploadBytes,
     limitBytes,
     plan,
+    addonActive,
   })
   return { ok: true }
 }
