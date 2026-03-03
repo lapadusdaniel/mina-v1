@@ -97,7 +97,7 @@ function AuthLayout({ children }) {
 }
 
 function ProtectedDashboard({ user, onLogout, initialTab, theme, setTheme }) {
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/" replace />
   return (
     <div style={{ fontFamily: 'Arial, sans-serif' }}>
       <Dashboard user={user} onLogout={onLogout} initialTab={initialTab} theme={theme} setTheme={setTheme} />
