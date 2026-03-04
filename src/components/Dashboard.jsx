@@ -37,9 +37,6 @@ const SIDEBAR_TABS = [
   { key: 'card', label: 'Card', icon: Contact },
   { key: 'trash', label: 'Coș de gunoi', icon: Trash2 },
   { key: 'site', label: 'Site-ul meu (Beta)', icon: Layout },
-  { key: 'lansare', label: 'Lansare', icon: Check },
-  { key: 'statistici', label: 'Statistici', icon: BarChart3 },
-  { key: 'contracte', label: 'Contracte', icon: FileText },
   { key: 'abonament', label: 'Abonament', icon: CreditCard },
   { key: 'setari', label: 'Setări', icon: SettingsIcon }
 ]
