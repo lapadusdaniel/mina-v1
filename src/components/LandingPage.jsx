@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import './LandingPage.css'
 
 function LandingPage({ user }) {
@@ -289,9 +289,13 @@ function LandingPage({ user }) {
           </div>
           <div className="fl-footer-col">
             <h4>Legal</h4>
-            <p>GDPR</p>
-            <p>Termeni</p>
-            <p>Confidențialitate</p>
+            <div className="fl-footer-legal-links">
+              <Link to="/termeni">Termeni</Link>
+              <span>·</span>
+              <Link to="/confidentialitate">Confidențialitate</Link>
+              <span>·</span>
+              <Link to="/refund">Refund</Link>
+            </div>
           </div>
         </div>
         <div className="fl-footer-bottom">

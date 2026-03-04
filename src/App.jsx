@@ -5,6 +5,9 @@ import Login from './components/login.jsx'
 import Register from './components/Register.jsx'
 import { getAppServices } from './core/bootstrap/appBootstrap'
 import { useTheme } from './hooks/useTheme'
+import Termeni from './pages/Termeni'
+import Confidentialitate from './pages/Confidentialitate'
+import Refund from './pages/Refund'
 
 const Dashboard = lazy(() => import('./components/Dashboard.jsx'))
 const ClientGallery = lazy(() => import('./components/ClientGallery.jsx'))
@@ -201,6 +204,9 @@ function App() {
         <Route path="/dashboard" element={<ProtectedDashboard user={user} onLogout={handleLogout} theme={theme} setTheme={setTheme} />} />
         <Route path="/settings" element={<ProtectedDashboard user={user} onLogout={handleLogout} initialTab="setari" theme={theme} setTheme={setTheme} />} />
         <Route path="/admin" element={<AdminPanel user={user} />} />
+        <Route path="/termeni" element={<Termeni />} />
+        <Route path="/confidentialitate" element={<Confidentialitate />} />
+        <Route path="/refund" element={<Refund />} />
         <Route path="/g/:slug" element={<GallerySlugRouter />} />
         <Route path="/gallery/:id" element={<ClientGallery />} />
         <Route path="/" element={<LandingPage user={user} />} />

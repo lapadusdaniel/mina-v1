@@ -829,6 +829,18 @@
    }
    
    .fl-footer-col a:hover { color: var(--white); }
+
+.fl-footer-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fl-footer-legal-links span {
+  color: var(--gray-4);
+  font-weight: 300;
+}
    
    .fl-footer-bottom {
      display: flex;
