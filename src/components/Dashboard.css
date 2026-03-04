@@ -1749,6 +1749,11 @@
   overflow: hidden;
 }
 
+.gallery-config-modal--create {
+  width: min(480px, calc(100vw - 32px));
+  max-height: min(90vh, 760px);
+}
+
 .gallery-config-header {
   display: flex;
   align-items: center;
@@ -2116,6 +2121,43 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.gallery-config-header--create {
+  padding: 22px 24px 18px;
+}
+
+.gallery-config-body--create {
+  padding: 22px 24px 20px;
+  gap: 20px;
+}
+
+.gallery-config-card--create {
+  padding: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.gallery-config-date-input {
+  cursor: pointer;
+}
+
+.gallery-config-date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+.gallery-config-create-toggle-wrap {
+  margin-top: 4px;
+}
+
+.gallery-config-footer--create {
+  justify-content: flex-end;
+  padding: 16px 24px 20px;
+}
+
+.gallery-config-actions--create {
+  width: 100%;
+  justify-content: flex-end;
 }
 
 .dashboard-modal-overlay {
@@ -2775,6 +2817,11 @@
     width: 100%;
     max-height: calc(100vh - 20px);
     border-radius: 14px;
+  }
+
+  .gallery-config-modal--create {
+    width: 100%;
+    max-width: 480px;
   }
 
   .gallery-config-header {

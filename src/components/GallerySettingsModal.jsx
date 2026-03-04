@@ -96,7 +96,7 @@ export default function GallerySettingsModal({
     setActiveTab('main')
     const initialForm = buildGalleryFormState(galerie || null)
     setFormState(initialForm)
-    setPendingFiles(Array.isArray(initialFiles) ? initialFiles : [])
+    setPendingFiles(isCreate ? [] : (Array.isArray(initialFiles) ? initialFiles : []))
     initialSnapshotRef.current = JSON.stringify({
       ...initialForm,
       privacyPassword: '',
@@ -176,71 +176,13 @@ export default function GallerySettingsModal({
       if (isCreate) {
         const created = await galleriesService.createGallery(payload)
         const createdGalleryId = created.id
-        let uploadedBytes = 0
-        let firstOriginalKey = ''
-
-        if (pendingFiles.length > 0) {
-          setUploading(true)
-          setUploadProgress(0)
-          const totalSteps = pendingFiles.length * 3
-
-          const reportProgress = (stepIndex, percent) => {
-            const overall = Math.round(((stepIndex + percent / 100) / totalSteps) * 100)
-            setUploadProgress(Math.min(100, overall))
-          }
-
-          const idToken = await authService.getCurrentIdToken()
-
-          for (let i = 0; i < pendingFiles.length; i++) {
-            const file = pendingFiles[i]
-            const baseName = `${Date.now()}-${i}-${sanitizeFileName(file.name)}`
-            const baseNameNoExt = baseName.replace(/\.[^.]+$/, '')
-            const originalPath = `galerii/${createdGalleryId}/originals/${baseName}`
-            const mediumPath = `galerii/${createdGalleryId}/medium/${baseNameNoExt}.webp`
-            const thumbPath = `galerii/${createdGalleryId}/thumbnails/${baseNameNoExt}.webp`
-
-            uploadedBytes += Number(file.size || 0)
-            if (!firstOriginalKey) firstOriginalKey = originalPath
-
-            const [mediumFile, thumbFile] = await Promise.all([
-              imageCompression(file, {
-                maxWidthOrHeight: 2048,
-                initialQuality: 0.90,
-                useWebWorker: true,
-                fileType: 'image/webp',
-              }),
-              imageCompression(file, {
-                maxWidthOrHeight: 800,
-                initialQuality: 0.92,
-                useWebWorker: true,
-                fileType: 'image/webp',
-              }),
-            ])
-
-            await Promise.all([
-              mediaService.uploadPhoto(file, createdGalleryId, user.uid, (p) => reportProgress(i * 3, p), originalPath, idToken),
-              mediaService.uploadPhoto(mediumFile, createdGalleryId, user.uid, (p) => reportProgress(i * 3 + 1, p), mediumPath, idToken),
-              mediaService.uploadPhoto(thumbFile, createdGalleryId, user.uid, (p) => reportProgress(i * 3 + 2, p), thumbPath, idToken),
-            ])
-          }
-
-          await galleriesService.updateGallery(createdGalleryId, {
-            poze: pendingFiles.length,
-            coverKey: firstOriginalKey || '',
-            storageBytes: uploadedBytes,
-          })
-
-          if (uploadedBytes > 0) {
-            await galleriesService.adjustUserStorageUsed(user.uid, uploadedBytes)
-          }
-        }
 
         onCreated?.({
           id: createdGalleryId,
           ...payload,
-          poze: pendingFiles.length,
-          coverKey: firstOriginalKey || '',
-          storageBytes: uploadedBytes,
+          poze: 0,
+          coverKey: '',
+          storageBytes: 0,
         })
       } else if (galerie?.id) {
         await galleriesService.updateGallery(galerie.id, payload)
@@ -272,6 +214,84 @@ export default function GallerySettingsModal({
   }
 
   const saveDisabled = saving || uploading || !String(formState.galleryName || '').trim() || (!isCreate && !hasChanges)
+
+  if (isCreate) {
+    return (
+      <div className="gallery-config-overlay" onClick={requestClose}>
+        <div className="gallery-config-modal gallery-config-modal--create" onClick={(event) => event.stopPropagation()}>
+          <div className="gallery-config-header gallery-config-header--create">
+            <h3>Galerie nouă</h3>
+            <button type="button" className="gallery-config-close" onClick={requestClose}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="gallery-config-body gallery-config-body--create">
+            <section className="gallery-config-card gallery-config-card--create">
+              <label className="gallery-config-label">Nume galerie</label>
+              <input
+                type="text"
+                value={formState.galleryName}
+                onChange={(event) => setField('galleryName', event.target.value)}
+                className="gallery-config-input"
+                placeholder="Ex: Nuntă Ana și Mihai"
+              />
+
+              <label className="gallery-config-label">Data eveniment</label>
+              <input
+                type="date"
+                value={formState.shootDate}
+                onChange={(event) => setField('shootDate', event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Tab') event.preventDefault()
+                }}
+                onPaste={(event) => event.preventDefault()}
+                inputMode="none"
+                className="gallery-config-input gallery-config-date-input"
+              />
+
+              <label className="gallery-config-label">Timp de stocare</label>
+              <div className="gallery-config-segmented">
+                <button
+                  type="button"
+                  className={formState.storageMode === 'lifetime' ? 'active' : ''}
+                  onClick={() => setField('storageMode', 'lifetime')}
+                >
+                  Durată limitată
+                </button>
+                <button
+                  type="button"
+                  className={formState.storageMode === 'indefinite' ? 'active' : ''}
+                  onClick={() => setField('storageMode', 'indefinite')}
+                >
+                  Durată nelimitată
+                </button>
+              </div>
+
+              <div className="gallery-config-create-toggle-wrap">
+                <ToggleField
+                  label="Permite descărcarea fișierelor originale"
+                  checked={!!formState.settings.main.allowOriginalDownloads}
+                  onChange={(value) => setSetting('main', 'allowOriginalDownloads', value)}
+                />
+              </div>
+            </section>
+          </div>
+
+          <div className="gallery-config-footer gallery-config-footer--create">
+            <div className="gallery-config-actions gallery-config-actions--create">
+              <button type="button" className="btn-secondary" onClick={requestClose} disabled={saving || uploading}>
+                Anulează
+              </button>
+              <button type="button" className="btn-primary" onClick={handleSave} disabled={saveDisabled}>
+                {saving ? 'Se salvează...' : 'Creează galerie'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="gallery-config-overlay" onClick={requestClose}>
