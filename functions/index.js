@@ -268,6 +268,16 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase().slice(0, 190)
 }
 
+function sanitizeContactField(value, maxLen) {
+  return String(value || '').trim().slice(0, maxLen)
+}
+
+function isValidEmail(value) {
+  const email = normalizeEmail(value)
+  if (!email) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
 function sanitizeInvoiceId(value) {
   const clean = String(value || '').trim()
   if (!clean) return ''
@@ -1091,6 +1101,44 @@ async function handleChargeDisputeCreated(event) {
   }
 }
 
+
+exports.sendContactNotification = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 20,
+    secrets: [RESEND_API_KEY],
+  },
+  async (request) => {
+    const nume = sanitizeContactField(request.data?.nume, 120)
+    const email = normalizeEmail(request.data?.email)
+    const mesaj = sanitizeContactField(request.data?.mesaj, 5000)
+
+    if (!nume || !email || !mesaj) {
+      throw new HttpsError('invalid-argument', 'Nume, email și mesaj sunt obligatorii.')
+    }
+
+    if (!isValidEmail(email)) {
+      throw new HttpsError('invalid-argument', 'Adresa de email este invalidă.')
+    }
+
+    const result = await getEmailService().sendContactNotificationEmail({
+      toEmail: 'hello@cloudbymina.com',
+      nume,
+      email,
+      mesaj,
+    })
+
+    logger.info('Contact notification sent', {
+      ...result,
+      fromEmail: email,
+    })
+
+    return {
+      ok: true,
+      sent: !result?.skipped,
+    }
+  }
+)
 
 exports.sendWelcomeEmail = functionsV1
   .region('europe-west1')

@@ -1,11 +1,17 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { addDoc, collection } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions as firebaseFunctions } from '../firebase'
 import './LandingPage.css'
 
 function LandingPage({ user }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const galerieSlug = searchParams.get('galerie')
+  const [contactForm, setContactForm] = useState({ nume: '', email: '', mesaj: '' })
+  const [contactSending, setContactSending] = useState(false)
+  const [contactFeedback, setContactFeedback] = useState('')
 
   useEffect(() => {
     if (galerieSlug) navigate(`/${galerieSlug}`, { replace: true })
@@ -27,6 +33,47 @@ function LandingPage({ user }) {
   }, [])
 
   if (galerieSlug) return <div style={{ textAlign: 'center', padding: '100px' }}>Se încarcă...</div>
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault()
+    if (contactSending) return
+
+    const nume = String(contactForm.nume || '').trim()
+    const email = String(contactForm.email || '').trim().toLowerCase()
+    const mesaj = String(contactForm.mesaj || '').trim()
+
+    if (!nume || !email || !mesaj) {
+      setContactFeedback('A apărut o eroare. Încearcă din nou.')
+      return
+    }
+
+    setContactSending(true)
+    setContactFeedback('')
+
+    try {
+      await addDoc(collection(db, 'contactMessages'), {
+        nume,
+        email,
+        mesaj,
+        name: nume,
+        message: mesaj,
+        phone: '',
+        read: false,
+        createdAt: new Date(),
+      })
+
+      const sendContactNotification = httpsCallable(firebaseFunctions, 'sendContactNotification')
+      await sendContactNotification({ nume, email, mesaj })
+
+      setContactForm({ nume: '', email: '', mesaj: '' })
+      setContactFeedback('Mesajul tău a fost trimis! Te contactăm în maxim 24 de ore.')
+    } catch (err) {
+      console.error('Landing contact submit failed', err)
+      setContactFeedback('A apărut o eroare. Încearcă din nou.')
+    } finally {
+      setContactSending(false)
+    }
+  }
 
   return (
     <div className="fl">
@@ -247,13 +294,39 @@ function LandingPage({ user }) {
             <p className="fl-contact-sub">
               Scrie-ne și îți răspundem în cel mai scurt timp.
             </p>
-            <form className="fl-contact-form" onSubmit={(e) => e.preventDefault()}>
+            <form className="fl-contact-form" onSubmit={handleContactSubmit}>
               <div className="fl-form-row">
-                <input className="fl-input" type="text" placeholder="Nume" required />
-                <input className="fl-input" type="email" placeholder="Email" required />
+                <input
+                  className="fl-input"
+                  type="text"
+                  placeholder="Nume"
+                  value={contactForm.nume}
+                  onChange={(e) => setContactForm((prev) => ({ ...prev, nume: e.target.value }))}
+                  required
+                />
+                <input
+                  className="fl-input"
+                  type="email"
+                  placeholder="Email"
+                  value={contactForm.email}
+                  onChange={(e) => setContactForm((prev) => ({ ...prev, email: e.target.value }))}
+                  required
+                />
               </div>
-              <textarea className="fl-input" placeholder="Mesajul tău" rows="5" required />
-              <button type="submit" className="fl-btn-send">Trimite mesaj</button>
+              <textarea
+                className="fl-input"
+                placeholder="Mesajul tău"
+                rows="5"
+                value={contactForm.mesaj}
+                onChange={(e) => setContactForm((prev) => ({ ...prev, mesaj: e.target.value }))}
+                required
+              />
+              <button type="submit" className="fl-btn-send" disabled={contactSending}>
+                {contactSending ? 'Se trimite...' : 'Trimite mesaj'}
+              </button>
+              {contactFeedback && (
+                <p className="fl-contact-feedback">{contactFeedback}</p>
+              )}
             </form>
           </div>
         </section>

@@ -772,6 +772,16 @@
      background: var(--gray-5);
      transform: scale(1.02);
    }
+
+   .fl-contact-feedback {
+     margin: 10px 2px 0;
+     font-family: var(--font-ui);
+     font-size: 0.9rem;
+     font-weight: 400;
+     color: var(--gray-5);
+     line-height: 1.5;
+     text-align: left;
+   }
    
    /* ── FOOTER ── */
    .fl-footer {

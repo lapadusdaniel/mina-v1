@@ -214,6 +214,22 @@ function buildDisputeEmailHtml(userEmail) {
   `
 }
 
+function buildContactNotificationEmailHtml({ nume = '', email = '', mesaj = '' } = {}) {
+  const safeNume = escapeHtml(nume || '-')
+  const safeEmail = escapeHtml(email || '-')
+  const safeMesaj = escapeHtml(mesaj || '-').replace(/\n/g, '<br />')
+
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
+      <h2 style="margin:0 0 12px">Mesaj nou din formularul de contact</h2>
+      <p style="margin:0 0 8px"><strong>Nume:</strong> ${safeNume}</p>
+      <p style="margin:0 0 8px"><strong>Email:</strong> ${safeEmail}</p>
+      <p style="margin:0 0 8px"><strong>Mesaj:</strong></p>
+      <p style="margin:0 0 18px">${safeMesaj}</p>
+    </div>
+  `
+}
+
 function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } = {}) {
   const key = sanitize(apiKey)
   if (!key) {
@@ -346,12 +362,33 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
   }
 
 
+  async function sendContactNotificationEmail({ toEmail, nume, email, mesaj } = {}) {
+    const to = normalizeEmail(toEmail)
+    if (!to) {
+      return { skipped: true, reason: 'missing_to_email' }
+    }
+
+    await resend.emails.send({
+      from: fromEmail,
+      to: [to],
+      subject: `Contact nou: ${sanitize(nume || 'fără nume').slice(0, 120)}`,
+      html: buildContactNotificationEmailHtml({ nume, email, mesaj }),
+    })
+
+    return {
+      skipped: false,
+      email: to,
+    }
+  }
+
+
   return {
     sendWelcomeEmail,
     sendPaymentSuccessEmail,
     sendSubscriptionCanceledEmail,
     sendPaymentFailedEmail,
     sendDisputeEmail,
+    sendContactNotificationEmail,
   }
 }
 
