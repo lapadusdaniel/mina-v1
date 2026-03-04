@@ -1389,11 +1389,15 @@ const ClientGallery = () => {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: space-between;
+          justify-content: center;
           padding: 32px 32px 40px;
           color: #fff;
         }
         .cg-cover-brand {
+          position: absolute;
+          top: 32px;
+          left: 50%;
+          transform: translateX(-50%);
           display: flex;
           align-items: center;
         }
@@ -1416,8 +1420,11 @@ const ClientGallery = () => {
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
           text-align: center;
           gap: 16px;
+          width: min(92vw, 980px);
+          margin: 0 auto;
         }
         .cg-cover-title {
           font-family: 'DM Serif Display', Georgia, serif;
@@ -1462,6 +1469,10 @@ const ClientGallery = () => {
           border-color: rgba(255,255,255,0.5);
         }
         .cg-cover-count {
+          position: absolute;
+          left: 50%;
+          bottom: 32px;
+          transform: translateX(-50%);
           font-family: 'DM Sans', sans-serif;
           font-size: 12px;
           font-weight: 300;
@@ -2000,6 +2011,8 @@ const ClientGallery = () => {
           .cg-cover-title { font-size: 2rem; }
           .cg-cover-btn { font-size: 14px; padding: 11px 22px; }
           .cg-cover-overlay { padding: 24px 20px 32px; }
+          .cg-cover-brand { top: 24px; }
+          .cg-cover-count { bottom: 24px; }
           .cg-toolbar { padding: 0 12px; min-height: 52px; }
           .cg-toolbar-btn { padding: 8px 10px; }
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
