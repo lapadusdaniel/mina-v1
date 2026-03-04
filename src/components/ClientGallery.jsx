@@ -282,6 +282,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
   const [galerie, setGalerie] = useState(null);
   const [poze, setPoze] = useState([]);
+  const [clientFolders, setClientFolders] = useState([]);
+  const [activeClientFolderId, setActiveClientFolderId] = useState('all');
   const [coverThumbUrl, setCoverThumbUrl] = useState(null);
   const [coverMediumUrl, setCoverMediumUrl] = useState(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
@@ -324,9 +326,18 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const reviewSectionRef = useRef(null);
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
+  const pozeFiltratePeFolder = useMemo(() => {
+    if (activeClientFolderId === 'all') return poze;
+    return poze.filter((photo) => photo.folderId === activeClientFolderId);
+  }, [activeClientFolderId, poze]);
+
   const pozeAfisate = useMemo(
-    () => (galerie ? (doarFavorite ? poze.filter((p) => galerie.favorite?.includes(p.key)) : poze) : []),
-    [galerie, doarFavorite, poze]
+    () => (galerie
+      ? (doarFavorite
+          ? pozeFiltratePeFolder.filter((p) => galerie.favorite?.includes(p.key))
+          : pozeFiltratePeFolder)
+      : []),
+    [galerie, doarFavorite, pozeFiltratePeFolder]
   );
   const gallerySettings = galerie?.settings || {};
   const mainSettings = gallerySettings.main || {};
@@ -439,13 +450,39 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const loadGalleryPhotos = useCallback(async (galleryData) => {
     if (!galleryData?.id) {
       setPoze([]);
+      setClientFolders([]);
       setCoverThumbUrl(null);
       setCoverMediumUrl(null);
       return;
     }
 
-    const pozeRaw = await mediaService.listGalleryPhotos(galleryData.id, galleryData.userId);
-    const pozeKeys = pozeRaw.map((p) => ({ key: p.key || p.Key, size: p.size })).filter((p) => p.key);
+    const [pozeRaw, foldersRaw, photoMetadataRaw] = await Promise.all([
+      mediaService.listGalleryPhotos(galleryData.id, galleryData.userId),
+      galleriesService.getFolders(galleryData.id).catch(() => []),
+      galleriesService.listPhotoMetadata(galleryData.id).catch(() => []),
+    ]);
+
+    const folders = Array.isArray(foldersRaw) ? foldersRaw : [];
+    const validFolderIds = new Set(folders.map((folder) => folder.id));
+    const photoMetaByKey = new Map(
+      (Array.isArray(photoMetadataRaw) ? photoMetadataRaw : [])
+        .filter((meta) => meta?.key)
+        .map((meta) => [meta.key, validFolderIds.has(meta.folderId) ? meta.folderId : null])
+    );
+
+    const pozeKeys = (Array.isArray(pozeRaw) ? pozeRaw : [])
+      .map((p) => {
+        const key = p.key || p.Key;
+        if (!key) return null;
+        return {
+          key,
+          size: p.size ?? p.Size,
+          folderId: photoMetaByKey.get(key) || null,
+        };
+      })
+      .filter((p) => p?.key);
+
+    setClientFolders(folders);
     setPoze(pozeKeys);
 
     if (pozeKeys[0]) {
@@ -464,6 +501,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     const fetchDate = async () => {
       setLoading(true);
       setEroare(null);
+      setActiveClientFolderId('all');
+      setClientFolders([]);
       try {
         const effectiveGalleryId = resolvedGalleryId || galleryId
         const dateGal = effectiveGalleryId
@@ -590,7 +629,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     return () => { cancelled = true; };
   }, [galerie?.id, numeSelectie]);
 
-  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [doarFavorite]);
+  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [doarFavorite, activeClientFolderId]);
+
+  useEffect(() => {
+    if (activeClientFolderId === 'all') return;
+    if (!clientFolders.some((folder) => folder.id === activeClientFolderId)) {
+      setActiveClientFolderId('all');
+    }
+  }, [activeClientFolderId, clientFolders]);
 
   useEffect(() => {
     const coverKey = poze[0]?.key;
@@ -936,6 +982,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverMediumUrl;
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
   const favCount = galerie?.favorite?.length ?? 0;
+  const activeClientFolder = clientFolders.find((folder) => folder.id === activeClientFolderId) || null;
+  const activeClientFolderName = activeClientFolder?.name || '';
   const isExpired = isGalleryExpired(galerie);
 
   if (isExpired) {
@@ -998,15 +1046,26 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         <>
         {/* Sticky Toolbar */}
         <div className="cg-toolbar">
-          <div className="cg-toolbar-left">
+          <div className="cg-toolbar-left" role="tablist" aria-label="Foldere galerie">
             <button
               type="button"
-              className="cg-tab-all"
-              onClick={() => setDoarFavorite(false)}
-              aria-current="page"
+              className={`cg-tab-all ${activeClientFolderId === 'all' ? 'is-active' : ''}`}
+              onClick={() => setActiveClientFolderId('all')}
+              aria-pressed={activeClientFolderId === 'all'}
             >
               Toate fotografiile
             </button>
+            {clientFolders.map((folder) => (
+              <button
+                key={folder.id}
+                type="button"
+                className={`cg-tab-all ${activeClientFolderId === folder.id ? 'is-active' : ''}`}
+                onClick={() => setActiveClientFolderId(folder.id)}
+                aria-pressed={activeClientFolderId === folder.id}
+              >
+                {folder.name}
+              </button>
+            ))}
           </div>
 
           <div className="cg-toolbar-right">
@@ -1025,7 +1084,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                 />
                 <span>Favorites</span>
                 {favCount > 0 && (
-                  <span className={`cg-toolbar-fav-badge ${countPop ? 'cg-count-pop' : ''}`}>
+                  <span className={`cg-toolbar-fav-badge ${countPop ? "cg-count-pop" : ""}`}>
                     ({favCount})
                   </span>
                 )}
@@ -1057,7 +1116,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         <div className="cg-gallery">
           {pozeAfisate.length === 0 ? (
             <div className="cg-empty">
-              {doarFavorite ? 'Nu ai selectat nicio fotografie încă.' : 'Galeria este goală.'}
+              {doarFavorite
+                ? 'Nu ai selectat nicio fotografie încă.'
+                : (activeClientFolderId === 'all'
+                    ? 'Galeria este goală.'
+                    : `Folderul "${activeClientFolderName || 'selectat'}" nu conține fotografii.`)}
             </div>
           ) : (
             <>
@@ -1608,7 +1671,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-toolbar-left {
           display: flex;
           align-items: flex-end;
+          gap: 18px;
           height: 100%;
+          min-width: 0;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .cg-toolbar-left::-webkit-scrollbar {
+          display: none;
         }
         .cg-tab-all {
           border: none;
@@ -1617,11 +1687,16 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           font-family: 'DM Sans', sans-serif;
           font-size: 14px;
           font-weight: 500;
-          color: #1d1d1f;
+          color: #6e6e73;
           padding: 20px 0 16px;
           margin: 0;
           position: relative;
           letter-spacing: 0.01em;
+          white-space: nowrap;
+          transition: color 0.15s ease;
+        }
+        .cg-tab-all:hover {
+          color: #1d1d1f;
         }
         .cg-tab-all::after {
           content: '';
@@ -1632,6 +1707,15 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           height: 2px;
           background: #1d1d1f;
           border-radius: 999px;
+          transform: scaleX(0);
+          transition: transform 0.2s ease;
+          transform-origin: center;
+        }
+        .cg-tab-all.is-active {
+          color: #1d1d1f;
+        }
+        .cg-tab-all.is-active::after {
+          transform: scaleX(1);
         }
         .cg-toolbar-right {
           display: flex;
@@ -2015,6 +2099,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-cover-brand { top: 24px; }
           .cg-cover-count { bottom: 24px; }
           .cg-toolbar { padding: 0 12px; min-height: 52px; }
+          .cg-toolbar-left { gap: 14px; flex: 1; }
+          .cg-tab-all { font-size: 13px; padding: 16px 0 12px; }
           .cg-toolbar-btn { padding: 8px 10px; }
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
           .cg-toolbar-fav-badge { display: inline; }

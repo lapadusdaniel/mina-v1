@@ -21,6 +21,7 @@ import {
   sanitizeKeys,
   toClientSelectionId,
 } from './selection.utils'
+import { createFoldersService } from './folders.service'
 
 function mapDoc(snap) {
   return { id: snap.id, ...snap.data() }
@@ -71,7 +72,10 @@ async function syncSelectionAggregates(db, galleryId) {
 }
 
 export function createGalleriesModule({ db }) {
+  const foldersService = createFoldersService({ db })
+
   return {
+    ...foldersService,
     db,
 
     async adjustUserStorageUsed(uid, deltaBytes) {

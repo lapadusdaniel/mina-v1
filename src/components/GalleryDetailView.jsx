@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Masonry from 'react-masonry-css'
-import { Settings } from 'lucide-react'
+import { FolderPlus, Settings, Trash2 } from 'lucide-react'
 import AdminSelections from './AdminSelections'
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
@@ -61,18 +61,25 @@ function GalleryPhotoTile({ photo, onDeletePoza }) {
 }
 
 /**
- * Gallery detail view: header, AdminSelections, photo grid.
+ * Gallery detail view: header, folders, AdminSelections, photo grid.
  */
 export default function GalleryDetailView({
   galerie,
   pozeGalerie,
+  allPozeGalerie = [],
   loadingPoze,
+  loadingFolders = false,
+  galleryFolders = [],
+  activeFolderId = 'all',
   user,
   uploading,
   uploadProgress,
   fileInputRef,
   onBack,
   onPreview,
+  onSelectFolder,
+  onCreateFolder,
+  onDeleteFolder,
   onUploadPoze,
   onDeletePoza,
   onDeleteGallery
@@ -86,6 +93,15 @@ export default function GalleryDetailView({
     500: 1
   }
 
+  const totalPhotosCount = Array.isArray(allPozeGalerie) ? allPozeGalerie.length : pozeGalerie.length
+  const selectedFolder = useMemo(
+    () => galleryFolders.find((folder) => folder.id === activeFolderId) || null,
+    [activeFolderId, galleryFolders]
+  )
+  const subtitle = activeFolderId === 'all'
+    ? `${galerie.categoria || 'Galerie'} • ${totalPhotosCount} poze`
+    : `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
+
   return (
     <div className="dashboard-root">
       <div className="dashboard-gallery-header">
@@ -95,9 +111,7 @@ export default function GalleryDetailView({
           </button>
           <div>
             <h2 className="dashboard-gallery-title">{galerie.nume}</h2>
-            <p className="dashboard-gallery-subtitle">
-              {galerie.categoria} • {pozeGalerie.length} poze
-            </p>
+            <p className="dashboard-gallery-subtitle">{subtitle}</p>
           </div>
         </div>
         <div className="dashboard-header-actions">
@@ -146,6 +160,58 @@ export default function GalleryDetailView({
         </div>
       )}
 
+      <div className="dashboard-folders-section">
+        <div className="dashboard-folders-list">
+          <button
+            type="button"
+            className={`dashboard-folder-chip ${activeFolderId === 'all' ? 'is-active' : ''}`}
+            onClick={() => onSelectFolder?.('all')}
+          >
+            <span>Toate</span>
+            <span className="dashboard-folder-chip-count">{totalPhotosCount}</span>
+          </button>
+
+          {galleryFolders.map((folder) => (
+            <button
+              key={folder.id}
+              type="button"
+              className={`dashboard-folder-chip ${activeFolderId === folder.id ? 'is-active' : ''}`}
+              onClick={() => onSelectFolder?.(folder.id)}
+              title={folder.name}
+            >
+              <span>{folder.name}</span>
+              <span className="dashboard-folder-chip-count">{Number(folder.photoCount || 0)}</span>
+            </button>
+          ))}
+
+          {loadingFolders && (
+            <span className="dashboard-folder-loading">Se încarcă foldere...</span>
+          )}
+        </div>
+
+        <div className="dashboard-folders-actions">
+          <button
+            type="button"
+            className="dashboard-folder-add-btn"
+            onClick={() => onCreateFolder?.()}
+          >
+            <FolderPlus size={16} />
+            <span>Folder nou</span>
+          </button>
+
+          {activeFolderId !== 'all' && (
+            <button
+              type="button"
+              className="dashboard-folder-delete-btn"
+              onClick={() => onDeleteFolder?.(activeFolderId)}
+            >
+              <Trash2 size={16} />
+              <span>Șterge folderul</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       <AdminSelections galerie={galerie} userId={user?.uid} />
 
       <div className="dashboard-gallery-content">
@@ -156,7 +222,9 @@ export default function GalleryDetailView({
         ) : pozeGalerie.length === 0 ? (
           <div className="dashboard-empty-state">
             <p className="dashboard-empty-icon">📸</p>
-            <p className="dashboard-empty-text">Nicio poză încă</p>
+            <p className="dashboard-empty-text">
+              {activeFolderId === 'all' ? 'Nicio poză încă' : 'Acest folder nu are poze încă'}
+            </p>
             <button onClick={() => fileInputRef.current?.click()} className="btn-primary">
               + Adaugă prima poză
             </button>

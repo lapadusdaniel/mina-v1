@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import imageCompression from 'browser-image-compression'
 import './Dashboard.css'
@@ -62,6 +62,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [loadingPoze, setLoadingPoze] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploading, setUploading] = useState(false)
+  const [galleryFolders, setGalleryFolders] = useState([])
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  const [activeFolderId, setActiveFolderId] = useState('all')
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
 
   const { userPlan, storageLimit, checkAccess } = useUserSubscription(user?.uid)
@@ -99,6 +102,33 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     } catch (_) {
     }
   }, [])
+
+  const attachFolderCounts = useCallback((folders = [], photos = []) => {
+    const counts = new Map()
+    photos.forEach((photo) => {
+      if (!photo?.folderId) return
+      counts.set(photo.folderId, (counts.get(photo.folderId) || 0) + 1)
+    })
+    return folders.map((folder) => ({
+      ...folder,
+      _storedPhotoCount: Number(folder.photoCount || 0),
+      photoCount: counts.get(folder.id) || 0,
+    }))
+  }, [])
+
+  const syncFolderCounts = useCallback(async (galleryId, folders = [], photos = []) => {
+    if (!galleryId || !folders.length) return
+    const nextFolders = attachFolderCounts(folders, photos)
+    setGalleryFolders(nextFolders)
+
+    const updates = nextFolders
+      .filter((folder) => Number(folder.photoCount || 0) !== Number(folder._storedPhotoCount || 0))
+      .map((folder) => galleriesService.setFolderPhotoCount(galleryId, folder.id, folder.photoCount).catch(() => {}))
+
+    if (updates.length) {
+      await Promise.all(updates)
+    }
+  }, [attachFolderCounts])
 
   // Auto-cleanup: șterge galeriile din coș mai vechi de TRASH_RETENTION_DAYS (R2 + Firestore)
   useEffect(() => {
@@ -242,10 +272,19 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
   }, [galerii])
 
+
+  useEffect(() => {
+    if (activeFolderId === 'all') return
+    if (!galleryFolders.some((folder) => folder.id === activeFolderId)) {
+      setActiveFolderId('all')
+    }
+  }, [activeFolderId, galleryFolders])
   const closeActiveGallery = useCallback(() => {
     suppressAutoReopenRef.current = true
     setGalerieActiva(null)
     setPozeGalerie([])
+    setGalleryFolders([])
+    setActiveFolderId('all')
     persistActiveGalleryId(null)
   }, [persistActiveGalleryId])
 
@@ -255,10 +294,25 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     suppressAutoReopenRef.current = false
     setGalerieActiva(galerie)
     setLoadingPoze(true)
+    setLoadingFolders(true)
+    setActiveFolderId('all')
     setPozeGalerie([])
+    setGalleryFolders([])
     persistActiveGalleryId(galerie.id)
     try {
-      const poze = await mediaService.listGalleryPhotos(galerie.id, user.uid)
+      const [poze, folders, photoMetadata] = await Promise.all([
+        mediaService.listGalleryPhotos(galerie.id, user.uid),
+        galleriesService.getFolders(galerie.id).catch(() => []),
+        galleriesService.listPhotoMetadata(galerie.id).catch(() => []),
+      ])
+
+      const validFolderIds = new Set((folders || []).map((folder) => folder.id))
+      const photoMetaByKey = new Map(
+        (photoMetadata || [])
+          .filter((meta) => meta?.key)
+          .map((meta) => [meta.key, validFolderIds.has(meta.folderId) ? meta.folderId : null])
+      )
+
       const normalizedPhotos = poze
         .map((poza) => {
           const key = poza.key || poza.name || poza.Key
@@ -268,10 +322,13 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             url: null,
             size: poza.size ?? poza.Size,
             lastModified: poza.lastModified ?? poza.uploaded ?? poza.LastModified,
+            folderId: photoMetaByKey.get(key) || null,
           }
         })
         .filter(Boolean)
       setPozeGalerie(normalizedPhotos)
+
+      await syncFolderCounts(galerie.id, folders || [], normalizedPhotos)
 
       // Backfill metadata once for older galleries to avoid future N+1 listing in table rows.
       const needsBackfill = !galerie?.coverKey || typeof galerie?.storageBytes !== 'number'
@@ -289,8 +346,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       alert('Eroare la încărcarea pozelor!')
     } finally {
       setLoadingPoze(false)
+      setLoadingFolders(false)
     }
-  }, [persistActiveGalleryId, user.uid])
+  }, [persistActiveGalleryId, syncFolderCounts, user.uid])
 
   // Redeschide ultima galerie după refresh, fără să blocheze navigarea prin URL.
   useEffect(() => {
@@ -333,6 +391,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
     try {
       const idToken = await authService.getCurrentIdToken()
+      const uploadFolderId = activeFolderId !== 'all' ? activeFolderId : null
       let uploadedBytes = 0
       let firstUploadedOriginal = ''
       for (let i = 0; i < files.length; i++) {
@@ -361,10 +420,21 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         await Promise.all([
           mediaService.uploadPhoto(file, galerieActiva.id, user.uid, (p) => reportProgress(i * 3, p), origPath, idToken),
           mediaService.uploadPhoto(mediumFile, galerieActiva.id, user.uid, (p) => reportProgress(i * 3 + 1, p), mediumPath, idToken),
-          mediaService.uploadPhoto(thumbFile, galerieActiva.id, user.uid, (p) => reportProgress(i * 3 + 2, p), thumbPath, idToken)
+          mediaService.uploadPhoto(thumbFile, galerieActiva.id, user.uid, (p) => reportProgress(i * 3 + 2, p), thumbPath, idToken),
         ])
+
+        await galleriesService.upsertPhotoMetadata(galerieActiva.id, origPath, {
+          folderId: uploadFolderId,
+          size: Number(file.size || 0),
+          lastModified: file.lastModified ? new Date(file.lastModified) : null,
+          createdAt: new Date(),
+        })
       }
-      await handleDeschideGalerie(galerieActiva)
+
+      if (uploadFolderId) {
+        await galleriesService.incrementFolderPhotoCount(galerieActiva.id, uploadFolderId, files.length).catch(() => {})
+      }
+
       const currentPhotoCount = Number(galerieActiva?.poze ?? pozeGalerie.length ?? 0)
       const currentBytes = Number(galerieActiva?.storageBytes || 0)
       await galleriesService.updateGallery(galerieActiva.id, {
@@ -373,6 +443,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         coverKey: galerieActiva?.coverKey || firstUploadedOriginal || '',
       })
       await galleriesService.adjustUserStorageUsed(user.uid, uploadedBytes)
+      await handleDeschideGalerie(galerieActiva)
+      if (uploadFolderId) {
+        setActiveFolderId(uploadFolderId)
+      }
     } catch (error) {
       console.error('Error uploading:', error)
       alert('Eroare la upload!')
@@ -389,10 +463,20 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       const removedPhoto = pozeGalerie.find((p) => p.key === pozaKey)
       const idToken = await authService.getCurrentIdToken()
       await mediaService.deletePhoto(pozaKey, idToken)
+
+      if (galerieActiva?.id) {
+        await galleriesService.deletePhotoMetadata(galerieActiva.id, pozaKey)
+        if (removedPhoto?.folderId) {
+          await galleriesService.incrementFolderPhotoCount(galerieActiva.id, removedPhoto.folderId, -1).catch(() => {})
+        }
+      }
+
       const nextPhotos = pozeGalerie.filter((p) => p.key !== pozaKey)
       setPozeGalerie(nextPhotos)
 
       if (galerieActiva?.id) {
+        await syncFolderCounts(galerieActiva.id, galleryFolders, nextPhotos)
+
         const nextCoverKey = galerieActiva?.coverKey === pozaKey ? (nextPhotos[0]?.key || '') : (galerieActiva?.coverKey || '')
         const currentPhotoCount = Number(galerieActiva?.poze ?? pozeGalerie.length ?? 0)
         const currentBytes = Number(galerieActiva?.storageBytes || 0)
@@ -412,6 +496,81 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
   }
 
+
+  const handleCreateFolder = async () => {
+    if (!galerieActiva?.id) return
+    const rawName = window.prompt('Nume folder nou:')
+    const name = String(rawName || '').trim()
+    if (!name) return
+
+    try {
+      const createdFolder = await galleriesService.createFolder(galerieActiva.id, { name })
+      setGalleryFolders((prev) => [...prev, { ...createdFolder, photoCount: 0 }])
+      setActiveFolderId(createdFolder.id)
+    } catch (error) {
+      console.error('Error creating folder:', error)
+      alert('Nu am putut crea folderul. Încearcă din nou.')
+    }
+  }
+
+  const handleDeleteFolder = async (folderId) => {
+    if (!galerieActiva?.id || !folderId || folderId === 'all') return
+    const folder = galleryFolders.find((f) => f.id === folderId)
+    const folderName = folder?.name || 'Acest folder'
+    const photosInFolder = pozeGalerie.filter((photo) => photo.folderId === folderId)
+
+    if (!window.confirm(`${folderName}: ștergi folderul și ${photosInFolder.length} poze din el?`)) return
+
+    try {
+      const idToken = await authService.getCurrentIdToken()
+      const deletedKeys = new Set()
+      let removedBytes = 0
+      const failedKeys = []
+
+      for (const photo of photosInFolder) {
+        try {
+          await mediaService.deletePhoto(photo.key, idToken)
+          await galleriesService.deletePhotoMetadata(galerieActiva.id, photo.key)
+          deletedKeys.add(photo.key)
+          removedBytes += Number(photo.size || 0)
+        } catch (_) {
+          failedKeys.push(photo.key)
+        }
+      }
+
+      if (failedKeys.length > 0) {
+        await handleDeschideGalerie(galerieActiva)
+        alert(`Au rămas ${failedKeys.length} poze care nu au putut fi șterse. Încearcă din nou.`)
+        return
+      }
+
+      await galleriesService.deletePhotoMetadataByFolder(galerieActiva.id, folderId).catch(() => {})
+      await galleriesService.deleteFolder(galerieActiva.id, folderId)
+
+      const nextPhotos = pozeGalerie.filter((photo) => !deletedKeys.has(photo.key))
+      const nextFolders = galleryFolders.filter((item) => item.id !== folderId)
+      setPozeGalerie(nextPhotos)
+      setGalleryFolders(nextFolders)
+      setActiveFolderId('all')
+
+      await syncFolderCounts(galerieActiva.id, nextFolders, nextPhotos)
+
+      const nextCoverKey = deletedKeys.has(galerieActiva?.coverKey) ? (nextPhotos[0]?.key || '') : (galerieActiva?.coverKey || '')
+      const currentPhotoCount = Number(galerieActiva?.poze ?? pozeGalerie.length ?? 0)
+      const currentBytes = Number(galerieActiva?.storageBytes || 0)
+      await galleriesService.updateGallery(galerieActiva.id, {
+        poze: Math.max(0, currentPhotoCount - deletedKeys.size),
+        storageBytes: Math.max(0, currentBytes - removedBytes),
+        coverKey: nextCoverKey,
+      })
+      if (removedBytes > 0) {
+        await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
+      }
+    } catch (error) {
+      console.error('Error deleting folder:', error)
+      alert('Nu am putut șterge folderul. Încearcă din nou.')
+    }
+  }
   // Management Galerii (Trash / Delete / Restore)
   const handleMoveToTrash = async (id) => {
     try {
@@ -506,6 +665,11 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     callback?.()
   }
 
+  const pozeGalerieFiltrate = useMemo(() => {
+    if (activeFolderId === 'all') return pozeGalerie
+    return pozeGalerie.filter((photo) => photo.folderId === activeFolderId)
+  }, [activeFolderId, pozeGalerie])
+
   const renderSidebar = () => (
     <div className="dashboard-sidebar">
       <div className="sidebar-logo-area">
@@ -554,14 +718,21 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         <div key={`view-gallery-${galerieActiva.id}`} className="dashboard-view-animate">
           <GalleryDetailView
             galerie={galerieActiva}
-            pozeGalerie={pozeGalerie}
+            pozeGalerie={pozeGalerieFiltrate}
+            allPozeGalerie={pozeGalerie}
             loadingPoze={loadingPoze}
+            loadingFolders={loadingFolders}
+            galleryFolders={galleryFolders}
+            activeFolderId={activeFolderId}
             user={user}
             uploading={uploading}
             uploadProgress={uploadProgress}
             fileInputRef={fileInputRef}
             onBack={closeActiveGallery}
             onPreview={handlePreview}
+            onSelectFolder={setActiveFolderId}
+            onCreateFolder={handleCreateFolder}
+            onDeleteFolder={handleDeleteFolder}
             onUploadPoze={handleUploadPoze}
             onDeletePoza={handleDeletePoza}
             onDeleteGallery={handleMoveToTrash}

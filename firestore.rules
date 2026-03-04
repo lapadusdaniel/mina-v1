@@ -340,6 +340,18 @@ service cloud.firestore {
       allow delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
+    // Gallery folders: owner/admin write, public read only for active/public galleries.
+    match /galerii/{galerieId}/folders/{folderId} {
+      allow read: if isAdmin() || isGalleryOwnerById(galerieId) || isGalleryPublicById(galerieId);
+      allow create, update, delete: if isAdmin() || isGalleryOwnerById(galerieId);
+    }
+
+    // Photo metadata per gallery (folder assignment).
+    match /galerii/{galerieId}/photos/{photoId} {
+      allow read: if isAdmin() || isGalleryOwnerById(galerieId) || isGalleryPublicById(galerieId);
+      allow create, update, delete: if isAdmin() || isGalleryOwnerById(galerieId);
+    }
+
     // Client selections per gallery (new scalable structure)
     match /gallerySelections/{galleryId}/clients/{clientId} {
       allow read: if isGalleryOwnerById(galleryId) || isAdmin();
