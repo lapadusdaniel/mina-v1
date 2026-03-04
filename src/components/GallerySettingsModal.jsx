@@ -60,6 +60,24 @@ function hasFormChanges(formState, initialSnapshot) {
   return current !== initialSnapshot
 }
 
+function normalizeFocalPoint(value) {
+  const fallback = { x: 50, y: 50 }
+  if (!value || typeof value !== 'object') return fallback
+
+  const rawX = Number(value.x)
+  const rawY = Number(value.y)
+  const x = Number.isFinite(rawX) ? Math.max(0, Math.min(100, rawX)) : fallback.x
+  const y = Number.isFinite(rawY) ? Math.max(0, Math.min(100, rawY)) : fallback.y
+  return { x, y }
+}
+
+function focalPointsAreEqual(a, b) {
+  const left = normalizeFocalPoint(a)
+  const right = normalizeFocalPoint(b)
+  return Math.round(left.x * 10) === Math.round(right.x * 10)
+    && Math.round(left.y * 10) === Math.round(right.y * 10)
+}
+
 export default function GallerySettingsModal({
   galerie,
   user,
@@ -78,8 +96,11 @@ export default function GallerySettingsModal({
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState('')
+  const [coverFocalPoint, setCoverFocalPoint] = useState({ x: 50, y: 50 })
   const fileInputRef = useRef(null)
   const initialSnapshotRef = useRef('')
+  const initialFocalPointRef = useRef({ x: 50, y: 50 })
   const initializedModalKeyRef = useRef('')
 
   useEffect(() => {
@@ -97,11 +118,40 @@ export default function GallerySettingsModal({
     const initialForm = buildGalleryFormState(galerie || null)
     setFormState(initialForm)
     setPendingFiles(isCreate ? [] : (Array.isArray(initialFiles) ? initialFiles : []))
+    const initialFocalPoint = normalizeFocalPoint(galerie?.coverFocalPoint)
+    initialFocalPointRef.current = initialFocalPoint
+    setCoverFocalPoint(initialFocalPoint)
     initialSnapshotRef.current = JSON.stringify({
       ...initialForm,
       privacyPassword: '',
     })
   }, [open, galerie?.id, mode, initialFiles])
+
+  useEffect(() => {
+    if (!open || isCreate || !galerie?.coverKey) {
+      setCoverPreviewUrl('')
+      return
+    }
+
+    let cancelled = false
+
+    const loadCoverPreview = async () => {
+      try {
+        const previewUrl = await mediaService.getPhotoUrl(galerie.coverKey, 'medium')
+        if (!cancelled) setCoverPreviewUrl(previewUrl || '')
+      } catch (_) {
+        try {
+          const fallbackUrl = await mediaService.getPhotoUrl(galerie.coverKey, 'thumb')
+          if (!cancelled) setCoverPreviewUrl(fallbackUrl || '')
+        } catch (_) {
+          if (!cancelled) setCoverPreviewUrl('')
+        }
+      }
+    }
+
+    loadCoverPreview()
+    return () => { cancelled = true }
+  }, [open, isCreate, galerie?.coverKey])
 
   useEffect(() => {
     if (!open) return
@@ -116,6 +166,10 @@ export default function GallerySettingsModal({
     if (isCreate) return true
     return hasFormChanges(formState, initialSnapshotRef.current)
   }, [formState, isCreate])
+  const focalPointChanged = useMemo(() => {
+    if (isCreate) return false
+    return !focalPointsAreEqual(coverFocalPoint, initialFocalPointRef.current)
+  }, [coverFocalPoint, isCreate])
 
   if (!open) return null
 
@@ -185,7 +239,10 @@ export default function GallerySettingsModal({
           storageBytes: 0,
         })
       } else if (galerie?.id) {
-        await galleriesService.updateGallery(galerie.id, payload)
+        await galleriesService.updateGallery(galerie.id, {
+          ...payload,
+          coverFocalPoint: normalizeFocalPoint(coverFocalPoint),
+        })
       }
 
       onSaved?.()
@@ -213,7 +270,25 @@ export default function GallerySettingsModal({
     }
   }
 
-  const saveDisabled = saving || uploading || !String(formState.galleryName || '').trim() || (!isCreate && !hasChanges)
+  const saveDisabled = saving
+    || uploading
+    || !String(formState.galleryName || '').trim()
+    || (!isCreate && !hasChanges && !focalPointChanged)
+
+  const handleCoverFocalPointClick = (event) => {
+    if (!coverPreviewUrl) return
+
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (!bounds.width || !bounds.height) return
+
+    const x = Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100))
+    const y = Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100))
+
+    setCoverFocalPoint({
+      x: Number(x.toFixed(2)),
+      y: Number(y.toFixed(2)),
+    })
+  }
 
   if (isCreate) {
     return (
@@ -393,6 +468,48 @@ export default function GallerySettingsModal({
                   checked={!!formState.settings.main.watermarkEnabled}
                   onChange={(value) => setSetting('main', 'watermarkEnabled', value)}
                 />
+              </section>
+
+              <section className="gallery-config-card">
+                <label className="gallery-config-label">Copertă galerie</label>
+                {coverPreviewUrl ? (
+                  <>
+                    <div
+                      className="gallery-config-cover-preview"
+                      role="button"
+                      tabIndex={0}
+                      onClick={handleCoverFocalPointClick}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setCoverFocalPoint({ x: 50, y: 50 })
+                        }
+                      }}
+                      aria-label="Setează focal point pentru copertă"
+                    >
+                      <img
+                        src={coverPreviewUrl}
+                        alt="Preview copertă"
+                        className="gallery-config-cover-preview-img"
+                        style={{ objectPosition: coverFocalPoint.x + '% ' + coverFocalPoint.y + '%' }}
+                      />
+                      <span
+                        className="gallery-config-cover-focal-dot"
+                        style={{ left: coverFocalPoint.x + '%', top: coverFocalPoint.y + '%' }}
+                      />
+                    </div>
+                    <p className="gallery-config-sub-label">
+                      Click pe imagine pentru a seta punctul de focus al copertei.
+                    </p>
+                    <p className="gallery-config-cover-focal-values">
+                      X: {Math.round(coverFocalPoint.x)}% · Y: {Math.round(coverFocalPoint.y)}%
+                    </p>
+                  </>
+                ) : (
+                  <p className="gallery-config-sub-label">
+                    Coperta se poate poziționa după ce galeria are cel puțin o fotografie.
+                  </p>
+                )}
               </section>
 
               {isCreate && (

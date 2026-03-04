@@ -980,6 +980,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
   const coverImageUrl = galerie.coverUrl || coverMediumUrl || coverThumbUrl;
   const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverMediumUrl;
+  const coverFocalPoint = galerie?.coverFocalPoint;
+  const coverObjectPosition = (Number.isFinite(Number(coverFocalPoint?.x)) && Number.isFinite(Number(coverFocalPoint?.y)))
+    ? Math.max(0, Math.min(100, Number(coverFocalPoint.x))) + '% ' + Math.max(0, Math.min(100, Number(coverFocalPoint.y))) + '%'
+    : 'center';
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
   const favCount = galerie?.favorite?.length ?? 0;
   const activeClientFolder = clientFolders.find((folder) => folder.id === activeClientFolderId) || null;
@@ -1007,6 +1011,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
             alt=""
             fetchPriority="high"
             className={`cg-cover-img ${coverIsBlurred ? 'cg-cover-img--blurred' : ''}`}
+                      style={{ objectPosition: coverObjectPosition }}
           />
         ) : (
           <div className="cg-cover-fallback" />
