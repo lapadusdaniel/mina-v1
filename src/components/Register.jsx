@@ -24,7 +24,7 @@ function Register({ onRegister, onSwitchToLogin }) {
     e.preventDefault()
     setError('')
 
-    if (!formData.name || !formData.brandName || !formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
       setError('Completează toate câmpurile.')
       return
     }
@@ -134,7 +134,7 @@ function Register({ onRegister, onSwitchToLogin }) {
             color: '#86868b',
             margin: 0,
           }}>
-            14 zile gratuit. Fără card.
+            Platforma de livrare galerii pentru fotografii din România.
           </p>
         </div>
 
@@ -185,7 +185,7 @@ function Register({ onRegister, onSwitchToLogin }) {
                   name="brandName"
                   value={formData.brandName}
                   onChange={handleChange}
-                  placeholder="Studio Foto"
+                  placeholder="Numele brandului tău (opțional)"
                   disabled={loading}
                   style={inputStyle}
                   onFocus={handleFocus}
