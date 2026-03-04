@@ -158,6 +158,51 @@
   color: var(--theme-text-muted);
 }
 
+.settings-danger-zone {
+  border: 1px solid rgba(179, 41, 41, 0.28);
+  background: color-mix(in srgb, #b32929 4%, var(--theme-bg-card));
+  border-radius: 16px;
+  padding: 22px;
+  display: grid;
+  gap: 10px;
+}
+
+.settings-danger-title {
+  margin: 0;
+  font-size: 18px;
+  font-family: var(--theme-font-display);
+  color: #b32929;
+}
+
+.settings-danger-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--theme-text-muted);
+}
+
+.settings-delete-account-btn {
+  justify-self: start;
+  border: 1px solid rgba(179, 41, 41, 0.45);
+  background: transparent;
+  color: #b32929;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.settings-delete-account-btn:hover:not(:disabled) {
+  background: rgba(179, 41, 41, 0.08);
+  border-color: rgba(179, 41, 41, 0.62);
+}
+
+.settings-delete-account-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 @media (max-width: 900px) {
   .settings-theme-grid {
     grid-template-columns: 1fr;
