@@ -350,6 +350,21 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
   }, [persistActiveGalleryId, syncFolderCounts, user.uid])
 
+  const handleGalleryCreated = useCallback((galerieCreata) => {
+    if (!galerieCreata?.id) return
+
+    setGalerii((prev) => {
+      const next = [galerieCreata, ...prev.filter((galerie) => galerie.id !== galerieCreata.id)]
+      return next.sort((a, b) => {
+        const dateA = a?.createdAt?.toDate?.() || (a?.data ? new Date(a.data) : null) || new Date(0)
+        const dateB = b?.createdAt?.toDate?.() || (b?.data ? new Date(b.data) : null) || new Date(0)
+        return dateB.getTime() - dateA.getTime()
+      })
+    })
+
+    handleDeschideGalerie(galerieCreata)
+  }, [handleDeschideGalerie])
+
   // Redeschide ultima galerie după refresh, fără să blocheze navigarea prin URL.
   useEffect(() => {
     if (activeTab !== 'galerii') return
@@ -768,6 +783,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             userPlan={userPlan}
             storageLimit={storageLimit}
             onDeschideGalerie={handleDeschideGalerie}
+            onGalleryCreated={handleGalleryCreated}
             onMoveToTrash={handleMoveToTrash}
             onDeletePermanently={handleDeletePermanently}
             onRestore={handleRestoreGalerie}

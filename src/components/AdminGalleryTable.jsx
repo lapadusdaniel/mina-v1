@@ -423,6 +423,7 @@ export default function AdminGalleryTable({
   userPlan: userPlanProp,
   storageLimit: storageLimitProp,
   onDeschideGalerie,
+  onGalleryCreated,
   onMoveToTrash,
   onDeletePermanently,
   onRestore,
@@ -780,6 +781,7 @@ export default function AdminGalleryTable({
             mode="create"
             open={createModalOpen}
             initialFiles={createModalFiles}
+            onCreated={onGalleryCreated}
             onClose={closeCreateModal}
           />
         </div>
