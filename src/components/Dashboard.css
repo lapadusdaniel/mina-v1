@@ -1487,7 +1487,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px 40px 10px;
+  padding: 0 40px;
+  height: 44px;
   border-bottom: 1px solid var(--theme-border);
   background: var(--theme-bg);
 }
@@ -1495,60 +1496,65 @@
 .dashboard-folders-list {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  min-height: 38px;
+  gap: 0;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dashboard-folders-list::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-folder-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border: 1px solid var(--theme-border);
-  background: var(--theme-bg-card);
+  gap: 6px;
+  height: 100%;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
   color: var(--theme-text-muted);
-  border-radius: 999px;
-  padding: 6px 12px;
   font-family: var(--theme-font-body);
-  font-size: 12.5px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 14px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .dashboard-folder-chip:hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 45%, transparent);
   color: var(--theme-text);
 }
 
 .dashboard-folder-chip.is-active {
-  border-color: var(--theme-accent);
-  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
   color: var(--theme-text);
+  border-bottom-color: var(--theme-text);
 }
 
 .dashboard-folder-chip-count {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--theme-border) 85%, transparent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   font-size: 11px;
-  font-weight: 600;
+  color: var(--theme-text-muted);
+  font-weight: 400;
+}
+
+.dashboard-folder-chip.is-active .dashboard-folder-chip-count {
+  color: var(--theme-text);
 }
 
 .dashboard-folder-loading {
   font-family: var(--theme-font-body);
   font-size: 12px;
   color: var(--theme-text-muted);
+  padding: 0 14px;
 }
 
 .dashboard-folders-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .dashboard-folder-add-btn,
@@ -1556,31 +1562,31 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
-  border-radius: 100px;
+  height: 30px;
+  border-radius: 6px;
   border: 1px solid var(--theme-border);
-  background: var(--theme-bg-card);
-  color: var(--theme-text);
+  background: transparent;
+  color: var(--theme-text-muted);
   font-family: var(--theme-font-body);
-  font-size: 12.5px;
-  padding: 0 12px;
+  font-size: 12px;
+  padding: 0 10px;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .dashboard-folder-add-btn:hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
-  color: var(--theme-accent);
+  color: var(--theme-text);
+  border-color: var(--theme-text-muted);
 }
 
 .dashboard-folder-delete-btn {
   color: #b32929;
-  border-color: rgba(179, 41, 41, 0.32);
+  border-color: rgba(179, 41, 41, 0.3);
 }
 
 .dashboard-folder-delete-btn:hover {
-  background: rgba(179, 41, 41, 0.08);
+  background: rgba(179, 41, 41, 0.06);
   border-color: rgba(179, 41, 41, 0.5);
 }
 
@@ -2732,7 +2738,6 @@
   .dashboard-controlbar { padding: 16px 28px; }
   .dashboard-content { padding: 28px 28px 60px; }
   .dashboard-gallery-header { padding: 0 28px; }
-  .dashboard-folders-section { padding: 14px 28px 10px; }
   .dashboard-gallery-content { padding: 28px; }
 }
 
@@ -2879,35 +2884,6 @@
   .dashboard-header-actions .dashboard-preview-btn,
   .dashboard-header-actions .dashboard-add-poze-btn,
   .dashboard-add-poze-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .dashboard-folders-section {
-    padding: 12px 16px;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .dashboard-folders-list {
-    width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
-    flex-wrap: nowrap;
-    padding-bottom: 4px;
-  }
-
-  .dashboard-folder-chip {
-    flex: 0 0 auto;
-  }
-
-  .dashboard-folders-actions {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .dashboard-folder-add-btn,
-  .dashboard-folder-delete-btn {
     width: 100%;
     justify-content: center;
   }
