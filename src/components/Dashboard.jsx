@@ -46,6 +46,7 @@ const MEDIUM_MAX_DIMENSION = 2048
 const MEDIUM_QUALITY = 0.90
 const THUMB_MAX_DIMENSION = 800
 const THUMB_QUALITY = 0.92
+const CARD_LOGO_PATH = (userId) => `branding/${userId}/logo.png`
 
 function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const navigate = useNavigate()
@@ -77,16 +78,21 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
   // Profile / Branding State
   const [profileData, setProfileData] = useState({
+    logoUrl: '',
     numeBrand: '',
     slogan: '',
+    accentColor: '#1d1d1f',
     whatsapp: '',
     instagram: '',
     email: '',
-    website: ''
+    website: '',
   })
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
-  
+  const [cardLogoPreview, setCardLogoPreview] = useState(null)
+  const [cardLogoUploading, setCardLogoUploading] = useState(false)
+
+  const cardLogoInputRef = useRef(null)
   const fileInputRef = useRef(null)
   const metadataBackfillQueueRef = useRef(new Set())
   const lastSyncedStorageBytesRef = useRef(null)
@@ -633,38 +639,127 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
   useEffect(() => {
     if (!user?.uid || activeTab !== 'card') return
-    setProfileLoading(true)
-    sitesService.getCardProfile(user.uid)
-      .then((d) => {
-        if (d) {
-          setProfileData({
-            numeBrand: d.numeBrand ?? '',
-            slogan: d.slogan ?? '',
-            whatsapp: d.whatsapp ?? d.telefon ?? '',
-            instagram: d.instagram ?? '',
-            email: d.email ?? '',
-            website: d.website ?? ''
-          })
+    let cancelled = false
+
+    const loadCardProfile = async () => {
+      setProfileLoading(true)
+      try {
+        const [cardData, brandingData] = await Promise.all([
+          sitesService.getCardProfile(user.uid),
+          sitesService.getProfile(user.uid).catch(() => null),
+        ])
+
+        if (cancelled) return
+
+        const mergedProfile = {
+          logoUrl: cardData?.logoUrl ?? brandingData?.logoUrl ?? '',
+          numeBrand: cardData?.numeBrand ?? brandingData?.brandName ?? '',
+          slogan: cardData?.slogan ?? '',
+          accentColor: cardData?.accentColor ?? brandingData?.accentColor ?? '#1d1d1f',
+          whatsapp: cardData?.whatsapp ?? cardData?.telefon ?? brandingData?.whatsappNumber ?? '',
+          instagram: cardData?.instagram ?? brandingData?.instagramUrl ?? '',
+          email: cardData?.email ?? brandingData?.emailContact ?? '',
+          website: cardData?.website ?? brandingData?.websiteUrl ?? '',
         }
-        setProfileLoading(false)
-      })
-      .catch(() => setProfileLoading(false))
+
+        setProfileData(mergedProfile)
+
+        if (mergedProfile.logoUrl) {
+          try {
+            const logoUrl = await mediaService.getBrandingAsset(mergedProfile.logoUrl)
+            if (!cancelled) setCardLogoPreview(logoUrl)
+          } catch (_) {
+            if (!cancelled) setCardLogoPreview(null)
+          }
+        } else {
+          setCardLogoPreview(null)
+        }
+      } catch (error) {
+        console.error('Error loading card profile:', error)
+      } finally {
+        if (!cancelled) setProfileLoading(false)
+      }
+    }
+
+    loadCardProfile()
+    return () => { cancelled = true }
   }, [user?.uid, activeTab])
 
   const saveProfileSettings = async (e) => {
     e?.preventDefault?.()
+    if (!user?.uid) return
+
+    const normalizedProfile = {
+      logoUrl: String(profileData.logoUrl || '').trim(),
+      numeBrand: String(profileData.numeBrand || '').trim(),
+      slogan: String(profileData.slogan || '').trim(),
+      accentColor: String(profileData.accentColor || '#1d1d1f').trim() || '#1d1d1f',
+      whatsapp: String(profileData.whatsapp || '').trim(),
+      instagram: String(profileData.instagram || '').trim(),
+      email: String(profileData.email || '').trim(),
+      website: String(profileData.website || '').trim(),
+    }
+
     setProfileSaving(true)
     try {
       await sitesService.saveCardProfile(
         user.uid,
-        { ...profileData, updatedAt: new Date() },
+        { ...normalizedProfile, updatedAt: new Date() },
         { merge: true }
       )
+
+      // Keep public profile in sync for gallery/site branding compatibility.
+      await sitesService.saveProfile(
+        user.uid,
+        {
+          brandName: normalizedProfile.numeBrand,
+          instagramUrl: normalizedProfile.instagram,
+          whatsappNumber: normalizedProfile.whatsapp,
+          websiteUrl: normalizedProfile.website,
+          emailContact: normalizedProfile.email,
+          accentColor: normalizedProfile.accentColor,
+          logoUrl: normalizedProfile.logoUrl,
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      )
+
       alert('Modificările au fost salvate.')
     } catch (err) {
       console.error('Error:', err)
+      alert('Nu am putut salva datele cardului. Încearcă din nou.')
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  const handleCardLogoChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file || !user?.uid) return
+
+    if (!file.type.startsWith('image/')) {
+      alert('Selectează un fișier imagine (PNG, JPG).')
+      return
+    }
+
+    setCardLogoUploading(true)
+    try {
+      const path = CARD_LOGO_PATH(user.uid)
+      const idToken = await authService.getCurrentIdToken()
+      await mediaService.uploadFileToPath(file, path, undefined, idToken)
+      const logoUrl = await mediaService.getBrandingAsset(path)
+
+      setCardLogoPreview(logoUrl)
+      setProfileData((prev) => ({ ...prev, logoUrl: path }))
+
+      await sitesService.saveCardProfile(user.uid, { logoUrl: path, updatedAt: new Date() }, { merge: true })
+      await sitesService.saveProfile(user.uid, { logoUrl: path, updatedAt: new Date() }, { merge: true })
+    } catch (error) {
+      console.error(error)
+      alert('Eroare la încărcarea logo-ului.')
+    } finally {
+      setCardLogoUploading(false)
+      if (cardLogoInputRef.current) cardLogoInputRef.current.value = ''
     }
   }
 
@@ -792,53 +887,130 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         {activeTab === 'card' && (
           <div className="brand-card-container">
             <div className="brand-card-editor">
-              <h2 className="brand-card-title">Identitate de brand</h2>
+              <h2 className="brand-card-title">Card fotograf</h2>
               {profileLoading ? (
                 <p>Se încarcă...</p>
               ) : (
                 <form onSubmit={saveProfileSettings} className="brand-card-form">
                   <div className="brand-card-form-group">
-                    <label>Nume Brand</label>
+                    <label>Logo</label>
                     <input
+                      ref={cardLogoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCardLogoChange}
+                      style={{ display: 'none' }}
+                    />
+                    <div className="brand-card-logo-row">
+                      <button
+                        type="button"
+                        className="btn-secondary brand-card-logo-btn"
+                        onClick={() => cardLogoInputRef.current?.click()}
+                        disabled={cardLogoUploading}
+                      >
+                        {cardLogoUploading ? 'Se încarcă...' : 'Încarcă logo'}
+                      </button>
+                      {cardLogoPreview ? (
+                        <img src={cardLogoPreview} alt="Logo" className="brand-card-logo-preview" />
+                      ) : (
+                        <span className="brand-card-logo-placeholder">Fără logo</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="brand-card-form-group">
+                    <label>Nume brand</label>
+                    <input
+                      className="brand-card-input"
                       type="text"
                       value={profileData.numeBrand}
-                      onChange={(e) => setProfileData(p => ({ ...p, numeBrand: e.target.value }))}
+                      onChange={(e) => setProfileData((p) => ({ ...p, numeBrand: e.target.value }))}
                       placeholder="Ex: Studio Foto XYZ"
                     />
                   </div>
+
                   <div className="brand-card-form-group">
                     <label>Slogan</label>
                     <input
+                      className="brand-card-input"
                       type="text"
                       value={profileData.slogan}
-                      onChange={(e) => setProfileData(p => ({ ...p, slogan: e.target.value }))}
+                      onChange={(e) => setProfileData((p) => ({ ...p, slogan: e.target.value }))}
                       placeholder="Ex: Fotografii care spun povești"
                     />
                   </div>
+
                   <div className="brand-card-form-group">
-                    <label>WhatsApp / Instagram / Email</label>
+                    <label>Culoare accent</label>
+                    <div className="brand-card-color-row">
+                      <input
+                        className="brand-card-color-input"
+                        type="color"
+                        value={profileData.accentColor || '#1d1d1f'}
+                        onChange={(e) => setProfileData((p) => ({ ...p, accentColor: e.target.value }))}
+                      />
+                      <input
+                        className="brand-card-input brand-card-color-text"
+                        type="text"
+                        value={profileData.accentColor || '#1d1d1f'}
+                        onChange={(e) => setProfileData((p) => ({ ...p, accentColor: e.target.value }))}
+                        placeholder="#1d1d1f"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="brand-card-form-group">
+                    <label>WhatsApp</label>
                     <input
+                      className="brand-card-input"
                       type="tel"
                       value={profileData.whatsapp}
-                      onChange={(e) => setProfileData(p => ({ ...p, whatsapp: e.target.value }))}
-                      placeholder="WhatsApp"
-                    />
-                    <input
-                      type="text"
-                      value={profileData.instagram}
-                      onChange={(e) => setProfileData(p => ({ ...p, instagram: e.target.value }))}
-                      placeholder="Instagram"
-                    />
-                    <input
-                      type="email"
-                      value={profileData.email}
-                      onChange={(e) => setProfileData(p => ({ ...p, email: e.target.value }))}
-                      placeholder="Email de contact"
+                      onChange={(e) => setProfileData((p) => ({ ...p, whatsapp: e.target.value }))}
+                      placeholder="+40 712 345 678"
                     />
                   </div>
-                  <button type="submit" className="btn-primary" disabled={profileSaving}>
-                    {profileSaving ? 'Se salvează...' : 'Salvează modificările'}
-                  </button>
+
+                  <div className="brand-card-form-group">
+                    <label>Instagram</label>
+                    <input
+                      className="brand-card-input"
+                      type="text"
+                      value={profileData.instagram}
+                      onChange={(e) => setProfileData((p) => ({ ...p, instagram: e.target.value }))}
+                      placeholder="@username sau link complet"
+                    />
+                  </div>
+
+                  <div className="brand-card-form-group">
+                    <label>Email contact</label>
+                    <input
+                      className="brand-card-input"
+                      type="email"
+                      value={profileData.email}
+                      onChange={(e) => setProfileData((p) => ({ ...p, email: e.target.value }))}
+                      placeholder="contact@studio.ro"
+                    />
+                  </div>
+
+                  <div className="brand-card-form-group">
+                    <label>Website</label>
+                    <input
+                      className="brand-card-input"
+                      type="url"
+                      value={profileData.website}
+                      onChange={(e) => setProfileData((p) => ({ ...p, website: e.target.value }))}
+                      placeholder="https://exemplu.ro"
+                    />
+                  </div>
+
+                  <div className="brand-card-actions">
+                    <button type="submit" className="btn-primary" disabled={profileSaving}>
+                      {profileSaving ? 'Se salvează...' : 'Salvează cardul'}
+                    </button>
+                    <a className="brand-card-copy-link" href={'/card/' + (user?.uid || '')} target="_blank" rel="noreferrer">
+                      Vezi cardul public
+                    </a>
+                  </div>
                 </form>
               )}
             </div>

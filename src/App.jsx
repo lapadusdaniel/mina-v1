@@ -14,6 +14,7 @@ const ClientGallery = lazy(() => import('./components/ClientGallery.jsx'))
 const PhotographerSite = lazy(() => import('./components/PhotographerSite.jsx'))
 const LandingPage = lazy(() => import('./components/LandingPage.jsx'))
 const AdminPanel = lazy(() => import('./components/AdminPanel.jsx'))
+const PhotographerCard = lazy(() => import('./pages/PhotographerCard.jsx'))
 
 const authService = getAppServices().auth
 const sitesService = getAppServices().sites
@@ -209,6 +210,7 @@ function App() {
         <Route path="/refund" element={<Refund />} />
         <Route path="/g/:slug" element={<GallerySlugRouter />} />
         <Route path="/gallery/:id" element={<ClientGallery />} />
+        <Route path="/card/:uid" element={<PhotographerCard />} />
         <Route path="/" element={<LandingPage user={user} />} />
         <Route path="/:slug" element={<SlugRouter />} />
         <Route path="*" element={<Navigate to="/" replace />} />

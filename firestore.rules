@@ -310,7 +310,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Dashboard card profile: /users/{uid}/settings/profile
+    // Public card profile data: /users/{uid}/profile/main
+    match /users/{userId}/profile/{profileId} {
+      allow read: if true;
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Dashboard card legacy profile path: /users/{uid}/settings/profile
     match /users/{userId}/settings/{settingId} {
       allow read, create, update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();

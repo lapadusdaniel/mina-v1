@@ -1,89 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth } from '../firebase'
-import { getAppServices } from '../core/bootstrap/appBootstrap'
 import SubscriptionSection from '../components/SubscriptionSection'
 import './Settings.css'
 
-const { auth: authService, sites: sitesService, media: mediaService } = getAppServices()
-
-const LOGO_PATH = (userId) => `branding/${userId}/logo.png`
-const DEFAULTS = {
-  brandName: 'My Gallery',
-  instagramUrl: '',
-  whatsappNumber: '',
-  websiteUrl: '',
-  accentColor: '#000000',
-  logoUrl: '',
-}
-
 export default function Settings({ user, theme, setTheme, userPlan, storageLimit, checkAccess }) {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('branding')
-  const [form, setForm] = useState({ ...DEFAULTS })
-  const [logoPreview, setLogoPreview] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [logoUploading, setLogoUploading] = useState(false)
+  const [activeTab, setActiveTab] = useState('theme')
   const [deletingAccount, setDeletingAccount] = useState(false)
-  const fileInputRef = useRef(null)
-
-  useEffect(() => {
-    if (!user?.uid) return
-    const load = async () => {
-      try {
-        const data = await sitesService.getProfile(user.uid)
-        if (data) {
-          setForm({
-            brandName: data.brandName ?? DEFAULTS.brandName,
-            instagramUrl: data.instagramUrl ?? '',
-            whatsappNumber: data.whatsappNumber ?? '',
-            websiteUrl: data.websiteUrl ?? '',
-            accentColor: data.accentColor ?? DEFAULTS.accentColor,
-            logoUrl: data.logoUrl ?? '',
-          })
-
-          if (data.logoUrl) {
-            try {
-              const url = await mediaService.getBrandingAsset(data.logoUrl)
-              setLogoPreview(url)
-            } catch {
-              setLogoPreview(null)
-            }
-          }
-        }
-      } catch (error) {
-        console.error(error)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [user?.uid])
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    if (!user?.uid) return
-
-    setSaving(true)
-    try {
-      await sitesService.saveProfile(
-        user.uid,
-        {
-          ...form,
-          brandName: form.brandName.trim() || DEFAULTS.brandName,
-          updatedAt: new Date(),
-        },
-        { merge: true }
-      )
-      alert('Setările au fost salvate.')
-    } catch (error) {
-      console.error(error)
-      alert('Eroare la salvare.')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm('Ești sigur? Toate galeriile și pozele tale vor fi șterse permanent. Această acțiune nu poate fi anulată.')
@@ -109,54 +33,14 @@ export default function Settings({ user, theme, setTheme, userPlan, storageLimit
     }
   }
 
-  const handleLogoChange = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file || !user?.uid) return
-
-    if (!file.type.startsWith('image/')) {
-      alert('Selectează un fișier imagine (PNG, JPG).')
-      return
-    }
-
-    setLogoUploading(true)
-    try {
-      const path = LOGO_PATH(user.uid)
-      const idToken = await authService.getCurrentIdToken()
-      await mediaService.uploadFileToPath(file, path, undefined, idToken)
-      const blobUrl = await mediaService.getBrandingAsset(path)
-      setLogoPreview(blobUrl)
-      setForm((prev) => ({ ...prev, logoUrl: path }))
-      await sitesService.saveProfile(user.uid, { logoUrl: path, updatedAt: new Date() }, { merge: true })
-    } catch (error) {
-      console.error(error)
-      alert('Eroare la încărcarea logo-ului.')
-    } finally {
-      setLogoUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  if (loading) {
-    return <div className="settings-loading">Se încarcă...</div>
-  }
-
   return (
     <div className="settings-page">
       <div className="settings-header">
         <h2>Setări</h2>
-        <p>Controlezi brandingul, tema și zona de abonament dintr-un singur loc.</p>
+        <p>Tema și zona de abonament/facturare sunt gestionate aici. Branding-ul este unificat în tab-ul Card.</p>
       </div>
 
       <div className="settings-tabs" role="tablist" aria-label="Setări">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'branding'}
-          className={`settings-tab-btn ${activeTab === 'branding' ? 'is-active' : ''}`}
-          onClick={() => setActiveTab('branding')}
-        >
-          Branding
-        </button>
         <button
           type="button"
           role="tab"
@@ -176,100 +60,6 @@ export default function Settings({ user, theme, setTheme, userPlan, storageLimit
           Abonament & Facturare
         </button>
       </div>
-
-      {activeTab === 'branding' && (
-        <section className="settings-panel" role="tabpanel" aria-label="Branding">
-          <h3 className="settings-panel-title">Branding</h3>
-
-          <form onSubmit={handleSubmit} className="st-form">
-            <div className="st-field">
-              <label>Logo</label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleLogoChange}
-                style={{ display: 'none' }}
-              />
-              <div className="st-logo-row">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={logoUploading}
-                  className="btn-secondary"
-                >
-                  {logoUploading ? 'Se încarcă...' : 'Încarcă logo'}
-                </button>
-                {logoPreview && (
-                  <img src={logoPreview} alt="Logo" className="st-logo-preview" />
-                )}
-              </div>
-            </div>
-
-            <div className="st-field">
-              <label>Nume brand</label>
-              <input
-                type="text"
-                value={form.brandName}
-                onChange={(e) => setForm((prev) => ({ ...prev, brandName: e.target.value }))}
-                placeholder={DEFAULTS.brandName}
-              />
-            </div>
-
-            <div className="st-field">
-              <label>Culoare accent</label>
-              <div className="st-color-row">
-                <input
-                  type="color"
-                  value={form.accentColor}
-                  onChange={(e) => setForm((prev) => ({ ...prev, accentColor: e.target.value }))}
-                  className="st-color-input"
-                />
-                <input
-                  type="text"
-                  value={form.accentColor}
-                  onChange={(e) => setForm((prev) => ({ ...prev, accentColor: e.target.value }))}
-                  className="st-color-text"
-                />
-              </div>
-            </div>
-
-            <div className="st-field">
-              <label>WhatsApp</label>
-              <input
-                type="text"
-                value={form.whatsappNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, whatsappNumber: e.target.value }))}
-                placeholder="+40 712 345 678"
-              />
-            </div>
-
-            <div className="st-field">
-              <label>Instagram</label>
-              <input
-                type="text"
-                value={form.instagramUrl}
-                onChange={(e) => setForm((prev) => ({ ...prev, instagramUrl: e.target.value }))}
-                placeholder="https://instagram.com/username sau @username"
-              />
-            </div>
-
-            <div className="st-field">
-              <label>Website</label>
-              <input
-                type="url"
-                value={form.websiteUrl}
-                onChange={(e) => setForm((prev) => ({ ...prev, websiteUrl: e.target.value }))}
-                placeholder="https://example.com"
-              />
-            </div>
-
-            <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? 'Se salvează...' : 'Salvează setările'}
-            </button>
-          </form>
-        </section>
-      )}
 
       {activeTab === 'theme' && (
         <section className="settings-panel" role="tabpanel" aria-label="Temă">

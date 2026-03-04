@@ -7,6 +7,9 @@ function firstOrNull(snapshot) {
 }
 
 export function createSitesModule({ db }) {
+  const getNewCardProfileRef = (uid) => doc(db, 'users', uid, 'profile', 'main')
+  const getLegacyCardProfileRef = (uid) => doc(db, 'users', uid, 'settings', 'profile')
+
   return {
     async resolveSlugTarget(slug) {
       if (!slug) return 'notfound'
@@ -68,13 +71,22 @@ export function createSitesModule({ db }) {
 
     async getCardProfile(uid) {
       if (!uid) return null
-      const snap = await getDoc(doc(db, 'users', uid, 'settings', 'profile'))
-      return snap.exists() ? snap.data() : null
+      const snap = await getDoc(getNewCardProfileRef(uid))
+      if (snap.exists()) return snap.data()
+
+      try {
+        const legacySnap = await getDoc(getLegacyCardProfileRef(uid))
+        return legacySnap.exists() ? legacySnap.data() : null
+      } catch (_) {
+        return null
+      }
     },
 
     async saveCardProfile(uid, data, { merge = true } = {}) {
       if (!uid) throw new Error('saveCardProfile: uid este obligatoriu')
-      await setDoc(doc(db, 'users', uid, 'settings', 'profile'), data, { merge })
+      await setDoc(getNewCardProfileRef(uid), data, { merge })
+      // Keep legacy path in sync temporarily to avoid breaking older reads.
+      await setDoc(getLegacyCardProfileRef(uid), data, { merge })
     },
 
     async getGalleriesByIds(ids = []) {

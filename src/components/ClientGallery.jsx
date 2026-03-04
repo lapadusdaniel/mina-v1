@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import Lightbox, { useLightboxState } from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import { Zoom, Thumbnails } from 'yet-another-react-lightbox/plugins';
@@ -321,6 +321,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     brandName: '', logoUrl: '', instagramUrl: '', whatsappNumber: '',
     websiteUrl: '', accentColor: '#b8965a', logoPreviewUrl: null
   });
+  const [hasPublicCardProfile, setHasPublicCardProfile] = useState(false);
 
   const contentRef = useRef(null);
   const reviewSectionRef = useRef(null);
@@ -503,6 +504,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       setEroare(null);
       setActiveClientFolderId('all');
       setClientFolders([]);
+      setHasPublicCardProfile(false);
       try {
         const effectiveGalleryId = resolvedGalleryId || galleryId
         const dateGal = effectiveGalleryId
@@ -526,31 +528,63 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         if (dateGal.userId) {
           const userId = dateGal.userId;
 
-          // Un singur call pentru profil — temă + branding
+          // Single fetch sequence for branding + public card availability.
           try {
-            const profileData = await sitesService.getProfile(userId);
+            const [profileData, cardData] = await Promise.all([
+              sitesService.getProfile(userId),
+              sitesService.getCardProfile(userId).catch(() => null),
+            ]);
 
-            // Aplică tema
+            const hasCardData = Boolean(
+              cardData
+              && [
+                cardData.numeBrand,
+                cardData.slogan,
+                cardData.whatsapp,
+                cardData.instagram,
+                cardData.email,
+                cardData.website,
+                cardData.logoUrl,
+              ].some((value) => String(value || '').trim().length > 0)
+            );
+            setHasPublicCardProfile(hasCardData);
+
+            // Apply photographer theme.
             const theme = profileData?.theme;
             if (theme && VALID_THEMES.includes(theme)) {
               document.documentElement.setAttribute('data-theme', theme);
             }
 
-            // Setează branding
+            // Apply branding used inside gallery.
             if (profileData) {
               let logoPreviewUrl = null;
               if (profileData.logoUrl) {
                 try { logoPreviewUrl = await mediaService.getBrandingAsset(profileData.logoUrl); } catch (_) {}
               }
               setProfile({
-                brandName: profileData.brandName || '',
-                logoUrl: profileData.logoUrl || '',
-                instagramUrl: profileData.instagramUrl || '',
-                whatsappNumber: profileData.whatsappNumber || '',
-                websiteUrl: profileData.websiteUrl || '',
-                accentColor: profileData.accentColor || '#b8965a',
+                brandName: profileData.brandName || cardData?.numeBrand || '',
+                logoUrl: profileData.logoUrl || cardData?.logoUrl || '',
+                instagramUrl: profileData.instagramUrl || cardData?.instagram || '',
+                whatsappNumber: profileData.whatsappNumber || cardData?.whatsapp || '',
+                websiteUrl: profileData.websiteUrl || cardData?.website || '',
+                accentColor: profileData.accentColor || cardData?.accentColor || '#b8965a',
                 logoPreviewUrl,
               });
+            } else if (cardData) {
+              let logoPreviewUrl = null;
+              if (cardData.logoUrl) {
+                try { logoPreviewUrl = await mediaService.getBrandingAsset(cardData.logoUrl); } catch (_) {}
+              }
+              setProfile((p) => ({
+                ...p,
+                brandName: cardData.numeBrand || '',
+                logoUrl: cardData.logoUrl || '',
+                instagramUrl: cardData.instagram || '',
+                whatsappNumber: cardData.whatsapp || '',
+                websiteUrl: cardData.website || '',
+                accentColor: cardData.accentColor || p.accentColor,
+                logoPreviewUrl,
+              }));
             } else {
               const legacy = await sitesService.getLegacySettings(userId);
               if (legacy) {
@@ -564,6 +598,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
             }
           } catch (e) {
             console.error(e);
+            setHasPublicCardProfile(false);
           }
         }
 
@@ -1303,7 +1338,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
               )}
             </>
           )}
-          <p className="cg-footer-copy">Galerie creată cu Mina</p>
+          {hasPublicCardProfile && galerie?.userId ? (
+            <Link to={'/card/' + galerie.userId} className="cg-footer-copy cg-footer-copy-link">
+              Galerie creată cu Mina
+            </Link>
+          ) : (
+            <p className="cg-footer-copy">Galerie creată cu Mina</p>
+          )}
         </footer>
       </div>
 
@@ -1972,6 +2013,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           font-weight: 300;
           color: #c0c0c8;
           letter-spacing: 0.02em;
+        }
+        .cg-footer-copy-link {
+          text-decoration: none;
+          transition: color 0.15s ease;
+        }
+        .cg-footer-copy-link:hover {
+          color: #8f8f98;
         }
 
         /* ── Modal ── */
