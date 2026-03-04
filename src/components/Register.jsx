@@ -118,7 +118,7 @@ function Register({ onRegister, onSwitchToLogin }) {
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <h1 style={{ margin: '0 0 8px' }}>
-            <span style={{
+            <Link to="/" style={{
   fontFamily: "'Cormorant Garamond', Georgia, serif",
   fontWeight: 300,
   fontSize: '2.2rem',
@@ -126,7 +126,7 @@ function Register({ onRegister, onSwitchToLogin }) {
   color: '#1d1d1f',
   fontStyle: 'normal',
   textDecoration: 'none'
-}}>MINA</span>
+}}>MINA</Link>
           </h1>
           <p style={{
             fontSize: '15px',
