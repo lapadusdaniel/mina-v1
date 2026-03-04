@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 
 const authService = getAppServices().auth
@@ -259,6 +260,12 @@ function Register({ onRegister, onSwitchToLogin }) {
             >
               {loading ? 'Se creează contul...' : 'Creează cont gratuit'}
             </button>
+            <p style={{ fontSize: '13px', color: '#6e6e73', textAlign: 'center', marginTop: '12px', lineHeight: 1.6 }}>
+              Prin crearea contului, accepți{' '}
+              <Link to="/termeni" style={{ color: '#1d1d1f', textDecoration: 'underline' }}>Termenii și Condițiile</Link>
+              {' '}și{' '}
+              <Link to="/confidentialitate" style={{ color: '#1d1d1f', textDecoration: 'underline' }}>Politica de Confidențialitate</Link>.
+            </p>
           </form>
 
           <p style={{

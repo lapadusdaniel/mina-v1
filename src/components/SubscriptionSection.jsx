@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
 import BillingSettings from './BillingSettings';
 import BillingHistory from './BillingHistory';
@@ -423,6 +424,14 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
               <span>Add-on storage</span>
               <strong>{addonActive ? 'Activ (+500 GB)' : 'Inactiv'}</strong>
             </div>
+          </div>
+
+          <div style={{ marginTop: '16px', fontSize: '13px', color: '#6e6e73' }}>
+            <Link to="/termeni" style={{ color: '#6e6e73', textDecoration: 'underline' }}>Termeni</Link>
+            {' · '}
+            <Link to="/confidentialitate" style={{ color: '#6e6e73', textDecoration: 'underline' }}>Confidențialitate</Link>
+            {' · '}
+            <Link to="/refund" style={{ color: '#6e6e73', textDecoration: 'underline' }}>Refund</Link>
           </div>
 
           {activeSubscription && (
