@@ -343,6 +343,21 @@ export default function GallerySettingsModal({
                 </button>
               </div>
 
+              {formState.storageMode === 'lifetime' && (
+                <>
+                  <label className="gallery-config-label">Perioadă</label>
+                  <select
+                    value={formState.storageDuration}
+                    onChange={(event) => setField('storageDuration', event.target.value)}
+                    className="gallery-config-input"
+                  >
+                    {STORAGE_DURATION_OPTIONS.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                </>
+              )}
+
               <div className="gallery-config-create-toggle-wrap">
                 <ToggleField
                   label="Permite descărcarea fișierelor originale"

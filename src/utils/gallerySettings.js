@@ -190,6 +190,7 @@ export async function buildGalleryPayload({
     categoria: formState.category || 'Nunți',
     dataEveniment: formState.shootDate ? new Date(formState.shootDate).toISOString() : null,
     dataExpirare: expiryIso,
+    storageDuration: formState.storageMode === 'lifetime' ? String(formState.storageDuration || '1year') : null,
     settings,
 
     // Compatibility fields already consumed in existing flows.
