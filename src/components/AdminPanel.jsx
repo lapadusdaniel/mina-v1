@@ -6,6 +6,7 @@ import {
   CheckCircle, Ban, Trash2, Edit3, Eye
 } from 'lucide-react'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import { getGalleryPublicPath } from '../utils/publicLinks'
 import './AdminPanel.css'
 
 const appServices = getAppServices()
@@ -422,7 +423,7 @@ function GaleriiSection({ galerii, loading }) {
                     <td>
                       <div className="ap-row-actions">
                         {g.id && (
-                          <a href={`/gallery/${g.id}`} target="_blank" rel="noreferrer" className="ap-row-btn" title="Deschide">
+                          <a href={getGalleryPublicPath(g)} target="_blank" rel="noreferrer" className="ap-row-btn" title="Deschide">
                             <Eye size={14} />
                           </a>
                         )}

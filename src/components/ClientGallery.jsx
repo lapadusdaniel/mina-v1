@@ -271,14 +271,14 @@ function LightboxDownloadButton({ pozeAfisate, isDownloading, setDownloading }) 
   );
 }
 
-const ClientGallery = () => {
+const ClientGallery = ({ resolvedGalleryId = null }) => {
   const { slug, id: galleryId } = useParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile(768);
 
   useEffect(() => {
-    if (!slug && !galleryId) { navigate('/', { replace: true }); }
-  }, [slug, galleryId, navigate]);
+    if (!slug && !galleryId && !resolvedGalleryId) { navigate('/', { replace: true }); }
+  }, [slug, galleryId, resolvedGalleryId, navigate]);
 
   const [galerie, setGalerie] = useState(null);
   const [poze, setPoze] = useState([]);
@@ -465,8 +465,9 @@ const ClientGallery = () => {
       setLoading(true);
       setEroare(null);
       try {
-        const dateGal = galleryId
-          ? await galleriesService.getGalleryById(galleryId)
+        const effectiveGalleryId = resolvedGalleryId || galleryId
+        const dateGal = effectiveGalleryId
+          ? await galleriesService.getGalleryById(effectiveGalleryId)
           : await galleriesService.getGalleryBySlug(slug);
         if (!dateGal) {
           setEroare('Galeria nu a fost găsită.');
@@ -558,8 +559,8 @@ const ClientGallery = () => {
       }
     };
 
-    if (slug || galleryId) fetchDate();
-  }, [slug, galleryId, loadGalleryPhotos]);
+    if (slug || galleryId || resolvedGalleryId) fetchDate();
+  }, [slug, galleryId, resolvedGalleryId, loadGalleryPhotos]);
 
   useEffect(() => {
     if (!galerie?.id || !numeSelectie) return;
@@ -843,7 +844,7 @@ const ClientGallery = () => {
   // Lightbox plugins — no Thumbnails on mobile (they stack vertically and break layout)
   const lightboxPlugins = isMobile ? [Zoom] : [Zoom, Thumbnails];
 
-  if (!slug && !galleryId) return null;
+  if (!slug && !galleryId && !resolvedGalleryId) return null;
 
   // Loading state
   if (loading) {

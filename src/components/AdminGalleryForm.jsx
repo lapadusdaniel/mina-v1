@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import imageCompression from 'browser-image-compression'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { addMonths, toDateInputValue } from '../utils/galleryUtils'
+import { generateSlug } from '../utils/slug'
 import { CATEGORII } from '../utils/galleryUtils'
 
 const { auth: authService, galleries: galleriesService, media: mediaService } = getAppServices()
@@ -38,11 +39,7 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
       return
     }
 
-    const generatedSlug = numeGalerie.toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
+    const generatedSlug = generateSlug(numeGalerie, dataEveniment || null)
 
     try {
       const docData = {

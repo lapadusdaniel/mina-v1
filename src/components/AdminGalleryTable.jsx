@@ -16,6 +16,7 @@ import {
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { formatBytes, formatDateRO, CATEGORII_FILTRU } from '../utils/galleryUtils'
+import { getGalleryPublicUrl } from '../utils/publicLinks'
 
 import './Dashboard.css'
 
@@ -100,9 +101,7 @@ function GalleryRow({
   const menuRef = useRef(null)
   const rowRef = useRef(null)
 
-  const galleryUrl = galerie?.id
-    ? `${window.location.origin}/gallery/${galerie.id}`
-    : ''
+  const galleryUrl = getGalleryPublicUrl(galerie)
 
   const buildSecureShareUrl = async () => {
     if (!galerie?.id) return galleryUrl
@@ -114,7 +113,9 @@ function GalleryRow({
       const shareData = await mediaService.createSecureShareToken(galerie.id, idToken, ttlHours)
       if (!shareData?.token) return galleryUrl
 
-      return `${window.location.origin}/gallery/${galerie.id}?st=${encodeURIComponent(shareData.token)}`
+      const secureUrl = new URL(galleryUrl)
+      secureUrl.searchParams.set('st', shareData.token)
+      return secureUrl.toString()
     } catch (_) {
       return galleryUrl
     }

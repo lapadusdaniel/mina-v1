@@ -123,21 +123,53 @@ export function createGalleriesModule({ db }) {
       return mapDoc(snap)
     },
 
-    async getGalleryBySlug(slug) {
-      const q = query(
-        collection(db, 'galerii'),
-        where('slug', '==', slug),
-        where('status', '==', 'active'),
-        where('statusActiv', '==', true)
-      )
+    async getGalleryIdBySlug(slug) {
+      const normalizedSlug = String(slug || '').trim().toLowerCase()
+      if (!normalizedSlug) return null
+
+      const slugSnap = await getDoc(doc(db, 'slugs', normalizedSlug))
+      if (slugSnap.exists()) {
+        const slugData = slugSnap.data() || {}
+        const galleryId = String(slugData.galleryId || '').trim()
+        if (galleryId) return galleryId
+      }
+
+      const q = query(collection(db, 'galerii'), where('slug', '==', normalizedSlug), limitQuery(1))
       const snapshot = await getDocs(q)
       if (snapshot.empty) return null
-      return mapDoc(snapshot.docs[0])
+      return snapshot.docs[0].id
+    },
+
+    async getGalleryBySlug(slug) {
+      const galleryId = await this.getGalleryIdBySlug(slug)
+      if (!galleryId) return null
+
+      const gallery = await this.getGalleryById(galleryId)
+      if (!gallery) return null
+      if (gallery.status === 'trash' || gallery.status === 'archived') return null
+      if (gallery.statusActiv === false) return null
+      return gallery
     },
 
     async createGallery(data) {
-      const docRef = await addDoc(collection(db, 'galerii'), data)
-      return { id: docRef.id }
+      const normalizedSlug = String(data?.slug || '').trim().toLowerCase()
+      const payload = normalizedSlug ? { ...data, slug: normalizedSlug } : { ...data }
+
+      const docRef = await addDoc(collection(db, 'galerii'), payload)
+
+      if (normalizedSlug) {
+        await setDoc(
+          doc(db, 'slugs', normalizedSlug),
+          {
+            galleryId: docRef.id,
+            uid: String(payload?.userId || ''),
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        )
+      }
+
+      return { id: docRef.id, slug: normalizedSlug }
     },
 
     async updateGallery(galleryId, data) {
@@ -444,6 +476,14 @@ export function createGalleriesModule({ db }) {
     },
 
     async deleteGallery(galleryId) {
+      if (!galleryId) return
+      const gallery = await this.getGalleryById(galleryId)
+      const gallerySlug = String(gallery?.slug || '').trim().toLowerCase()
+
+      if (gallerySlug) {
+        await deleteDoc(doc(db, 'slugs', gallerySlug)).catch(() => {})
+      }
+
       await deleteDoc(doc(db, 'galerii', galleryId))
     },
   }

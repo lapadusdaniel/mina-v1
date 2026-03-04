@@ -4,6 +4,7 @@ import { Settings } from 'lucide-react'
 import AdminSelections from './AdminSelections'
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import { getGalleryPublicPath } from '../utils/publicLinks'
 
 const { media: mediaService } = getAppServices()
 
@@ -112,7 +113,10 @@ export default function GalleryDetailView({
           <button
             onClick={() => {
               if (onPreview) onPreview(galerie)
-              else window.open(`/gallery/${galerie.id}`, '_blank')
+              else {
+                const previewPath = getGalleryPublicPath(galerie)
+                if (previewPath) window.open(previewPath, '_blank')
+              }
             }}
             className="dashboard-preview-btn"
           >

@@ -14,6 +14,7 @@ const AdminPanel = lazy(() => import('./components/AdminPanel.jsx'))
 
 const authService = getAppServices().auth
 const sitesService = getAppServices().sites
+const galleriesService = getAppServices().galleries
 
 function FullscreenLoader() {
   return (
@@ -101,6 +102,40 @@ function SlugRouter() {
   return <Navigate to="/" replace />
 }
 
+function GallerySlugRouter() {
+  const { slug } = useParams()
+  const [resolvedGalleryId, setResolvedGalleryId] = useState(null)
+  const [loadingSlug, setLoadingSlug] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const resolveGallerySlug = async () => {
+      if (!slug) {
+        if (!cancelled) setLoadingSlug(false)
+        return
+      }
+
+      try {
+        const galleryId = await galleriesService.getGalleryIdBySlug(slug)
+        if (!cancelled) setResolvedGalleryId(galleryId || null)
+      } catch (error) {
+        console.error('GallerySlugRouter error:', error)
+        if (!cancelled) setResolvedGalleryId(null)
+      } finally {
+        if (!cancelled) setLoadingSlug(false)
+      }
+    }
+
+    resolveGallerySlug()
+    return () => { cancelled = true }
+  }, [slug])
+
+  if (loadingSlug) return <FullscreenLoader />
+  if (!resolvedGalleryId) return <Navigate to="/" replace />
+  return <ClientGallery resolvedGalleryId={resolvedGalleryId} />
+}
+
 function AuthLayout({ children }) {
   return <div style={{ fontFamily: 'Arial, sans-serif' }}>{children}</div>
 }
@@ -166,6 +201,7 @@ function App() {
         <Route path="/dashboard" element={<ProtectedDashboard user={user} onLogout={handleLogout} theme={theme} setTheme={setTheme} />} />
         <Route path="/settings" element={<ProtectedDashboard user={user} onLogout={handleLogout} initialTab="setari" theme={theme} setTheme={setTheme} />} />
         <Route path="/admin" element={<AdminPanel user={user} />} />
+        <Route path="/g/:slug" element={<GallerySlugRouter />} />
         <Route path="/gallery/:id" element={<ClientGallery />} />
         <Route path="/" element={<LandingPage user={user} />} />
         <Route path="/:slug" element={<SlugRouter />} />

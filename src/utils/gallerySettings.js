@@ -1,3 +1,5 @@
+import { generateSlug } from './slug'
+
 export const STORAGE_DURATION_OPTIONS = [
   { key: '1month', label: '1 lună', months: 1 },
   { key: '3months', label: '3 luni', months: 3 },
@@ -91,11 +93,8 @@ export function slugifyGalleryName(name) {
   return slug || 'galerie'
 }
 
-export function createGallerySlug(name) {
-  const base = slugifyGalleryName(name)
-  const datePrefix = new Date().toISOString().slice(0, 10)
-  const randomSuffix = Math.random().toString(36).slice(2, 7)
-  return `${datePrefix}-${base}-${randomSuffix}`
+export function createGallerySlug(name, dateValue = null) {
+  return generateSlug(name, dateValue)
 }
 
 function inferDurationKeyFromDates(startDate, expiryDate) {
@@ -201,7 +200,7 @@ export async function buildGalleryPayload({
   }
 
   if (mode === 'create') {
-    payload.slug = createGallerySlug(payload.nume)
+    payload.slug = createGallerySlug(payload.nume, payload.dataEveniment)
     payload.userId = ownerUid
     payload.userName = ownerName || 'Fotograf'
     payload.poze = 0

@@ -23,6 +23,7 @@ import Settings from '../pages/Settings'
 import SubscriptionSection from './SubscriptionSection'
 import SiteEditor from './SiteEditor'
 import LaunchChecklist from './LaunchChecklist'
+import { getGalleryPublicUrl } from '../utils/publicLinks'
 
 const {
   auth: authService,
@@ -450,7 +451,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
   const handlePreview = async (galerie) => {
     if (!galerie?.id) return
-    const url = `${window.location.origin}/gallery/${galerie.id}`
+    const url = getGalleryPublicUrl(galerie)
+    if (!url) return
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
