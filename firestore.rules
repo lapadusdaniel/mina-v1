@@ -267,7 +267,8 @@ service cloud.firestore {
 
     // --- Utilizatori ---
     match /users/{userId} {
-      allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      allow get: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      allow list: if isAdmin();
       allow create: if isOwner(userId)
         && validBillingDetails(request.resource.data)
         && (
