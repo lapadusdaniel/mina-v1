@@ -16,7 +16,7 @@ const LEGACY_SELECTION_NAME_STORAGE_KEY = 'fotolio_nume_client';
 const GALLERY_UNLOCK_STORAGE_KEY_PREFIX = 'mina_gallery_unlock_';
 const LIGHTBOX_PRELOAD_OFFSETS_DESKTOP = [0, -1, 1, -2, 2];
 const LIGHTBOX_PRELOAD_OFFSETS_MOBILE = [0, -1, 1];
-const MAX_URL_CACHE_ENTRIES = 180;
+const MAX_URL_CACHE_ENTRIES = 400;
 
 const urlCache = new Map();
 const { galleries: galleriesService, media: mediaService, sites: sitesService } = getAppServices();
@@ -36,11 +36,6 @@ function cacheUrl(key, value) {
   } else {
     const existing = urlCache.get(key);
     if (existing === value) return;
-    if (isBlobUrl(existing)) {
-      try {
-        URL.revokeObjectURL(existing);
-      } catch (_) {}
-    }
     urlCache.set(key, value);
   }
 
@@ -48,12 +43,7 @@ function cacheUrl(key, value) {
 
   const oldestKey = urlCache.keys().next().value;
   if (!oldestKey || oldestKey === key) return;
-  const oldestValue = urlCache.get(oldestKey);
-  if (isBlobUrl(oldestValue)) {
-    try {
-      URL.revokeObjectURL(oldestValue);
-    } catch (_) {}
-  }
+  // Keep eviction cheap and avoid revoking URLs that can still be used by mounted images.
   urlCache.delete(oldestKey);
 }
 
@@ -142,6 +132,7 @@ function LazyGalleryImage({
 }) {
   const [url, setUrl] = useState(() => getCachedUrl(`thumb:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [thumbRetryCount, setThumbRetryCount] = useState(0);
 
   useEffect(() => {
     if (url) return;
@@ -159,6 +150,7 @@ function LazyGalleryImage({
         if (cancelled) return;
         cacheUrl(`thumb:${pozaKey}`, thumb);
         setUrl(thumb);
+        setThumbRetryCount(0);
       } catch (_) {
         // Keep placeholder when thumb is unavailable. Grid should load thumbnails only.
       }
@@ -167,6 +159,21 @@ function LazyGalleryImage({
     loadThumb();
     return () => { cancelled = true; };
   }, [pozaKey, url]);
+
+  useEffect(() => {
+    setThumbRetryCount(0);
+  }, [pozaKey]);
+
+  const handleThumbError = useCallback(() => {
+    if (!url) return;
+    if (thumbRetryCount >= 2) return;
+    const cacheKey = `thumb:${pozaKey}`;
+    if (getCachedUrl(cacheKey) === url) {
+      urlCache.delete(cacheKey);
+    }
+    setThumbRetryCount((prev) => prev + 1);
+    setUrl(null);
+  }, [pozaKey, thumbRetryCount, url]);
 
   const handleDownload = useCallback(async () => {
     if (isDownloading) return;
@@ -190,6 +197,7 @@ function LazyGalleryImage({
             className="cg-item-img"
             loading="lazy"
             onClick={onClick}
+            onError={handleThumbError}
           />
         ) : (
           <div className="cg-item-placeholder" />
