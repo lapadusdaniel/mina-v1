@@ -14,10 +14,59 @@ const INITIAL_VISIBLE = 24;
 const SELECTION_NAME_STORAGE_KEY = 'mina_nume_client';
 const LEGACY_SELECTION_NAME_STORAGE_KEY = 'fotolio_nume_client';
 const GALLERY_UNLOCK_STORAGE_KEY_PREFIX = 'mina_gallery_unlock_';
-const LIGHTBOX_PRELOAD_OFFSETS = [0, -1, 1, -2, 2, -3, 3, -4, 4];
+const LIGHTBOX_PRELOAD_OFFSETS_DESKTOP = [0, -1, 1, -2, 2];
+const LIGHTBOX_PRELOAD_OFFSETS_MOBILE = [0, -1, 1];
+const MAX_URL_CACHE_ENTRIES = 180;
 
 const urlCache = new Map();
 const { galleries: galleriesService, media: mediaService, sites: sitesService } = getAppServices();
+
+function isBlobUrl(value) {
+  return typeof value === 'string' && value.startsWith('blob:');
+}
+
+function getCachedUrl(key) {
+  return urlCache.get(key) || null;
+}
+
+function cacheUrl(key, value) {
+  if (!key || !value) return;
+  if (!urlCache.has(key)) {
+    urlCache.set(key, value);
+  } else {
+    const existing = urlCache.get(key);
+    if (existing === value) return;
+    if (isBlobUrl(existing)) {
+      try {
+        URL.revokeObjectURL(existing);
+      } catch (_) {}
+    }
+    urlCache.set(key, value);
+  }
+
+  if (urlCache.size <= MAX_URL_CACHE_ENTRIES) return;
+
+  const oldestKey = urlCache.keys().next().value;
+  if (!oldestKey || oldestKey === key) return;
+  const oldestValue = urlCache.get(oldestKey);
+  if (isBlobUrl(oldestValue)) {
+    try {
+      URL.revokeObjectURL(oldestValue);
+    } catch (_) {}
+  }
+  urlCache.delete(oldestKey);
+}
+
+function clearAllCachedUrls() {
+  for (const value of urlCache.values()) {
+    if (isBlobUrl(value)) {
+      try {
+        URL.revokeObjectURL(value);
+      } catch (_) {}
+    }
+  }
+  urlCache.clear();
+}
 
 function readStoredSelectionName() {
   const current = localStorage.getItem(SELECTION_NAME_STORAGE_KEY);
@@ -91,14 +140,14 @@ function LazyGalleryImage({
   watermarkEnabled = false,
   watermarkLabel = 'Mina',
 }) {
-  const [url, setUrl] = useState(() => urlCache.get(`thumb:${pozaKey}`) || null);
+  const [url, setUrl] = useState(() => getCachedUrl(`thumb:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (url) return;
     let cancelled = false;
 
-    const cachedThumb = urlCache.get(`thumb:${pozaKey}`);
+    const cachedThumb = getCachedUrl(`thumb:${pozaKey}`);
     if (cachedThumb) {
       setUrl(cachedThumb);
       return () => { cancelled = true; };
@@ -108,7 +157,7 @@ function LazyGalleryImage({
       try {
         const thumb = await mediaService.getPhotoUrl(pozaKey, 'thumb');
         if (cancelled) return;
-        urlCache.set(`thumb:${pozaKey}`, thumb);
+        cacheUrl(`thumb:${pozaKey}`, thumb);
         setUrl(thumb);
       } catch (_) {
         // Keep placeholder when thumb is unavailable. Grid should load thumbnails only.
@@ -378,7 +427,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const preloadMediumForLightbox = useCallback(async (photoKey) => {
     if (!photoKey) return null;
 
-    const cached = urlCache.get(`medium:${photoKey}`);
+    const cached = getCachedUrl(`medium:${photoKey}`);
     if (cached) {
       setLightboxMediumUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: cached }));
       return cached;
@@ -386,64 +435,43 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
     try {
       const medium = await mediaService.getPhotoUrl(photoKey, 'medium');
-      urlCache.set(`medium:${photoKey}`, medium);
+      cacheUrl(`medium:${photoKey}`, medium);
       setLightboxMediumUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: medium }));
       return medium;
     } catch (_) {
       return null;
     }
   }, []);
-
-  const preloadOriginalForLightbox = useCallback(async (photoKey) => {
-    if (!photoKey) return null;
-
-    const cached = urlCache.get(`original:${photoKey}`);
-    if (cached) {
-      setLightboxOriginalUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: cached }));
-      return cached;
-    }
-
-    try {
-      const original = await mediaService.getPhotoUrl(photoKey, 'original');
-      urlCache.set(`original:${photoKey}`, original);
-      setLightboxOriginalUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: original }));
-      return original;
-    } catch (_) {
-      return null;
-    }
-  }, []);
-
   const seedLightboxSources = useCallback((centerIndex) => {
     if (!Number.isInteger(centerIndex) || centerIndex < 0 || !pozeAfisate.length) return;
-    for (const offset of LIGHTBOX_PRELOAD_OFFSETS) {
+    const preloadOffsets = isMobile ? LIGHTBOX_PRELOAD_OFFSETS_MOBILE : LIGHTBOX_PRELOAD_OFFSETS_DESKTOP;
+    for (const offset of preloadOffsets) {
       const idx = centerIndex + offset;
       if (idx < 0 || idx >= pozeAfisate.length) continue;
       const key = pozeAfisate[idx]?.key;
       if (!key) continue;
-      if (!urlCache.get(`thumb:${key}`)) {
-        mediaService.getPhotoUrl(key, 'thumb').then((url) => urlCache.set(`thumb:${key}`, url)).catch(() => {});
+      if (!getCachedUrl(`thumb:${key}`)) {
+        mediaService.getPhotoUrl(key, 'thumb').then((url) => cacheUrl(`thumb:${key}`, url)).catch(() => {});
       }
     }
-  }, [pozeAfisate]);
+  }, [isMobile, pozeAfisate]);
 
   const resolveLightboxSrc = useCallback((key) => {
     if (!key) return '';
     if (isMobile) {
       return (
-        lightboxOriginalUrls[key]
-        || urlCache.get(`original:${key}`)
-        || lightboxMediumUrls[key]
-        || urlCache.get(`medium:${key}`)
-        || urlCache.get(`thumb:${key}`)
+        lightboxMediumUrls[key]
+        || getCachedUrl(`medium:${key}`)
+        || getCachedUrl(`thumb:${key}`)
         || ''
       );
     }
     return (
       lightboxMediumUrls[key]
-      || urlCache.get(`medium:${key}`)
+      || getCachedUrl(`medium:${key}`)
       || lightboxOriginalUrls[key]
-      || urlCache.get(`original:${key}`)
-      || urlCache.get(`thumb:${key}`)
+      || getCachedUrl(`original:${key}`)
+      || getCachedUrl(`thumb:${key}`)
       || ''
     );
   }, [isMobile, lightboxMediumUrls, lightboxOriginalUrls]);
@@ -490,7 +518,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       const coverKey = pozeKeys[0].key;
       mediaService.getPhotoUrl(coverKey, 'thumb').then((url) => {
         setCoverThumbUrl(url);
-        urlCache.set(`thumb:${coverKey}`, url);
+        cacheUrl(`thumb:${coverKey}`, url);
       }).catch(() => {});
     } else {
       setCoverThumbUrl(null);
@@ -675,14 +703,20 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
   useEffect(() => {
     const coverKey = poze[0]?.key;
-    if (!coverKey || urlCache.get(`medium:${coverKey}`)) return;
-    mediaService.getPhotoUrl(coverKey, 'medium').then((url) => { urlCache.set(`medium:${coverKey}`, url); setCoverMediumUrl(url); }).catch(() => {});
+    if (!coverKey || getCachedUrl(`medium:${coverKey}`)) return;
+    mediaService.getPhotoUrl(coverKey, 'medium').then((url) => { cacheUrl(`medium:${coverKey}`, url); setCoverMediumUrl(url); }).catch(() => {});
   }, [poze]);
 
   useEffect(() => {
     if (!galerie?.nume) return;
     document.title = galerie.nume;
   }, [galerie?.nume]);
+
+  useEffect(() => {
+    return () => {
+      clearAllCachedUrls();
+    };
+  }, []);
 
   useEffect(() => {
     if (!galerie?.id) return;
@@ -704,17 +738,15 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   useEffect(() => {
     if (!lightboxOpen || !pozeAfisate.length) return;
     seedLightboxSources(lightboxIndex);
-    const indices = LIGHTBOX_PRELOAD_OFFSETS
+    const preloadOffsets = isMobile ? LIGHTBOX_PRELOAD_OFFSETS_MOBILE : LIGHTBOX_PRELOAD_OFFSETS_DESKTOP;
+    const indices = preloadOffsets
       .map((offset) => lightboxIndex + offset)
       .filter((i) => i >= 0 && i < pozeAfisate.length);
     indices.forEach((i) => {
       const key = pozeAfisate[i].key;
       void preloadMediumForLightbox(key);
-      if (isMobile) {
-        void preloadOriginalForLightbox(key);
-      }
     });
-  }, [isMobile, lightboxOpen, lightboxIndex, pozeAfisate, preloadMediumForLightbox, preloadOriginalForLightbox, seedLightboxSources]);
+  }, [isMobile, lightboxOpen, lightboxIndex, pozeAfisate, preloadMediumForLightbox, seedLightboxSources]);
 
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -1187,11 +1219,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                       setSelectedImage(nextIndex >= 0 ? nextIndex : 0);
                       setLightboxDownloading(false);
                       seedLightboxSources(nextIndex);
-                      if (isMobile) {
-                        void preloadOriginalForLightbox(poza.key);
-                      } else {
-                        void preloadMediumForLightbox(poza.key);
-                      }
+                      void preloadMediumForLightbox(poza.key);
                     }}
                   />
                 ))}
