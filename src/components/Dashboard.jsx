@@ -996,7 +996,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
                     <label>Website</label>
                     <input
                       className="brand-card-input"
-                      type="url"
+                      type="text"
+                      inputMode="url"
                       value={profileData.website}
                       onChange={(e) => setProfileData((p) => ({ ...p, website: e.target.value }))}
                       placeholder="https://exemplu.ro"
