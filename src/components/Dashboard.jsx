@@ -60,6 +60,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [loadingPoze, setLoadingPoze] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploading, setUploading] = useState(false)
+  const [uploadTotalFiles, setUploadTotalFiles] = useState(0)
+  const [uploadCompletedFiles, setUploadCompletedFiles] = useState(0)
+  const [uploadStatusText, setUploadStatusText] = useState("")
   const [galleryFolders, setGalleryFolders] = useState([])
   const [loadingFolders, setLoadingFolders] = useState(false)
   const [activeFolderId, setActiveFolderId] = useState('all')
@@ -403,6 +406,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     if (!files.length || !galerieActiva) return
     setUploading(true)
     setUploadProgress(0)
+    setUploadTotalFiles(files.length)
+    setUploadCompletedFiles(0)
+    setUploadStatusText('Pregătesc fișierele pentru upload...')
     const totalSteps = files.length * 3
     const reportProgress = (stepIndex, percent) => {
       setUploadProgress(Math.round(((stepIndex + percent / 100) / totalSteps) * 100))
@@ -413,9 +419,12 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       let uploadedBytes = 0
       let firstUploadedOriginal = ''
       const BATCH_SIZE = 5
+      const totalBatches = Math.ceil(files.length / BATCH_SIZE)
 
       for (let batchStart = 0; batchStart < files.length; batchStart += BATCH_SIZE) {
         const batch = files.slice(batchStart, batchStart + BATCH_SIZE)
+        const batchNumber = Math.floor(batchStart / BATCH_SIZE) + 1
+        setUploadStatusText(`Procesez lotul ${batchNumber}/${totalBatches}...`)
 
         const batchResults = await Promise.all(
           batch.map(async (file, batchIndex) => {
@@ -452,6 +461,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
               createdAt: new Date(),
             })
 
+            setUploadCompletedFiles((prev) => prev + 1)
+
             return {
               uploadedSize: Number(file.size || 0),
               originalPath: origPath,
@@ -465,6 +476,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         })
       }
 
+      setUploadStatusText("Finalizez galeria...")
       if (uploadFolderId) {
         await galleriesService.incrementFolderPhotoCount(galerieActiva.id, uploadFolderId, files.length).catch(() => {})
       }
@@ -483,10 +495,14 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       }
     } catch (error) {
       console.error('Error uploading:', error)
+      setUploadStatusText('Upload eșuat')
       alert('Eroare la upload!')
     } finally {
       setUploading(false)
       setUploadProgress(0)
+    setUploadTotalFiles(0)
+    setUploadCompletedFiles(0)
+    setUploadStatusText('')
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -850,6 +866,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             user={user}
             uploading={uploading}
             uploadProgress={uploadProgress}
+            uploadTotalFiles={uploadTotalFiles}
+            uploadCompletedFiles={uploadCompletedFiles}
+            uploadStatusText={uploadStatusText}
             fileInputRef={fileInputRef}
             onBack={closeActiveGallery}
             onPreview={handlePreview}

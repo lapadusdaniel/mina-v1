@@ -1602,6 +1602,68 @@
   transition: width 0.3s ease;
 }
 
+.dashboard-upload-status {
+  margin: 12px 40px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-bg-card);
+  border-radius: 10px;
+}
+
+.dashboard-upload-status-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.dashboard-upload-status-title {
+  font-family: var(--theme-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--theme-text-muted);
+}
+
+.dashboard-upload-status-percent {
+  font-family: var(--theme-font-body);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--theme-accent);
+}
+
+.dashboard-upload-status-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--theme-font-body);
+  font-size: 12.5px;
+  color: var(--theme-text);
+  margin-bottom: 10px;
+}
+
+.dashboard-upload-status-meta span:last-child {
+  color: var(--theme-text-muted);
+}
+
+.dashboard-upload-status-bar {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--theme-text) 8%, transparent);
+}
+
+.dashboard-upload-status-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--theme-accent);
+  transition: width 0.2s ease;
+}
+
+
 /* ── Gallery Photos Content ── */
 .dashboard-gallery-content {
   padding: 36px 40px;
@@ -2829,6 +2891,7 @@
   .dashboard-content { padding: 28px 28px 60px; }
   .dashboard-gallery-header { padding: 0 28px; }
   .dashboard-gallery-content { padding: 28px; }
+  .dashboard-upload-status { margin: 12px 28px 0; }
 }
 
 @media (max-width: 900px) {
@@ -2980,6 +3043,17 @@
 
   .dashboard-gallery-content {
     padding: 24px 16px 72px;
+  }
+
+  .dashboard-upload-status {
+    margin: 10px 16px 0;
+    padding: 10px 12px;
+  }
+
+  .dashboard-upload-status-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 
   .dashboard-loading-state,

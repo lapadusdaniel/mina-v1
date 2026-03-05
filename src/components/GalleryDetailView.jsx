@@ -43,6 +43,14 @@ function GalleryPhotoTile({ photo, onDeletePoza }) {
     }
   }, [photo?.key, photo?.url])
 
+  const safeUploadProgress = Math.max(0, Math.min(100, Number(uploadProgress) || 0))
+  const totalUploadFiles = Number(uploadTotalFiles || 0)
+  const completedUploadFiles = Math.min(Number(uploadCompletedFiles || 0), totalUploadFiles)
+  const uploadCounterText = totalUploadFiles > 0
+    ? `${completedUploadFiles}/${totalUploadFiles} fișiere finalizate`
+    : "Pregătesc fișierele..."
+  const uploadLabel = uploadStatusText || "Încarc fotografiile în cloud..."
+
   return (
     <div className="dashboard-masonry-item">
       {thumbUrl ? (
@@ -74,6 +82,9 @@ export default function GalleryDetailView({
   user,
   uploading,
   uploadProgress,
+  uploadTotalFiles = 0,
+  uploadCompletedFiles = 0,
+  uploadStatusText = '',
   fileInputRef,
   onBack,
   onPreview,
@@ -101,6 +112,14 @@ export default function GalleryDetailView({
   const subtitle = activeFolderId === 'all'
     ? `${galerie.categoria || 'Galerie'} • ${totalPhotosCount} poze`
     : `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
+
+  const safeUploadProgress = Math.max(0, Math.min(100, Number(uploadProgress) || 0))
+  const totalUploadFiles = Number(uploadTotalFiles || 0)
+  const completedUploadFiles = Math.min(Number(uploadCompletedFiles || 0), totalUploadFiles)
+  const uploadCounterText = totalUploadFiles > 0
+    ? `${completedUploadFiles}/${totalUploadFiles} fișiere finalizate`
+    : "Pregătesc fișierele..."
+  const uploadLabel = uploadStatusText || "Încarc fotografiile în cloud..."
 
   return (
     <div className="dashboard-root">
@@ -149,14 +168,24 @@ export default function GalleryDetailView({
             disabled={uploading}
             className="btn-primary dashboard-add-poze-btn"
           >
-            {uploading ? `${uploadProgress}%` : '+ Adaugă poze'}
+            {uploading ? `Se încarcă ${safeUploadProgress}%` : '+ Adaugă poze'}
           </button>
         </div>
       </div>
 
       {uploading && (
-        <div className="dashboard-progress-bar">
-          <div className="dashboard-progress-fill" style={{ width: `${uploadProgress}%` }} />
+        <div className="dashboard-upload-status" role="status" aria-live="polite">
+          <div className="dashboard-upload-status-top">
+            <span className="dashboard-upload-status-title">Upload în curs</span>
+            <strong className="dashboard-upload-status-percent">{safeUploadProgress}%</strong>
+          </div>
+          <div className="dashboard-upload-status-meta">
+            <span>{uploadCounterText}</span>
+            <span>{uploadLabel}</span>
+          </div>
+          <div className="dashboard-upload-status-bar">
+            <div className="dashboard-upload-status-fill" style={{ width: `${safeUploadProgress}%` }} />
+          </div>
         </div>
       )}
 
