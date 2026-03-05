@@ -412,40 +412,56 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       const uploadFolderId = activeFolderId !== 'all' ? activeFolderId : null
       let uploadedBytes = 0
       let firstUploadedOriginal = ''
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        const baseName = `${Date.now()}-${i}-${(file.name || 'image').replace(/[^a-zA-Z0-9.-]/g, '_')}`
-        const baseNameNoExt = baseName.replace(/\.[^.]+$/, '')
-        const origPath = `galerii/${galerieActiva.id}/originals/${baseName}`
-        const mediumPath = `galerii/${galerieActiva.id}/medium/${baseNameNoExt}.webp`
-        const thumbPath = `galerii/${galerieActiva.id}/thumbnails/${baseNameNoExt}.webp`
-        uploadedBytes += Number(file.size || 0)
-        if (!firstUploadedOriginal) firstUploadedOriginal = origPath
+      const BATCH_SIZE = 5
 
-        const mediumFile = await imageCompression(file, {
-          maxWidthOrHeight: MEDIUM_MAX_DIMENSION,
-          fileType: 'image/webp',
-          initialQuality: MEDIUM_QUALITY,
-          useWebWorker: true,
-        })
-        const thumbFile = await imageCompression(mediumFile || file, {
-          maxWidthOrHeight: THUMB_MAX_DIMENSION,
-          fileType: 'image/webp',
-          initialQuality: THUMB_QUALITY,
-          useWebWorker: true,
-        })
+      for (let batchStart = 0; batchStart < files.length; batchStart += BATCH_SIZE) {
+        const batch = files.slice(batchStart, batchStart + BATCH_SIZE)
 
-        await Promise.all([
-          mediaService.uploadPhoto(file, galerieActiva.id, user.uid, (p) => reportProgress(i * 3, p), origPath, idToken),
-          mediaService.uploadPhoto(mediumFile, galerieActiva.id, user.uid, (p) => reportProgress(i * 3 + 1, p), mediumPath, idToken),
-          mediaService.uploadPhoto(thumbFile, galerieActiva.id, user.uid, (p) => reportProgress(i * 3 + 2, p), thumbPath, idToken),
-        ])
+        const batchResults = await Promise.all(
+          batch.map(async (file, batchIndex) => {
+            const fileIndex = batchStart + batchIndex
+            const baseName = `${Date.now()}-${fileIndex}-${(file.name || 'image').replace(/[^a-zA-Z0-9.-]/g, '_')}`
+            const baseNameNoExt = baseName.replace(/\.[^.]+$/, '')
+            const origPath = `galerii/${galerieActiva.id}/originals/${baseName}`
+            const mediumPath = `galerii/${galerieActiva.id}/medium/${baseNameNoExt}.webp`
+            const thumbPath = `galerii/${galerieActiva.id}/thumbnails/${baseNameNoExt}.webp`
 
-        await galleriesService.upsertPhotoMetadata(galerieActiva.id, origPath, {
-          folderId: uploadFolderId,
-          size: Number(file.size || 0),
-          lastModified: file.lastModified ? new Date(file.lastModified) : null,
-          createdAt: new Date(),
+            const mediumFile = await imageCompression(file, {
+              maxWidthOrHeight: MEDIUM_MAX_DIMENSION,
+              fileType: 'image/webp',
+              initialQuality: MEDIUM_QUALITY,
+              useWebWorker: true,
+            })
+            const thumbFile = await imageCompression(mediumFile || file, {
+              maxWidthOrHeight: THUMB_MAX_DIMENSION,
+              fileType: 'image/webp',
+              initialQuality: THUMB_QUALITY,
+              useWebWorker: true,
+            })
+
+            await Promise.all([
+              mediaService.uploadPhoto(file, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex * 3, p), origPath, idToken),
+              mediaService.uploadPhoto(mediumFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex * 3 + 1, p), mediumPath, idToken),
+              mediaService.uploadPhoto(thumbFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex * 3 + 2, p), thumbPath, idToken),
+            ])
+
+            await galleriesService.upsertPhotoMetadata(galerieActiva.id, origPath, {
+              folderId: uploadFolderId,
+              size: Number(file.size || 0),
+              lastModified: file.lastModified ? new Date(file.lastModified) : null,
+              createdAt: new Date(),
+            })
+
+            return {
+              uploadedSize: Number(file.size || 0),
+              originalPath: origPath,
+            }
+          })
+        )
+
+        batchResults.forEach(({ uploadedSize, originalPath }) => {
+          uploadedBytes += uploadedSize
+          if (!firstUploadedOriginal) firstUploadedOriginal = originalPath
         })
       }
 
