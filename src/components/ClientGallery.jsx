@@ -768,16 +768,20 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   }, [lightboxOpen, lightboxIndex, pozeAfisate.length, closeLightbox]);
 
   useEffect(() => {
-    if (!lightboxOpen) return undefined;
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
+    if (!lightboxOpen) return undefined
+    const scrollY = window.scrollY
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.width = '100%'
+    document.body.style.top = `-${scrollY}px`
     return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-    };
-  }, [lightboxOpen]);
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+      document.body.style.top = ''
+      window.scrollTo(0, scrollY)
+    }
+  }, [lightboxOpen])
 
   const handleEnterGallery = () => {
     setCoverVisible(false);
