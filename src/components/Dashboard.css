@@ -2924,69 +2924,128 @@
   .gallery-list-wrapper,
   .gallery-list-section,
   .gallery-list-premium {
-    overflow-x: visible;
+    overflow-x: hidden;
   }
 
-  .gallery-row {
+  .gallery-list-premium .gallery-row {
     min-width: 0;
-    grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     grid-template-areas:
-      "branding branding branding branding branding actions"
-      "date status views downloads favorites favorites";
+      "branding branding branding actions"
+      "status event event event"
+      "views downloads favorites favorites";
     gap: 8px 10px;
     padding: 16px 0;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-border) 85%, transparent);
   }
 
-  .gallery-row-col-branding { grid-area: branding; padding-right: 0; }
-  .gallery-row-col-actions { grid-area: actions; align-self: start; }
-  .gallery-row-col[data-label="Data Eveniment"] { grid-area: date; }
-  .gallery-row-col[data-label="Status"],
-  .gallery-row-col[data-label="Ștergere"] { grid-area: status; }
-  .gallery-row-col[data-label="Vizualizări"] { grid-area: views; }
-  .gallery-row-col[data-label="Descărcări"] { grid-area: downloads; }
-  .gallery-row-col-activitate { grid-area: favorites; }
+  .gallery-list-premium .gallery-row-col-branding {
+    grid-area: branding;
+    padding-right: 0;
+  }
 
-  .gallery-row-col[data-label="Data Eveniment"],
-  .gallery-row-col[data-label="Status"],
-  .gallery-row-col[data-label="Ștergere"],
-  .gallery-row-col[data-label="Vizualizări"],
-  .gallery-row-col[data-label="Descărcări"],
-  .gallery-row-col-activitate {
+  .gallery-list-premium .gallery-row-col-actions {
+    grid-area: actions;
+    align-self: start;
+    justify-content: flex-end;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Status"],
+  .gallery-list-premium .gallery-row-col[data-label="Ștergere"] {
+    grid-area: status;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Data Eveniment"] {
+    grid-area: event;
+    min-width: 0;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Vizualizări"] { grid-area: views; }
+  .gallery-list-premium .gallery-row-col[data-label="Descărcări"] { grid-area: downloads; }
+  .gallery-list-premium .gallery-row-col-activitate { grid-area: favorites; }
+
+  .gallery-list-premium .gallery-row-quick-actions {
+    display: none;
+  }
+
+  .gallery-list-premium .gallery-row-kebab-btn {
+    display: inline-flex;
+  }
+
+  .gallery-list-premium .gallery-row-name-inner {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+  }
+
+  .gallery-list-premium .gallery-row-meta {
+    font-size: 11.5px;
+    color: var(--theme-text-muted);
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Data Eveniment"] .gallery-stat-label,
+  .gallery-list-premium .gallery-row-col[data-label="Status"] .gallery-stat-label,
+  .gallery-list-premium .gallery-row-col[data-label="Ștergere"] .gallery-stat-label {
+    font-size: 11.5px;
+    color: var(--theme-text-muted);
+    white-space: normal;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Status"] .gallery-stat-label,
+  .gallery-list-premium .gallery-row-col[data-label="Ștergere"] .gallery-stat-label {
+    display: inline !important;
+    margin-top: 0 !important;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Status"] .gallery-stat-status,
+  .gallery-list-premium .gallery-row-col[data-label="Ștergere"] .gallery-stat-status {
+    font-size: 11.5px;
+    padding: 2px 8px;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Vizualizări"],
+  .gallery-list-premium .gallery-row-col[data-label="Descărcări"],
+  .gallery-list-premium .gallery-row-col-activitate {
     align-items: center;
     min-width: 0;
   }
 
-  .gallery-row-col[data-label="Data Eveniment"] .gallery-stat-label,
-  .gallery-row-col[data-label="Status"] .gallery-stat-label,
-  .gallery-row-col[data-label="Ștergere"] .gallery-stat-label,
-  .gallery-row-col[data-label="Vizualizări"] .gallery-stat,
-  .gallery-row-col[data-label="Descărcări"] .gallery-stat,
-  .gallery-row-col-activitate .gallery-activity-item {
-    font-size: 11.5px;
-  }
-
-  .gallery-row-col-activitate .gallery-activity-stats {
-    flex-direction: row;
-    gap: 0;
-  }
-
-  .gallery-row-col-activitate .gallery-activity-item:first-child {
-    display: none;
-  }
-
-  .gallery-row-col-activitate .gallery-activity-item:last-child {
-    gap: 4px;
+  .gallery-list-premium .gallery-row-col[data-label="Vizualizări"] .gallery-stat,
+  .gallery-list-premium .gallery-row-col[data-label="Descărcări"] .gallery-stat,
+  .gallery-list-premium .gallery-row-col-activitate .gallery-activity-item:last-child {
     font-size: 11.5px;
     color: var(--theme-text-muted);
   }
 
-  .gallery-row-col-activitate .gallery-activity-icon {
+  .gallery-list-premium .gallery-row-col[data-label="Vizualizări"] svg,
+  .gallery-list-premium .gallery-row-col[data-label="Descărcări"] svg,
+  .gallery-list-premium .gallery-row-col-activitate .gallery-activity-icon {
     display: none;
   }
 
-  .gallery-row-meta {
-    font-size: 11.5px;
+  .gallery-list-premium .gallery-row-col-activitate .gallery-activity-stats {
+    flex-direction: row;
+    gap: 0;
+  }
+
+  .gallery-list-premium .gallery-row-col-activitate .gallery-activity-item:first-child {
+    display: none;
+  }
+
+  .gallery-list-premium .gallery-row-col[data-label="Descărcări"]::before,
+  .gallery-list-premium .gallery-row-col-activitate::before {
+    content: '·';
+    margin-right: 6px;
+    color: var(--theme-text-muted);
   }
 
   /* ── Brand Card / Forms ── */
