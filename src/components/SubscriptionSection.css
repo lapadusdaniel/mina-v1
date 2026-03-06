@@ -415,3 +415,162 @@
     .pro-featured { transform: none; }
     .sub-billing-grid { grid-template-columns: 1fr; }
   }
+
+@media (max-width: 768px) {
+  .sub-wrapper {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .sub-header {
+    margin-bottom: 20px;
+  }
+
+  .sub-display-title {
+    font-size: 1.7rem;
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sub-display-sub {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sub-pricing-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sub-plan-card {
+    width: 100%;
+    min-width: 0;
+    padding: 20px 16px;
+    border-radius: 16px;
+    transform: none;
+    overflow: hidden;
+  }
+
+  .pro-featured {
+    transform: none;
+  }
+
+  .sub-plan-name {
+    font-size: 1.2rem;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sub-plan-price {
+    font-size: 1.9rem;
+    line-height: 1.1;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sub-plan-features {
+    margin-bottom: 18px;
+  }
+
+  .sub-plan-features li {
+    font-size: 0.84rem;
+    line-height: 1.45;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sub-plan-btn,
+  .sub-addon-btn,
+  .sub-danger-btn {
+    width: 100%;
+  }
+
+  .sub-addon-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .sub-addon-head h4,
+  .sub-addon-head span,
+  .sub-addon-text,
+  .sub-muted {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sub-billing-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sub-billing-card {
+    width: 100%;
+    min-width: 0;
+    padding: 16px;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .sub-billing-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sub-refresh-btn {
+    width: 100%;
+  }
+
+  .sub-kv-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding-bottom: 10px;
+  }
+
+  .sub-kv-row strong {
+    width: 100%;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sub-payment-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .sub-payment-right {
+    align-items: flex-start;
+  }
+
+  .sub-billing-actions {
+    width: 100%;
+  }
+
+  .sub-billing-card > .sub-kv + div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .sub-billing-card > .sub-kv + div a {
+    display: inline-block;
+  }
+}
