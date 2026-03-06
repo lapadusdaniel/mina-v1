@@ -182,3 +182,48 @@
     width: 100%;
   }
 }
+
+@media (max-width: 768px) {
+  .bill-settings-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 16px;
+    border-radius: 14px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .bill-settings-form,
+  .bill-settings-grid,
+  .bill-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .bill-settings-type-switch {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .bill-type-btn,
+  .bill-save-btn {
+    width: 100%;
+  }
+
+  .bill-field input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .bill-settings-actions {
+    width: 100%;
+  }
+
+  .bill-settings-gdpr {
+    padding: 10px;
+    align-items: flex-start;
+  }
+}
