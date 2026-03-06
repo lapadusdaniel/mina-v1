@@ -770,16 +770,15 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   useEffect(() => {
     if (!lightboxOpen) return undefined
     const scrollY = window.scrollY
+    document.documentElement.style.scrollBehavior = 'auto'
+    document.body.dataset.scrollY = scrollY
     document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.width = '100%'
-    document.body.style.top = `-${scrollY}px`
     return () => {
       document.body.style.overflow = ''
-      document.body.style.position = ''
-      document.body.style.width = ''
-      document.body.style.top = ''
-      window.scrollTo(0, scrollY)
+      document.documentElement.style.scrollBehavior = ''
+      const savedY = parseInt(document.body.dataset.scrollY || '0', 10)
+      delete document.body.dataset.scrollY
+      window.scrollTo({ top: savedY, behavior: 'instant' })
     }
   }, [lightboxOpen])
 
