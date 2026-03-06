@@ -1548,10 +1548,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-cover-brand {
           position: absolute;
           top: 32px;
-          left: 50%;
-          transform: translateX(-50%);
+          left: 0;
+          width: 100%;
           display: flex;
           align-items: center;
+          justify-content: center;
+          text-align: center;
         }
         .cg-cover-logo {
           height: 36px;
