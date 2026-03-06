@@ -382,7 +382,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
     if (!savedGalleryId) return
 
-    const target = galerii.find((g) => g.id === savedGalleryId && g.status !== 'trash')
+    const target = galerii.find((g) => g.id === savedGalleryId && g.status === 'active')
     if (!target) {
       persistActiveGalleryId(null)
       return

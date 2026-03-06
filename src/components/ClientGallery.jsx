@@ -561,6 +561,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         };
         setGalerie(normalizedGallery);
 
+        if (normalizedGallery.status === 'archived') {
+          setPoze([]);
+          setClientFolders([]);
+          setCoverThumbUrl(null);
+          setCoverMediumUrl(null);
+          return;
+        }
+
         if (dateGal.userId) {
           const userId = dateGal.userId;
 
@@ -1069,7 +1077,18 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const favCount = galerie?.favorite?.length ?? 0;
   const activeClientFolder = clientFolders.find((folder) => folder.id === activeClientFolderId) || null;
   const activeClientFolderName = activeClientFolder?.name || '';
+  const isArchived = galerie?.status === 'archived';
   const isExpired = isGalleryExpired(galerie);
+
+  if (isArchived) {
+    return (
+      <div className="cg-root">
+        <div className="cg-expired-block">
+          <p className="cg-expired-message">Această galerie nu mai este disponibilă.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isExpired) {
     return (

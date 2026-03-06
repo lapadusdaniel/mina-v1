@@ -228,6 +228,7 @@ function GalleryRow({
   const daysUntilAutoDelete = isTrashView ? getDaysUntilAutoDelete(galerie?.deletedAt) : null
 
   const showArchiveBtn = !isTrashView && !isArchivedView && onArchive
+  const showArchiveInMenu = !isTrashView && !isArchivedView && onArchive
   const showUnarchiveInMenu = isArchivedView && onUnarchive
 
   return (
@@ -379,6 +380,16 @@ function GalleryRow({
               <Pin size={16} />
               <span>Fixează galerie</span>
             </button>
+            {showArchiveInMenu && (
+              <button
+                type="button"
+                className="gallery-row-menu-item"
+                onClick={() => { setMenuOpen(false); onArchive?.(galerie?.id); }}
+              >
+                <Archive size={16} />
+                <span>Arhivează</span>
+              </button>
+            )}
             {showUnarchiveInMenu && (
               <button
                 type="button"
@@ -386,7 +397,7 @@ function GalleryRow({
                 onClick={() => { setMenuOpen(false); onUnarchive(galerie?.id); }}
               >
                 <ArchiveRestore size={16} />
-                <span>Restaurare din arhivă</span>
+                <span>Reactivează</span>
               </button>
             )}
             <button
@@ -525,10 +536,10 @@ export default function AdminGalleryTable({
     if (activeTab === 'trash') {
       list = list.filter(g => g?.status === 'trash')
     } else if (activeTab === 'galerii') {
-      if (statusFilter === 'active') {
-        list = list.filter(g => g?.status !== 'trash' && g?.status !== 'archived')
-      } else {
+      if (statusFilter === 'archived') {
         list = list.filter(g => g?.status === 'archived')
+      } else {
+        list = list.filter(g => g?.status === 'active')
       }
     } else {
       return []

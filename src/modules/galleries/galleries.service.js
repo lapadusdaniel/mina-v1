@@ -74,6 +74,44 @@ async function syncSelectionAggregates(db, galleryId) {
 export function createGalleriesModule({ db }) {
   const foldersService = createFoldersService({ db })
 
+  const parseExpiryDate = (gallery) => {
+    const raw = gallery?.dataExpirare ?? gallery?.expiryDate ?? gallery?.expiresAt ?? gallery?.dataExpirarii
+    if (!raw) return null
+
+    if (typeof raw?.toDate === 'function') {
+      const date = raw.toDate()
+      return Number.isNaN(date?.getTime?.()) ? null : date
+    }
+
+    const date = new Date(raw)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  const isExpiredAndActive = (gallery) => {
+    if (!gallery || gallery.status === 'trash' || gallery.status === 'archived') return false
+    const expiryDate = parseExpiryDate(gallery)
+    if (!expiryDate) return false
+    return Date.now() > expiryDate.getTime()
+  }
+
+  const ensureArchivedIfExpired = async (gallery) => {
+    if (!isExpiredAndActive(gallery) || !gallery?.id) return gallery
+
+    try {
+      await updateDoc(doc(db, 'galerii', gallery.id), {
+        status: 'archived',
+        archivedAt: new Date(),
+      })
+    } catch (_) {
+    }
+
+    return {
+      ...gallery,
+      status: 'archived',
+      archivedAt: gallery?.archivedAt || new Date(),
+    }
+  }
+
   return {
     ...foldersService,
     db,
@@ -109,22 +147,25 @@ export function createGalleriesModule({ db }) {
 
     watchOwnerGalleries(ownerUid, onChange) {
       const q = query(collection(db, 'galerii'), where('userId', '==', ownerUid))
-      return onSnapshot(q, (snapshot) => {
+      return onSnapshot(q, async (snapshot) => {
         const data = snapshot.docs.map(mapDoc)
-        onChange(data)
+        const normalized = await Promise.all(data.map((gallery) => ensureArchivedIfExpired(gallery)))
+        onChange(normalized)
       })
     },
 
     async listOwnerGalleries(ownerUid) {
       const q = query(collection(db, 'galerii'), where('userId', '==', ownerUid))
       const snapshot = await getDocs(q)
-      return snapshot.docs.map(mapDoc)
+      const data = snapshot.docs.map(mapDoc)
+      return Promise.all(data.map((gallery) => ensureArchivedIfExpired(gallery)))
     },
 
     async getGalleryById(galleryId) {
       const snap = await getDoc(doc(db, 'galerii', galleryId))
       if (!snap.exists()) return null
-      return mapDoc(snap)
+      const gallery = mapDoc(snap)
+      return ensureArchivedIfExpired(gallery)
     },
 
     async getGalleryIdBySlug(slug) {
@@ -150,7 +191,7 @@ export function createGalleriesModule({ db }) {
 
       const gallery = await this.getGalleryById(galleryId)
       if (!gallery) return null
-      if (gallery.status === 'trash' || gallery.status === 'archived') return null
+      if (gallery.status === 'trash') return null
       if (gallery.statusActiv === false) return null
       return gallery
     },
