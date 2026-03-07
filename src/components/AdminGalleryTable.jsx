@@ -96,12 +96,15 @@ function GalleryRow({
   const [coverLoading, setCoverLoading] = useState(true)
   const [shouldLoadCover, setShouldLoadCover] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
   const [copyTooltip, setCopyTooltip] = useState(false)
   const urlRef = useRef(null)
   const menuRef = useRef(null)
+  const buttonRef = useRef(null)
   const rowRef = useRef(null)
 
   const galleryUrl = getGalleryPublicUrl(galerie)
+  const isMobileMenu = typeof window !== 'undefined' && window.innerWidth < 768
 
   const buildSecureShareUrl = async () => {
     if (!galerie?.id) return galleryUrl
@@ -140,6 +143,22 @@ function GalleryRow({
     } else if (galleryUrl) {
       window.open(secureUrl, '_blank')
     }
+  }
+
+  const handleMenuToggle = (e) => {
+    e.stopPropagation()
+    if (!menuOpen) {
+      if (isMobileMenu && buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        setMenuPos({
+          top: rect.bottom + window.scrollY,
+          right: window.innerWidth - rect.right,
+        })
+      }
+      setMenuOpen(true)
+      return
+    }
+    setMenuOpen(false)
   }
 
   useEffect(() => {
@@ -347,7 +366,8 @@ function GalleryRow({
         )}
         <div style={{ position: 'relative', display: 'inline-block' }} ref={menuRef}>
           <button
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+            ref={buttonRef}
+            onClick={handleMenuToggle}
             className="gallery-row-kebab-btn"
             title="Meniu acțiuni"
             aria-haspopup="true"
@@ -358,15 +378,28 @@ function GalleryRow({
           {menuOpen && (
             <div
               className="gallery-row-menu"
-              style={{ 
-                position: 'absolute', 
-                top: '32px', 
-                right: 0, 
-                left: 'auto', 
-                zIndex: 200,
-                maxHeight: '60vh',
-                overflowY: 'auto'
-              }}
+              style={isMobileMenu
+                ? {
+                  position: 'fixed',
+                  top: menuPos.top,
+                  right: menuPos.right,
+                  left: 'auto',
+                  zIndex: 9999,
+                  background: 'var(--theme-bg)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  borderRadius: '12px',
+                  minWidth: '180px',
+                }
+                : {
+                  position: 'absolute',
+                  top: '32px',
+                  right: 0,
+                  left: 'auto',
+                  zIndex: 200,
+                  maxHeight: '60vh',
+                  overflowY: 'auto',
+                }
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <button
