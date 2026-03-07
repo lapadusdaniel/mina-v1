@@ -2936,6 +2936,8 @@
     gap: 8px;
     padding: 12px 16px;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-border) 80%, transparent);
+    position: relative;
+    overflow: visible;
   }
 
   .gallery-list-premium .gallery-row-col-branding {
@@ -2994,10 +2996,19 @@
     align-items: center;
     justify-content: flex-end;
     align-self: center;
+    position: relative;
+    overflow: visible;
   }
 
   .gallery-list-premium .gallery-row-kebab-btn {
     display: inline-flex;
+  }
+
+  .gallery-list-premium .gallery-row-menu {
+    position: absolute;
+    z-index: 100;
+    background: var(--theme-bg);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   }
 
   .gallery-list-premium .gallery-row-col-stat,
