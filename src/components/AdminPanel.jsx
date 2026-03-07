@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Images, CreditCard, MessageSquare,
-  Settings, LogOut, X, Search,
+  Settings, LogOut, X, Search, TrendingUp,
   CheckCircle, Ban, Trash2, Edit3, Eye
 } from 'lucide-react'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
@@ -521,6 +521,129 @@ function AbonamenteSection({ subscriptions, loading }) {
   )
 }
 
+// ── Secțiunea Financiar ──────────────────────
+function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscriptions }) {
+  const activeStatuses = new Set(['active', 'trialing'])
+  const activeSubscriptions = subscriptions.filter((sub) => activeStatuses.has(String(sub.status || '').toLowerCase()))
+
+  const starterActive = activeSubscriptions.filter((sub) => sub.plan === 'Starter').length
+  const proActive = activeSubscriptions.filter((sub) => sub.plan === 'Pro').length
+  const studioActive = activeSubscriptions.filter((sub) => sub.plan === 'Studio').length
+
+  const starterMRR = starterActive * 39
+  const proMRR = proActive * 79
+  const studioMRR = studioActive * 129
+  const totalMRR = starterMRR + proMRR + studioMRR
+
+  const bytesInGb = 1024 ** 3
+  const totalStorageBytes = users.reduce((acc, item) => acc + Number(item.storageUsedBytes || 0), 0)
+  const totalStorageGb = totalStorageBytes / bytesInGb
+
+  const usdToLei = 4.7
+  const r2CostUsd = totalStorageGb * 0.015
+  const r2CostLei = r2CostUsd * usdToLei
+  const b2CostUsd = totalStorageGb * 0.006
+  const b2CostLei = b2CostUsd * usdToLei
+  const savingsUsd = r2CostUsd - b2CostUsd
+  const savingsLei = r2CostLei - b2CostLei
+  const estimatedProfitLei = totalMRR - r2CostLei
+
+  const fmtInt = (value) =>
+    new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 }).format(value)
+
+  const fmtDecimal = (value, digits = 2) =>
+    new Intl.NumberFormat('ro-RO', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value)
+
+  const isLoading = loadingUsers || loadingSubscriptions
+
+  return (
+    <div>
+      <div className="ap-page-header">
+        <h1 className="ap-page-title">Financiar</h1>
+        <p className="ap-page-sub">MRR, costuri infrastructură și profit estimat</p>
+      </div>
+
+      <div className="ap-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="ap-stat-card">
+          <div className="ap-stat-label">MRR Starter</div>
+          <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(starterMRR)} lei`}</div>
+          <div className="ap-stat-trend">{starterActive} abonamente active × 39 lei</div>
+        </div>
+        <div className="ap-stat-card">
+          <div className="ap-stat-label">MRR Pro</div>
+          <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(proMRR)} lei`}</div>
+          <div className="ap-stat-trend">{proActive} abonamente active × 79 lei</div>
+        </div>
+        <div className="ap-stat-card">
+          <div className="ap-stat-label">MRR Studio</div>
+          <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(studioMRR)} lei`}</div>
+          <div className="ap-stat-trend">{studioActive} abonamente active × 129 lei</div>
+        </div>
+        <div className="ap-stat-card">
+          <div className="ap-stat-label">Total MRR</div>
+          <div className="ap-stat-value ap-stat-value--green">{isLoading ? '...' : `${fmtInt(totalMRR)} lei`}</div>
+          <div className="ap-stat-trend">Venit recurent lunar estimat</div>
+        </div>
+      </div>
+
+      <div className="ap-card">
+        <div className="ap-card-header">
+          <span className="ap-card-title">Costuri infrastructură</span>
+        </div>
+        <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(220px, 1fr))', gap: 14 }}>
+          <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(0,0,0,0.06)', background: '#fff' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Storage total ocupat</div>
+            <div style={{ fontSize: '1.45rem', color: '#1d1d1f', fontFamily: 'DM Serif Display, Georgia, serif' }}>
+              {isLoading ? '...' : `${fmtDecimal(totalStorageGb, 1)} GB`}
+            </div>
+            <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtInt(totalStorageBytes)} bytes`}</div>
+          </div>
+
+          <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(0,0,0,0.06)', background: '#fff' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Cost R2 (0.015 USD/GB)</div>
+            <div style={{ fontSize: '1.45rem', color: '#1d1d1f', fontFamily: 'DM Serif Display, Georgia, serif' }}>
+              {isLoading ? '...' : `${fmtDecimal(r2CostUsd)} USD`}
+            </div>
+            <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(r2CostLei)} lei (curs 4.7)`}</div>
+          </div>
+
+          <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(0,0,0,0.06)', background: '#fff' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Cost B2 (0.006 USD/GB)</div>
+            <div style={{ fontSize: '1.45rem', color: '#1d1d1f', fontFamily: 'DM Serif Display, Georgia, serif' }}>
+              {isLoading ? '...' : `${fmtDecimal(b2CostUsd)} USD`}
+            </div>
+            <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(b2CostLei)} lei`}</div>
+          </div>
+
+          <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(46,125,50,0.24)', background: 'rgba(46,125,50,0.04)' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2e7d32', marginBottom: 7 }}>Economie la migrare B2</div>
+            <div style={{ fontSize: '1.45rem', color: '#2e7d32', fontFamily: 'DM Serif Display, Georgia, serif' }}>
+              {isLoading ? '...' : `${fmtDecimal(savingsUsd)} USD`}
+            </div>
+            <div style={{ fontSize: '12px', color: '#2e7d32', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(savingsLei)} lei`}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="ap-card">
+        <div className="ap-card-header">
+          <span className="ap-card-title">Profit estimat</span>
+        </div>
+        <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: '12.5px', color: '#86868b' }}>Formula: MRR total - cost R2 (lei)</div>
+            <div style={{ fontSize: '11.5px', color: '#a1a1a6', marginTop: 6 }}>
+              {isLoading ? '' : `${fmtInt(totalMRR)} lei - ${fmtDecimal(r2CostLei)} lei`}
+            </div>
+          </div>
+          <div className={`ap-stat-value ${estimatedProfitLei >= 0 ? 'ap-stat-value--green' : 'ap-stat-value--red'}`} style={{ marginBottom: 0 }}>
+            {isLoading ? '...' : `${fmtDecimal(estimatedProfitLei)} lei`}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 // ── Secțiunea Mesaje ──────────────────────────
 function MesajeSection({ messages, loading, onMarkRead }) {
   const [selected, setSelected] = useState(null)
@@ -749,6 +872,7 @@ export default function AdminPanel({ user }) {
             brandName: userData.brandName || '',
             createdAt: userData.createdAt || null,
             status: userData.status || 'active',
+            storageUsedBytes: Number(userData.storageUsedBytes || 0),
             role: userData.role || 'user',
             isAdmin: userData.isAdmin === true
               || userData.role === 'admin',
@@ -906,6 +1030,7 @@ export default function AdminPanel({ user }) {
     { key: 'users', label: 'Utilizatori', icon: Users, badge: users.length },
     { key: 'galerii', label: 'Galerii', icon: Images, badge: galerii.length },
     { key: 'abonamente', label: 'Abonamente', icon: CreditCard },
+    { key: 'financiar', label: 'Financiar', icon: TrendingUp },
     { key: 'mesaje', label: 'Mesaje', icon: MessageSquare, badge: newMessages || null },
     { key: 'setari', label: 'Setări', icon: Settings },
   ]
@@ -974,6 +1099,14 @@ export default function AdminPanel({ user }) {
           )}
           {activeSection === 'galerii' && <GaleriiSection galerii={galerii} loading={loadingGalerii} />}
           {activeSection === 'abonamente' && <AbonamenteSection subscriptions={subscriptions} loading={loadingSubscriptions} />}
+          {activeSection === 'financiar' && (
+            <FinanciarSection
+              users={users}
+              subscriptions={subscriptions}
+              loadingUsers={loadingUsers}
+              loadingSubscriptions={loadingSubscriptions}
+            />
+          )}
           {activeSection === 'mesaje' && <MesajeSection messages={messages} loading={loadingMessages} onMarkRead={handleMarkRead} />}
           {activeSection === 'setari' && <SetariSection />}
         </main>
