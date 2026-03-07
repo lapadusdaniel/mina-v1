@@ -89,13 +89,13 @@ const IconSearch = () => (
 function GalleryRow({
   galerie, user, onDeschide, onMoveToTrash, onDeletePermanently, onRestore, onPreview,
   isPinned, onTogglePin, isTrashView, isArchivedView, isSelected, onToggleSelect,
-  onArchive, onUnarchive, onOpenSettings
+  onArchive, onUnarchive, onOpenSettings,
+  isMenuOpen, onToggleMenu, onCloseMenu
 }) {
   const [coverUrl, setCoverUrl] = useState(null)
   const [totalSize, setTotalSize] = useState(0)
   const [coverLoading, setCoverLoading] = useState(true)
   const [shouldLoadCover, setShouldLoadCover] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [copyTooltip, setCopyTooltip] = useState(false)
   const urlRef = useRef(null)
   const menuRef = useRef(null)
@@ -144,11 +144,11 @@ function GalleryRow({
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+      if (menuRef.current && !menuRef.current.contains(e.target)) onCloseMenu?.()
     }
-    if (menuOpen) document.addEventListener('mousedown', handleClickOutside)
+    if (isMenuOpen) document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [menuOpen])
+  }, [isMenuOpen, onCloseMenu])
 
   useEffect(() => {
     setShouldLoadCover(false)
@@ -314,7 +314,7 @@ function GalleryRow({
           </>
         )}
       </div>
-      <div className="gallery-row-col gallery-row-col-actions" ref={menuRef}>
+      <div className="gallery-row-col gallery-row-col-actions">
         {!isTrashView && (
           <div className="gallery-row-quick-actions">
             <button type="button" className="gallery-row-quick-btn" onClick={handleCopy} title="Copiază link">
@@ -345,82 +345,84 @@ function GalleryRow({
             Restaurare
           </button>
         )}
-        <button
-          onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-          className="gallery-row-kebab-btn"
-          title="Meniu acțiuni"
-          aria-haspopup="true"
-          aria-expanded={menuOpen}
-        >
-          <MoreVertical size={20} />
-        </button>
-        {menuOpen && (
-          <div className="gallery-row-menu" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="gallery-row-menu-item"
-              onClick={() => { setMenuOpen(false); onOpenSettings?.(galerie); }}
-            >
-              <Settings size={16} />
-              <span>Setări Galerie</span>
-            </button>
-            <button
-              type="button"
-              className="gallery-row-menu-item"
-              onClick={() => { setMenuOpen(false); onPreview?.(galerie); }}
-            >
-              <Eye size={16} />
-              <span>Preview</span>
-            </button>
-            <button
-              type="button"
-              className="gallery-row-menu-item"
-              onClick={() => { setMenuOpen(false); onTogglePin?.(galerie?.id); }}
-            >
-              <Pin size={16} />
-              <span>Fixează galerie</span>
-            </button>
-            {showArchiveInMenu && (
+        <div style={{ position: 'relative', display: 'inline-block' }} ref={menuRef}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleMenu?.(); }}
+            className="gallery-row-kebab-btn"
+            title="Meniu acțiuni"
+            aria-haspopup="true"
+            aria-expanded={isMenuOpen}
+          >
+            <MoreVertical size={20} />
+          </button>
+          {isMenuOpen && (
+            <div className="gallery-row-menu" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 className="gallery-row-menu-item"
-                onClick={() => { setMenuOpen(false); onArchive?.(galerie?.id); }}
+                onClick={() => { onCloseMenu?.(); onOpenSettings?.(galerie); }}
               >
-                <Archive size={16} />
-                <span>Arhivează</span>
+                <Settings size={16} />
+                <span>Setări Galerie</span>
               </button>
-            )}
-            {showUnarchiveInMenu && (
               <button
                 type="button"
                 className="gallery-row-menu-item"
-                onClick={() => { setMenuOpen(false); onUnarchive(galerie?.id); }}
+                onClick={() => { onCloseMenu?.(); onPreview?.(galerie); }}
               >
-                <ArchiveRestore size={16} />
-                <span>Reactivează</span>
+                <Eye size={16} />
+                <span>Preview</span>
               </button>
-            )}
-            <button
-              type="button"
-              className="gallery-row-menu-item gallery-row-menu-item-danger"
-              onClick={() => {
-                setMenuOpen(false)
-                if (isTrashView) {
-                  if (window.confirm('Sigur vrei să ștergi definitiv această galerie? Nu poate fi recuperată.')) {
-                    onDeletePermanently?.(galerie?.id)
+              <button
+                type="button"
+                className="gallery-row-menu-item"
+                onClick={() => { onCloseMenu?.(); onTogglePin?.(galerie?.id); }}
+              >
+                <Pin size={16} />
+                <span>Fixează galerie</span>
+              </button>
+              {showArchiveInMenu && (
+                <button
+                  type="button"
+                  className="gallery-row-menu-item"
+                  onClick={() => { onCloseMenu?.(); onArchive?.(galerie?.id); }}
+                >
+                  <Archive size={16} />
+                  <span>Arhivează</span>
+                </button>
+              )}
+              {showUnarchiveInMenu && (
+                <button
+                  type="button"
+                  className="gallery-row-menu-item"
+                  onClick={() => { onCloseMenu?.(); onUnarchive(galerie?.id); }}
+                >
+                  <ArchiveRestore size={16} />
+                  <span>Reactivează</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="gallery-row-menu-item gallery-row-menu-item-danger"
+                onClick={() => {
+                  onCloseMenu?.()
+                  if (isTrashView) {
+                    if (window.confirm('Sigur vrei să ștergi definitiv această galerie? Nu poate fi recuperată.')) {
+                      onDeletePermanently?.(galerie?.id)
+                    }
+                  } else {
+                    if (window.confirm('Sigur vrei să ștergi această galerie?')) {
+                      onMoveToTrash?.(galerie?.id)
+                    }
                   }
-                } else {
-                  if (window.confirm('Sigur vrei să ștergi această galerie?')) {
-                    onMoveToTrash?.(galerie?.id)
-                  }
-                }
-              }}
-            >
-              <Trash2 size={16} />
-              <span>{isTrashView ? 'Șterge definitiv' : 'Șterge galerie'}</span>
-            </button>
-          </div>
-        )}
+                }}
+              >
+                <Trash2 size={16} />
+                <span>{isTrashView ? 'Șterge definitiv' : 'Șterge galerie'}</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -452,6 +454,7 @@ export default function AdminGalleryTable({
   const dragCounterRef = useRef(0)
   const [pinnedGaleriiIds, setPinnedGaleriiIds] = useState(() => readPinnedIdsFromStorage())
   const [settingsGalerie, setSettingsGalerie] = useState(null)
+  const [openMenuId, setOpenMenuId] = useState(null)
 
   useEffect(() => {
     // One-time migration from old key name to the Mina key name.
@@ -741,6 +744,9 @@ export default function AdminGalleryTable({
                         onArchive={handleArchive}
                         onUnarchive={handleUnarchive}
                         onOpenSettings={setSettingsGalerie}
+                        isMenuOpen={openMenuId === galerie.id}
+                        onToggleMenu={() => setOpenMenuId((prev) => prev === galerie.id ? null : galerie.id)}
+                        onCloseMenu={() => setOpenMenuId(null)}
                       />
                     ))}
                   </div>
@@ -769,6 +775,9 @@ export default function AdminGalleryTable({
                         onArchive={handleArchive}
                         onUnarchive={handleUnarchive}
                         onOpenSettings={setSettingsGalerie}
+                        isMenuOpen={openMenuId === galerie.id}
+                        onToggleMenu={() => setOpenMenuId((prev) => prev === galerie.id ? null : galerie.id)}
+                        onCloseMenu={() => setOpenMenuId(null)}
                       />
                     ))}
                   </div>
