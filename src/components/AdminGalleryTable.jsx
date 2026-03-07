@@ -314,7 +314,7 @@ function GalleryRow({
           </>
         )}
       </div>
-      <div className="gallery-row-col gallery-row-col-actions" ref={menuRef}>
+      <div className="gallery-row-col gallery-row-col-actions">
         {!isTrashView && (
           <div className="gallery-row-quick-actions">
             <button type="button" className="gallery-row-quick-btn" onClick={handleCopy} title="Copiază link">
@@ -345,82 +345,88 @@ function GalleryRow({
             Restaurare
           </button>
         )}
-        <button
-          onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-          className="gallery-row-kebab-btn"
-          title="Meniu acțiuni"
-          aria-haspopup="true"
-          aria-expanded={menuOpen}
-        >
-          <MoreVertical size={20} />
-        </button>
-        {menuOpen && (
-          <div className="gallery-row-menu" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="gallery-row-menu-item"
-              onClick={() => { setMenuOpen(false); onOpenSettings?.(galerie); }}
+        <div style={{ position: 'relative', display: 'inline-block' }} ref={menuRef}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+            className="gallery-row-kebab-btn"
+            title="Meniu acțiuni"
+            aria-haspopup="true"
+            aria-expanded={menuOpen}
+          >
+            <MoreVertical size={20} />
+          </button>
+          {menuOpen && (
+            <div
+              className="gallery-row-menu"
+              style={{ position: 'absolute', top: '32px', right: 0, left: 'auto', zIndex: 200 }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <Settings size={16} />
-              <span>Setări Galerie</span>
-            </button>
-            <button
-              type="button"
-              className="gallery-row-menu-item"
-              onClick={() => { setMenuOpen(false); onPreview?.(galerie); }}
-            >
-              <Eye size={16} />
-              <span>Preview</span>
-            </button>
-            <button
-              type="button"
-              className="gallery-row-menu-item"
-              onClick={() => { setMenuOpen(false); onTogglePin?.(galerie?.id); }}
-            >
-              <Pin size={16} />
-              <span>Fixează galerie</span>
-            </button>
-            {showArchiveInMenu && (
               <button
                 type="button"
                 className="gallery-row-menu-item"
-                onClick={() => { setMenuOpen(false); onArchive?.(galerie?.id); }}
+                onClick={() => { setMenuOpen(false); onOpenSettings?.(galerie); }}
               >
-                <Archive size={16} />
-                <span>Arhivează</span>
+                <Settings size={16} />
+                <span>Setări Galerie</span>
               </button>
-            )}
-            {showUnarchiveInMenu && (
               <button
                 type="button"
                 className="gallery-row-menu-item"
-                onClick={() => { setMenuOpen(false); onUnarchive(galerie?.id); }}
+                onClick={() => { setMenuOpen(false); onPreview?.(galerie); }}
               >
-                <ArchiveRestore size={16} />
-                <span>Reactivează</span>
+                <Eye size={16} />
+                <span>Preview</span>
               </button>
-            )}
-            <button
-              type="button"
-              className="gallery-row-menu-item gallery-row-menu-item-danger"
-              onClick={() => {
-                setMenuOpen(false)
-                if (isTrashView) {
-                  if (window.confirm('Sigur vrei să ștergi definitiv această galerie? Nu poate fi recuperată.')) {
-                    onDeletePermanently?.(galerie?.id)
+              <button
+                type="button"
+                className="gallery-row-menu-item"
+                onClick={() => { setMenuOpen(false); onTogglePin?.(galerie?.id); }}
+              >
+                <Pin size={16} />
+                <span>Fixează galerie</span>
+              </button>
+              {showArchiveInMenu && (
+                <button
+                  type="button"
+                  className="gallery-row-menu-item"
+                  onClick={() => { setMenuOpen(false); onArchive?.(galerie?.id); }}
+                >
+                  <Archive size={16} />
+                  <span>Arhivează</span>
+                </button>
+              )}
+              {showUnarchiveInMenu && (
+                <button
+                  type="button"
+                  className="gallery-row-menu-item"
+                  onClick={() => { setMenuOpen(false); onUnarchive(galerie?.id); }}
+                >
+                  <ArchiveRestore size={16} />
+                  <span>Reactivează</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="gallery-row-menu-item gallery-row-menu-item-danger"
+                onClick={() => {
+                  setMenuOpen(false)
+                  if (isTrashView) {
+                    if (window.confirm('Sigur vrei să ștergi definitiv această galerie? Nu poate fi recuperată.')) {
+                      onDeletePermanently?.(galerie?.id)
+                    }
+                  } else {
+                    if (window.confirm('Sigur vrei să ștergi această galerie?')) {
+                      onMoveToTrash?.(galerie?.id)
+                    }
                   }
-                } else {
-                  if (window.confirm('Sigur vrei să ștergi această galerie?')) {
-                    onMoveToTrash?.(galerie?.id)
-                  }
-                }
-              }}
-            >
-              <Trash2 size={16} />
-              <span>{isTrashView ? 'Șterge definitiv' : 'Șterge galerie'}</span>
-            </button>
-          </div>
-        )}
+                }}
+              >
+                <Trash2 size={16} />
+                <span>{isTrashView ? 'Șterge definitiv' : 'Șterge galerie'}</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
