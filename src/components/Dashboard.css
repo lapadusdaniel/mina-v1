@@ -3006,9 +3006,17 @@
 
   .gallery-list-premium .gallery-row-menu {
     position: absolute;
+    top: 100%;
+    right: 0;
+    left: auto;
     z-index: 100;
     background: var(--theme-bg);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  }
+
+  .gallery-list-premium .gallery-row-name-inner {
+    display: block !important;
+    visibility: visible !important;
   }
 
   .gallery-list-premium .gallery-row-col-stat,
