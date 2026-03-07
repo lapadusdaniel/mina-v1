@@ -358,7 +358,15 @@ function GalleryRow({
           {menuOpen && (
             <div
               className="gallery-row-menu"
-              style={{ position: 'absolute', top: '32px', right: 0, left: 'auto', zIndex: 200 }}
+              style={{ 
+                position: 'absolute', 
+                top: '32px', 
+                right: 0, 
+                left: 'auto', 
+                zIndex: 200,
+                maxHeight: '60vh',
+                overflowY: 'auto'
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
