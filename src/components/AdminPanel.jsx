@@ -536,11 +536,29 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
   const totalMRR = starterMRR + proMRR + studioMRR
 
   const bytesInGb = 1024 ** 3
-  const totalStorageBytes = users.reduce((acc, item) => acc + Number(item.storageUsedBytes || 0), 0)
+
+  const readUserStorageBytes = (userRecord = {}) => {
+    const hasOwn = Object.prototype.hasOwnProperty
+    const candidates = ['storageUsedBytes', 'storageBytes', 'storageUsed']
+
+    for (const key of candidates) {
+      if (!hasOwn.call(userRecord, key)) continue
+      const value = Number(userRecord[key])
+      if (Number.isFinite(value) && value >= 0) return value
+    }
+
+    return 0
+  }
+
+  const totalStorageBytes = users.reduce((acc, item) => acc + readUserStorageBytes(item), 0)
   const totalStorageGb = totalStorageBytes / bytesInGb
 
+  const freeTierGb = 10
+  const freeTierUsedGb = Math.min(totalStorageGb, freeTierGb)
+  const billableGb = Math.max(0, totalStorageGb - freeTierGb)
+
   const usdToLei = 4.7
-  const r2CostUsd = totalStorageGb * 0.015
+  const r2CostUsd = billableGb * 0.015
   const r2CostLei = r2CostUsd * usdToLei
   const b2CostUsd = totalStorageGb * 0.006
   const b2CostLei = b2CostUsd * usdToLei
@@ -597,10 +615,12 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
               {isLoading ? '...' : `${fmtDecimal(totalStorageGb, 1)} GB`}
             </div>
             <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtInt(totalStorageBytes)} bytes`}</div>
+            <div style={{ fontSize: '11.5px', color: '#86868b', marginTop: 4 }}>{isLoading ? '' : `Free tier R2: ${fmtDecimal(freeTierUsedGb, 2)} GB`}</div>
+            <div style={{ fontSize: '11.5px', color: '#86868b', marginTop: 2 }}>{isLoading ? '' : `Billable R2: ${fmtDecimal(billableGb, 2)} GB`}</div>
           </div>
 
           <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(0,0,0,0.06)', background: '#fff' }}>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Cost R2 (0.015 USD/GB)</div>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Cost R2 (0.015 USD/GB, după 10 GB gratis)</div>
             <div style={{ fontSize: '1.45rem', color: '#1d1d1f', fontFamily: 'DM Serif Display, Georgia, serif' }}>
               {isLoading ? '...' : `${fmtDecimal(r2CostUsd)} USD`}
             </div>
@@ -644,6 +664,7 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
     </div>
   )
 }
+
 // ── Secțiunea Mesaje ──────────────────────────
 function MesajeSection({ messages, loading, onMarkRead }) {
   const [selected, setSelected] = useState(null)
@@ -872,7 +893,7 @@ export default function AdminPanel({ user }) {
             brandName: userData.brandName || '',
             createdAt: userData.createdAt || null,
             status: userData.status || 'active',
-            storageUsedBytes: Number(userData.storageUsedBytes || 0),
+            storageUsedBytes: Number(userData.storageUsedBytes ?? userData.storageBytes ?? userData.storageUsed ?? 0),
             role: userData.role || 'user',
             isAdmin: userData.isAdmin === true
               || userData.role === 'admin',
