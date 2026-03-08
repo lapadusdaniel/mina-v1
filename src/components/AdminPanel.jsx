@@ -560,10 +560,6 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
   const usdToLei = 4.7
   const r2CostUsd = billableGb * 0.015
   const r2CostLei = r2CostUsd * usdToLei
-  const b2CostUsd = totalStorageGb * 0.006
-  const b2CostLei = b2CostUsd * usdToLei
-  const savingsUsd = r2CostUsd - b2CostUsd
-  const savingsLei = r2CostLei - b2CostLei
   const estimatedProfitLei = totalMRR - r2CostLei
 
   const fmtInt = (value) =>
@@ -625,22 +621,6 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
               {isLoading ? '...' : `${fmtDecimal(r2CostUsd)} USD`}
             </div>
             <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(r2CostLei)} lei (curs 4.7)`}</div>
-          </div>
-
-          <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(0,0,0,0.06)', background: '#fff' }}>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Cost B2 (0.006 USD/GB)</div>
-            <div style={{ fontSize: '1.45rem', color: '#1d1d1f', fontFamily: 'DM Serif Display, Georgia, serif' }}>
-              {isLoading ? '...' : `${fmtDecimal(b2CostUsd)} USD`}
-            </div>
-            <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(b2CostLei)} lei`}</div>
-          </div>
-
-          <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(46,125,50,0.24)', background: 'rgba(46,125,50,0.04)' }}>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2e7d32', marginBottom: 7 }}>Economie la migrare B2</div>
-            <div style={{ fontSize: '1.45rem', color: '#2e7d32', fontFamily: 'DM Serif Display, Georgia, serif' }}>
-              {isLoading ? '...' : `${fmtDecimal(savingsUsd)} USD`}
-            </div>
-            <div style={{ fontSize: '12px', color: '#2e7d32', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(savingsLei)} lei`}</div>
           </div>
         </div>
       </div>
