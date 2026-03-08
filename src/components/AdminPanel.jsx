@@ -233,6 +233,21 @@ function UsersSection({ users, loading, onChangePlan, onToggleSuspend, onToggleA
   const [filterPlan, setFilterPlan] = useState('all')
   const [selectedUser, setSelectedUser] = useState(null)
   const [changePlanUser, setChangePlanUser] = useState(null)
+  const PLAN_STORAGE_LIMITS_GB = {
+    free: 30,
+    starter: 150,
+    pro: 600,
+    studio: 2048,
+    unlimited: 2048,
+  }
+
+  const getPlanStorageLimitGb = (plan) => PLAN_STORAGE_LIMITS_GB[String(plan || 'free').toLowerCase()] || 30
+  const bytesToGb = (bytes) => {
+    const value = Number(bytes || 0)
+    if (!Number.isFinite(value) || value <= 0) return 0
+    return value / (1024 ** 3)
+  }
+  const formatGb = (gb) => gb.toFixed(gb >= 100 ? 0 : 1)
 
   const filtered = users.filter(u => {
     const matchSearch = !search ||
@@ -295,6 +310,28 @@ function UsersSection({ users, loading, onChangePlan, onToggleSuspend, onToggleA
                         <div>
                           <div className="ap-user-name">{u.brandName || u.name || '—'}</div>
                           <div className="ap-user-email">{u.email}</div>
+                          {(() => {
+                            const usedGb = bytesToGb(u.storageUsedBytes)
+                            const limitGb = getPlanStorageLimitGb(u.plan)
+                            const usagePct = limitGb > 0 ? Math.min(100, Math.round((usedGb / limitGb) * 100)) : 0
+                            return (
+                              <div style={{ marginTop: 6 }}>
+                                <div style={{ fontSize: '11.5px', color: '#6e6e73', fontWeight: 400, marginBottom: 4 }}>
+                                  {`${formatGb(usedGb)} GB / ${limitGb} GB (${usagePct}%)`}
+                                </div>
+                                <div style={{ height: 4, width: 180, maxWidth: '100%', background: '#ececf0', borderRadius: 999, overflow: 'hidden' }}>
+                                  <div
+                                    style={{
+                                      height: '100%',
+                                      width: `${usagePct}%`,
+                                      background: usagePct >= 90 ? '#d32f2f' : usagePct >= 75 ? '#f57c00' : '#2e7d32',
+                                      transition: 'width 0.3s ease',
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </div>
                       </div>
                     </td>
