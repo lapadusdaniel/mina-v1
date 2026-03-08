@@ -95,29 +95,46 @@ export function createAdminModule({ db }) {
     },
 
     async getAdminSnapshot({ stripePriceStarter, stripePricePro, stripePriceStudio } = {}) {
-      const [
-        usersSnap,
-        galleriesSnap,
-        overridesSnap,
-        subscriptionsSnap,
-      ] = await Promise.all([
-        getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'galerii')),
-        getDocs(collection(db, 'adminOverrides')),
-        getDocs(collectionGroup(db, 'subscriptions')),
-      ])
+      let usersSnap = null
+      let galleriesSnap = null
+      let overridesSnap = null
+      let subscriptionsSnap = null
 
-      const users = usersSnap.docs.map((d) => ({ uid: d.id, ...d.data() }))
+      try {
+        usersSnap = await getDocs(collection(db, 'users'))
+      } catch (err) {
+        console.error('[getAdminSnapshot] Query failed: users', err)
+      }
+
+      try {
+        galleriesSnap = await getDocs(collection(db, 'galerii'))
+      } catch (err) {
+        console.error('[getAdminSnapshot] Query failed: galerii', err)
+      }
+
+      try {
+        overridesSnap = await getDocs(collection(db, 'adminOverrides'))
+      } catch (err) {
+        console.error('[getAdminSnapshot] Query failed: adminOverrides', err)
+      }
+
+      try {
+        subscriptionsSnap = await getDocs(collectionGroup(db, 'subscriptions'))
+      } catch (err) {
+        console.error('[getAdminSnapshot] Query failed: collectionGroup(subscriptions)', err)
+      }
+
+      const users = (usersSnap?.docs ?? []).map((d) => ({ uid: d.id, ...d.data() }))
 
       const galleryCountByUid = {}
-      galleriesSnap.docs.forEach((d) => {
+      ;(galleriesSnap?.docs ?? []).forEach((d) => {
         const uid = d.data()?.userId
         if (!uid) return
         galleryCountByUid[uid] = (galleryCountByUid[uid] || 0) + 1
       })
 
       const planOverrideByUid = {}
-      overridesSnap.docs.forEach((d) => {
+      ;(overridesSnap?.docs ?? []).forEach((d) => {
         const plan = normalizePlanFromString(d.data()?.plan)
         if (!plan) return
         planOverrideByUid[d.id] = plan
@@ -125,7 +142,7 @@ export function createAdminModule({ db }) {
 
       const subscriptions = []
       const activePlanByUid = {}
-      subscriptionsSnap.docs.forEach((d) => {
+      ;(subscriptionsSnap?.docs ?? []).forEach((d) => {
         const subData = d.data() || {}
         const uid = extractUidFromSubscriptionSnap(d)
         if (!uid) return
