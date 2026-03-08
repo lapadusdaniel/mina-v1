@@ -29,6 +29,9 @@ const STRIPE_PRICE_STARTER = import.meta.env.VITE_STRIPE_PRICE_STARTER || 'price
 const STRIPE_PRICE_PRO = import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T6a4F1ax2jGrLZH92vUsGzE'
 const STRIPE_PRICE_STUDIO = import.meta.env.VITE_STRIPE_PRICE_STUDIO || 'price_1T6a501ax2jGrLZHgLBbkzT4'
 
+const ADMIN_ACTIVE_SECTION_STORAGE_KEY = 'adminActiveSection'
+const ADMIN_ALLOWED_SECTIONS = ['overview', 'users', 'galerii', 'abonamente', 'financiar', 'mesaje', 'setari']
+
 // ── Helpers ───────────────────────────────────
 const formatDate = (val) => {
   if (!val) return '—'
@@ -827,6 +830,27 @@ export default function AdminPanel({ user }) {
       </div>
     )
   }
+
+  useEffect(() => {
+    try {
+      const savedSection = sessionStorage.getItem(ADMIN_ACTIVE_SECTION_STORAGE_KEY)
+      if (savedSection && ADMIN_ALLOWED_SECTIONS.includes(savedSection)) {
+        setActiveSection(savedSection)
+      }
+    } catch (_) {
+      // no-op
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      if (ADMIN_ALLOWED_SECTIONS.includes(activeSection)) {
+        sessionStorage.setItem(ADMIN_ACTIVE_SECTION_STORAGE_KEY, activeSection)
+      }
+    } catch (_) {
+      // no-op
+    }
+  }, [activeSection])
 
   // ── Load utilizatori din colecția 'users' (creată la Register) ──
   useEffect(() => {
