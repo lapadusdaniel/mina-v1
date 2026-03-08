@@ -154,7 +154,12 @@ function UserDetailModal({ user, onClose }) {
 }
 
 // ── Secțiunea Overview ────────────────────────
-function OverviewSection({ stats }) {
+function OverviewSection({ stats, users = [] }) {
+  const totalStorageBytes = users.reduce((sum, u) => sum + Number(u.storageUsedBytes || 0), 0)
+  const totalStorageGb = totalStorageBytes / (1024 ** 3)
+  const averageStorageGb = users.length > 0 ? totalStorageGb / users.length : 0
+  const formatStorageGb = (value) => value >= 100 ? value.toFixed(0) : value.toFixed(1)
+
   return (
     <div>
       <div className="ap-page-header">
@@ -197,6 +202,22 @@ function OverviewSection({ stats }) {
             {stats.loading ? '...' : stats.newMessages}
           </div>
           <div className="ap-stat-trend">necitite de la clienți</div>
+        </div>
+
+        <div className="ap-stat-card">
+          <div className="ap-stat-label"><TrendingUp size={13} /> Stocare totală</div>
+          <div className="ap-stat-value">
+            {stats.loading ? '...' : `${formatStorageGb(totalStorageGb)} GB`}
+          </div>
+          <div className="ap-stat-trend">stocare utilizată de toți userii</div>
+        </div>
+
+        <div className="ap-stat-card">
+          <div className="ap-stat-label"><TrendingUp size={13} /> Stocare medie / user</div>
+          <div className="ap-stat-value">
+            {stats.loading ? '...' : `${formatStorageGb(averageStorageGb)} GB`}
+          </div>
+          <div className="ap-stat-trend">media per cont activ</div>
         </div>
       </div>
 
@@ -1140,7 +1161,7 @@ export default function AdminPanel({ user }) {
         </nav>
 
         <main className="ap-main">
-          {activeSection === 'overview' && <OverviewSection stats={stats} />}
+          {activeSection === 'overview' && <OverviewSection stats={stats} users={users} />}
           {activeSection === 'users' && (
             <>
               {usersLoadError && (
