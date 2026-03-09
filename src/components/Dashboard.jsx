@@ -676,13 +676,23 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const handleDeletePermanently = async (id) => {
     if (!window.confirm('Această acțiune va șterge definitiv toate fotografiile din stocarea Cloudflare și nu poate fi anulată. Ștergi definitiv?')) return
     try {
-      const targetGallery = galerii.find((g) => g.id === id) || (galerieActiva?.id === id ? galerieActiva : null)
-      const removedBytes = Math.max(0, Number(targetGallery?.storageBytes || 0))
       const idToken = await authService.getCurrentIdToken()
-      await mediaService.deleteGalleryAssets(id, idToken, user?.uid || '')
-      await galleriesService.deleteGallery(id)
-      if (removedBytes > 0) {
-        await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
+      const explicitFunctionUrl = String(import.meta.env.VITE_DELETE_GALLERY_ASSETS_URL || '').trim()
+      const projectId = String(import.meta.env.VITE_FIREBASE_PROJECT_ID || '').trim()
+      const endpoint = explicitFunctionUrl || (projectId ? `https://us-central1-${projectId}.cloudfunctions.net/deleteGalleryAssets` : '')
+      if (!endpoint) throw new Error('URL funcției deleteGalleryAssets nu este configurat.')
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ galleryId: id }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(String(payload?.error || '').trim() || `Delete failed (${response.status}).`)
       }
     } catch (error) {
       console.error('Error:', error)

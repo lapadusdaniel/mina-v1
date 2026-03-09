@@ -24,6 +24,7 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 
 const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
+const DEFAULT_R2_WORKER_URL = 'https://mina-v1-r2-worker.lapadusdaniel.workers.dev'
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
   starter: 'price_1T6a3S1ax2jGrLZHmevohZWA',
@@ -127,12 +128,33 @@ async function hasStudioPlanInFirestore(uid) {
   return false
 }
 
-async function verifyRequestAuth(req) {
+function readBearerAuthHeader(req) {
   const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim()
   if (!authHeader.startsWith('Bearer ')) {
     throw new HttpsError('unauthenticated', 'Lipsește token-ul de autentificare.')
   }
+  return authHeader
+}
 
+function parseJsonRequestBody(req) {
+  if (req.body && typeof req.body === 'object') return req.body
+  try {
+    return JSON.parse(Buffer.from(req.rawBody || '').toString('utf8') || '{}')
+  } catch (_) {
+    return {}
+  }
+}
+
+function getR2WorkerBaseUrl() {
+  const raw = String(process.env.R2_WORKER_URL || process.env.VITE_R2_WORKER_URL || DEFAULT_R2_WORKER_URL).trim()
+  if (!raw) {
+    throw new HttpsError('internal', 'R2 worker URL nu este configurat.')
+  }
+  return raw.endsWith('/') ? raw : `${raw}/`
+}
+
+async function verifyRequestAuth(req) {
+  const authHeader = readBearerAuthHeader(req)
   const token = authHeader.slice('Bearer '.length).trim()
   if (!token) {
     throw new HttpsError('unauthenticated', 'Token invalid.')
@@ -1329,6 +1351,111 @@ exports.createAddonCheckoutSession = onRequest(
       url: session.url,
       sessionId: session.id,
     })
+  }
+)
+
+exports.deleteGalleryAssets = onRequest(
+  {
+    region: 'us-central1',
+    maxInstances: 20,
+    cors: true,
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method Not Allowed' })
+      return
+    }
+
+    let uid = ''
+    let authHeader = ''
+    let galleryId = ''
+
+    try {
+      authHeader = readBearerAuthHeader(req)
+      uid = await verifyRequestAuth(req)
+    } catch (authError) {
+      const code = authError instanceof HttpsError ? authError.code : 'unauthenticated'
+      const message = authError?.message || 'Neautorizat.'
+      res.status(code === 'permission-denied' ? 403 : 401).json({ error: message })
+      return
+    }
+
+    const payload = parseJsonRequestBody(req)
+    const rawGalleryId = String(payload?.galleryId || '').trim()
+    galleryId = rawGalleryId && !rawGalleryId.includes('/') ? rawGalleryId : ''
+    if (!galleryId) {
+      res.status(400).json({ error: 'galleryId invalid.' })
+      return
+    }
+
+    try {
+      const galleryRef = db.collection('galerii').doc(galleryId)
+      const gallerySnap = await galleryRef.get()
+      if (!gallerySnap.exists) {
+        res.status(404).json({ error: 'Galeria nu există.' })
+        return
+      }
+
+      const galleryData = gallerySnap.data() || {}
+      const ownerUid = String(galleryData.userId || '').trim()
+      if (!ownerUid || ownerUid !== uid) {
+        res.status(403).json({ error: 'Nu ai permisiunea să ștergi această galerie.' })
+        return
+      }
+
+      const prefix = `galerii/${galleryId}/`
+      const workerResponse = await fetch(
+        `${getR2WorkerBaseUrl()}?prefix=${encodeURIComponent(prefix)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: authHeader },
+        }
+      )
+
+      if (!workerResponse.ok) {
+        const workerMessage = String(await workerResponse.text().catch(() => '') || '').trim()
+        res.status(workerResponse.status).json({
+          error: workerMessage || `Ștergerea asset-urilor a eșuat (${workerResponse.status}).`,
+        })
+        return
+      }
+
+      const gallerySlug = String(galleryData.slug || '').trim().toLowerCase()
+      const removedBytes = Math.max(0, Number(galleryData.storageBytes || 0))
+      const batch = db.batch()
+
+      if (gallerySlug) {
+        batch.delete(db.collection('slugs').doc(gallerySlug))
+      }
+      batch.delete(galleryRef)
+
+      if (removedBytes > 0) {
+        batch.set(
+          db.collection('users').doc(ownerUid),
+          {
+            storageUsedBytes: admin.firestore.FieldValue.increment(-removedBytes),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+      }
+
+      await batch.commit()
+
+      const workerPayload = await workerResponse.json().catch(() => ({}))
+      res.status(200).json({
+        ok: true,
+        galleryId,
+        deleted: Number(workerPayload?.deleted || 0),
+      })
+    } catch (error) {
+      logger.error('deleteGalleryAssets failed', {
+        uid,
+        galleryId,
+        error: error?.message || String(error),
+      })
+      res.status(500).json({ error: 'Ștergerea galeriei a eșuat.' })
+    }
   }
 )
 
