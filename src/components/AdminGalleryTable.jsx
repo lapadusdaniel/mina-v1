@@ -623,7 +623,8 @@ export default function AdminGalleryTable({
     }
   }, [activeTab])
 
-  const totalPoze = galerii.reduce((sum, g) => sum + (g?.poze || 0), 0)
+  const statsGalerii = galerii.filter((g) => g?.status !== 'trash' && g?.status !== 'archived')
+  const totalPoze = statsGalerii.reduce((sum, g) => sum + (g?.poze || 0), 0)
   const totalStorageBytes = galerii.reduce((sum, g) => sum + Number(g?.storageBytes || 0), 0)
   const planName = userPlanProp ?? user?.plan ?? 'Free'
   const planLimitGB = storageLimitProp ?? PLAN_LIMITS_GB[planName] ?? 30
@@ -686,7 +687,7 @@ export default function AdminGalleryTable({
             </div>
           </div>
           <div className="dashboard-mini-stats">
-            {galerii.length} Galerii • {totalPoze} Poze • Plan: {planName}
+            {statsGalerii.length} Galerii • {totalPoze} Poze • Plan: {planName}
           </div>
         </div>
       </div>
