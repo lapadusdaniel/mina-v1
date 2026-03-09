@@ -7,6 +7,86 @@ import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { getGalleryPublicPath } from '../utils/publicLinks'
 
 const { media: mediaService } = getAppServices()
+const uploadProgressOverlayCss = `
+  .gallery-upload-progress-overlay {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    padding: 20px 32px;
+    min-width: 360px;
+    z-index: 1000;
+    box-sizing: border-box;
+  }
+
+  .gallery-upload-progress-overlay__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+
+  .gallery-upload-progress-overlay__count {
+    color: #1d1d1f;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .gallery-upload-progress-overlay__speed {
+    color: #86868b;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .gallery-upload-progress-overlay__bar {
+    display: block;
+    width: 100%;
+    height: 6px;
+    border: none;
+    border-radius: 3px;
+    overflow: hidden;
+    background: #f0f0f0;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .gallery-upload-progress-overlay__bar::-webkit-progress-bar {
+    background: #f0f0f0;
+    border-radius: 3px;
+  }
+
+  .gallery-upload-progress-overlay__bar::-webkit-progress-value {
+    background: #1d1d1f;
+    border-radius: 3px;
+  }
+
+  .gallery-upload-progress-overlay__bar::-moz-progress-bar {
+    background: #1d1d1f;
+    border-radius: 3px;
+  }
+
+  .gallery-upload-progress-overlay__percent {
+    margin-top: 10px;
+    color: #86868b;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  @media (max-width: 440px) {
+    .gallery-upload-progress-overlay {
+      right: 16px;
+      bottom: 16px;
+      left: 16px;
+      transform: none;
+      min-width: 0;
+      padding: 18px 20px;
+    }
+  }
+`
 
 function GalleryPhotoTile({ photo, onDeletePoza }) {
   const [thumbUrl, setThumbUrl] = useState(photo?.url || null)
@@ -176,17 +256,6 @@ export default function GalleryDetailView({
         </div>
       </div>
 
-      {uploading && (
-        <>
-          <div className="dashboard-progress-bar">
-            <div className="dashboard-progress-fill" style={{ width: `${uploadProgress}%` }} />
-          </div>
-          <div style={{ marginTop: 8, color: '#86868b', fontSize: 14 }}>
-            {uploadedCount} / {totalCount} poze încărcate • {uploadSpeedMbPerSecond.toFixed(2)} MB/s
-          </div>
-        </>
-      )}
-
       <div className="dashboard-folders-section">
         <div className="dashboard-folders-list">
           <button
@@ -281,6 +350,30 @@ export default function GalleryDetailView({
         }}
         onClose={() => setSettingsOpen(false)}
       />
+
+      {uploading && (
+        <>
+          <style>{uploadProgressOverlayCss}</style>
+          <div className="gallery-upload-progress-overlay" role="status" aria-live="polite">
+            <div className="gallery-upload-progress-overlay__row">
+              <span className="gallery-upload-progress-overlay__count">
+                {uploadedCount} / {totalCount} poze
+              </span>
+              <span className="gallery-upload-progress-overlay__speed">
+                {uploadSpeedMbPerSecond.toFixed(1)} MB/s
+              </span>
+            </div>
+            <progress
+              className="gallery-upload-progress-overlay__bar"
+              max="100"
+              value={uploadProgress}
+            />
+            <div className="gallery-upload-progress-overlay__percent">
+              {uploadProgress}%
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
