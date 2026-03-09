@@ -22,6 +22,10 @@ const SMARTBILL_TOKEN = defineSecret('SMARTBILL_TOKEN')
 const SMARTBILL_CIF = defineSecret('SMARTBILL_CIF')
 const SMARTBILL_SERIES_NAME = defineSecret('SMARTBILL_SERIES_NAME')
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
+const R2_ACCOUNT_ID = defineSecret('R2_ACCOUNT_ID')
+const R2_ACCESS_KEY_ID = defineSecret('R2_ACCESS_KEY_ID')
+const R2_SECRET_ACCESS_KEY = defineSecret('R2_SECRET_ACCESS_KEY')
+const R2_BUCKET_NAME = defineSecret('R2_BUCKET_NAME')
 
 const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
@@ -170,9 +174,9 @@ async function verifyRequestAuth(req) {
 }
 
 function getR2S3Client() {
-  const accountId = String(process.env.R2_ACCOUNT_ID || '').trim()
-  const accessKeyId = String(process.env.R2_ACCESS_KEY_ID || '').trim()
-  const secretAccessKey = String(process.env.R2_SECRET_ACCESS_KEY || '').trim()
+  const accountId = String(R2_ACCOUNT_ID.value() || '').trim()
+  const accessKeyId = String(R2_ACCESS_KEY_ID.value() || '').trim()
+  const secretAccessKey = String(R2_SECRET_ACCESS_KEY.value() || '').trim()
   if (!accountId || !accessKeyId || !secretAccessKey) {
     throw new HttpsError('internal', 'Lipsesc credențialele R2.')
   }
@@ -189,7 +193,7 @@ function getR2S3Client() {
 }
 
 function getR2BucketName() {
-  const bucketName = String(process.env.R2_BUCKET_NAME || '').trim()
+  const bucketName = String(R2_BUCKET_NAME.value() || '').trim()
   if (!bucketName) {
     throw new HttpsError('internal', 'Lipsește R2_BUCKET_NAME.')
   }
@@ -1423,6 +1427,7 @@ exports.deleteGalleryAssets = onRequest(
     region: 'us-central1',
     maxInstances: 20,
     cors: true,
+    secrets: [R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME],
   },
   async (req, res) => {
     if (req.method !== 'POST') {
