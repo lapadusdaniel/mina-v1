@@ -327,6 +327,15 @@ export default function GallerySettingsModal({
         const coverUrl = coverKey
           ? await mediaService.getPhotoUrl(coverKey, 'medium')
           : null
+        console.log('GALLERY SAVE DEBUG', {
+          galleryId: galerie.id,
+          payload: {
+            ...payload,
+            coverKey,
+            coverUrl,
+            coverFocalPoint: normalizeFocalPoint(coverFocalPoint),
+          },
+        })
 
         await galleriesService.updateGallery(galerie.id, {
           ...payload,
