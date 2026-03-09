@@ -235,7 +235,13 @@ function GalleryRow({
     <div
       ref={rowRef}
       className={`gallery-row ${isTrashView ? 'gallery-row-trash' : ''}`}
-      style={{ position: 'relative', zIndex: isMenuOpen ? 200 : 1 }}
+      style={{
+        position: 'relative',
+        zIndex: isMenuOpen ? 200 : 1,
+        background: isSelected ? 'rgba(0,0,0,0.04)' : undefined,
+        outline: isSelected ? '2px solid #1d1d1f' : undefined,
+        outlineOffset: isSelected ? '-2px' : undefined,
+      }}
     >
       <div
         className="gallery-row-col gallery-row-col-branding"
@@ -924,10 +930,20 @@ export default function AdminGalleryTable({
       {activeTab === 'galerii' && statusFilter === 'active' && selectedGaleriiIds.length > 0 && (
         <div className="gallery-bulk-bar">
           <span className="gallery-bulk-count">{selectedGaleriiIds.length} selectate</span>
-          <button type="button" className="gallery-bulk-btn gallery-bulk-btn-pin" onClick={handleBulkPin}>
+          <button
+            type="button"
+            className="gallery-bulk-btn gallery-bulk-btn-pin"
+            onClick={handleBulkPin}
+            style={{ color: '#1d1d1f', background: 'transparent', border: '1px solid #d1d1d6' }}
+          >
             <Pin size={18} /> Pin
           </button>
-          <button type="button" className="gallery-bulk-btn gallery-bulk-btn-delete" onClick={handleBulkMoveToTrash}>
+          <button
+            type="button"
+            className="gallery-bulk-btn gallery-bulk-btn-delete"
+            onClick={handleBulkMoveToTrash}
+            style={{ color: '#c0392b', background: 'transparent', border: '1px solid #c0392b' }}
+          >
             <Trash2 size={18} /> Șterge
           </button>
           <button type="button" className="gallery-bulk-btn gallery-bulk-btn-cancel" onClick={() => setSelectedGaleriiIds([])}>
