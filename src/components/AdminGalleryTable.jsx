@@ -238,9 +238,8 @@ function GalleryRow({
       style={{
         position: 'relative',
         zIndex: isMenuOpen ? 200 : 1,
-        background: isSelected ? 'rgba(0,0,0,0.04)' : undefined,
-        outline: isSelected ? '2px solid #1d1d1f' : undefined,
-        outlineOffset: isSelected ? '-2px' : undefined,
+        background: isSelected ? 'rgba(0,0,0,0.03)' : undefined,
+        boxShadow: isSelected ? 'inset 0 0 0 1.5px #1d1d1f' : undefined,
       }}
     >
       <div
