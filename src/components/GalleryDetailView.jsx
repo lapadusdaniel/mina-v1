@@ -342,6 +342,7 @@ export default function GalleryDetailView({
       <GallerySettingsModal
         user={user}
         galerie={galerie}
+        pozeGalerie={allPozeGalerie}
         mode="edit"
         open={settingsOpen}
         onDeleted={async (galleryId) => {

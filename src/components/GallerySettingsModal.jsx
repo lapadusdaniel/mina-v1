@@ -78,6 +78,71 @@ function focalPointsAreEqual(a, b) {
     && Math.round(left.y * 10) === Math.round(right.y * 10)
 }
 
+function CoverPhotoOption({ photoKey, isSelected, onSelect }) {
+  const [thumbUrl, setThumbUrl] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    let createdUrl = ''
+
+    if (!photoKey) {
+      setThumbUrl('')
+      return () => {}
+    }
+
+    setThumbUrl('')
+    mediaService.getPhotoUrl(photoKey, 'thumb')
+      .then((url) => {
+        if (cancelled) {
+          if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url)
+          return
+        }
+        createdUrl = url
+        setThumbUrl(url)
+      })
+      .catch(() => {
+        if (!cancelled) setThumbUrl('')
+      })
+
+    return () => {
+      cancelled = true
+      if (createdUrl && createdUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(createdUrl)
+      }
+    }
+  }, [photoKey])
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect?.(photoKey)}
+      style={{
+        border: isSelected ? '2px solid #1d1d1f' : '1px solid #e5e5ea',
+        borderRadius: 12,
+        overflow: 'hidden',
+        background: '#fff',
+        padding: 0,
+        cursor: 'pointer',
+        aspectRatio: '1 / 1',
+        minHeight: 92,
+        boxShadow: isSelected ? '0 8px 20px rgba(0, 0, 0, 0.08)' : 'none',
+      }}
+      aria-pressed={isSelected}
+    >
+      {thumbUrl ? (
+        <img
+          src={thumbUrl}
+          alt="Copertă disponibilă"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          loading="lazy"
+        />
+      ) : (
+        <div style={{ width: '100%', height: '100%', background: '#f5f5f7' }} />
+      )}
+    </button>
+  )
+}
+
 export default function GallerySettingsModal({
   galerie,
   user,
@@ -88,6 +153,7 @@ export default function GallerySettingsModal({
   onSaved,
   onDeleted,
   initialFiles = [],
+  pozeGalerie = [],
 }) {
   const isCreate = mode === 'create'
   const [activeTab, setActiveTab] = useState('main')
@@ -96,9 +162,12 @@ export default function GallerySettingsModal({
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [draftCoverKey, setDraftCoverKey] = useState(galerie?.coverKey || '')
   const [coverPreviewUrl, setCoverPreviewUrl] = useState('')
   const [coverFocalPoint, setCoverFocalPoint] = useState({ x: 50, y: 50 })
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false)
   const fileInputRef = useRef(null)
+  const coverUploadInputRef = useRef(null)
   const initialSnapshotRef = useRef('')
   const initialFocalPointRef = useRef({ x: 50, y: 50 })
   const initializedModalKeyRef = useRef('')
@@ -118,6 +187,8 @@ export default function GallerySettingsModal({
     const initialForm = buildGalleryFormState(galerie || null)
     setFormState(initialForm)
     setPendingFiles(isCreate ? [] : (Array.isArray(initialFiles) ? initialFiles : []))
+    setDraftCoverKey(galerie?.coverKey || '')
+    setCoverPickerOpen(false)
     const initialFocalPoint = normalizeFocalPoint(galerie?.coverFocalPoint)
     initialFocalPointRef.current = initialFocalPoint
     setCoverFocalPoint(initialFocalPoint)
@@ -128,7 +199,7 @@ export default function GallerySettingsModal({
   }, [open, galerie?.id, mode, initialFiles])
 
   useEffect(() => {
-    if (!open || isCreate || !galerie?.coverKey) {
+    if (!open || isCreate || !draftCoverKey) {
       setCoverPreviewUrl('')
       return
     }
@@ -137,21 +208,26 @@ export default function GallerySettingsModal({
 
     const loadCoverPreview = async () => {
       try {
-        const previewUrl = await mediaService.getPhotoUrl(galerie.coverKey, 'medium')
+        const previewUrl = await mediaService.getPhotoUrl(draftCoverKey, 'medium')
         if (!cancelled) setCoverPreviewUrl(previewUrl || '')
       } catch (_) {
         try {
-          const fallbackUrl = await mediaService.getPhotoUrl(galerie.coverKey, 'thumb')
+          const fallbackUrl = await mediaService.getPhotoUrl(draftCoverKey, 'thumb')
           if (!cancelled) setCoverPreviewUrl(fallbackUrl || '')
         } catch (_) {
-          if (!cancelled) setCoverPreviewUrl('')
+          try {
+            const originalUrl = await mediaService.getPhotoUrl(draftCoverKey, 'original')
+            if (!cancelled) setCoverPreviewUrl(originalUrl || '')
+          } catch (_) {
+            if (!cancelled) setCoverPreviewUrl('')
+          }
         }
       }
     }
 
     loadCoverPreview()
     return () => { cancelled = true }
-  }, [open, isCreate, galerie?.coverKey])
+  }, [open, isCreate, draftCoverKey])
 
   useEffect(() => {
     if (!open) return
@@ -170,6 +246,14 @@ export default function GallerySettingsModal({
     if (isCreate) return false
     return !focalPointsAreEqual(coverFocalPoint, initialFocalPointRef.current)
   }, [coverFocalPoint, isCreate])
+  const coverChanged = useMemo(() => {
+    if (isCreate) return false
+    return String(draftCoverKey || '') !== String(galerie?.coverKey || '')
+  }, [draftCoverKey, galerie?.coverKey, isCreate])
+  const availableCoverPhotos = useMemo(
+    () => (Array.isArray(pozeGalerie) ? pozeGalerie.filter((photo) => photo?.key) : []),
+    [pozeGalerie]
+  )
 
   if (!open) return null
 
@@ -241,6 +325,7 @@ export default function GallerySettingsModal({
       } else if (galerie?.id) {
         await galleriesService.updateGallery(galerie.id, {
           ...payload,
+          coverKey: draftCoverKey,
           coverFocalPoint: normalizeFocalPoint(coverFocalPoint),
         })
       }
@@ -273,7 +358,76 @@ export default function GallerySettingsModal({
   const saveDisabled = saving
     || uploading
     || !String(formState.galleryName || '').trim()
-    || (!isCreate && !hasChanges && !focalPointChanged)
+    || (!isCreate && !hasChanges && !focalPointChanged && !coverChanged)
+
+  const handleDirectCoverUpload = async (event) => {
+    const file = Array.from(event.target.files || []).find((item) => item?.type?.startsWith('image/'))
+    if (!file || !galerie?.id) return
+
+    setUploading(true)
+    setUploadProgress(0)
+
+    const safeName = sanitizeFileName(file.name || 'cover-image')
+    const baseNameNoExt = safeName.replace(/\.[^.]+$/, '')
+    const originalPath = `galerii/${galerie.id}/originals/${safeName}`
+    const mediumPath = `galerii/${galerie.id}/medium/${baseNameNoExt}.webp`
+    const thumbPath = `galerii/${galerie.id}/thumbnails/${baseNameNoExt}.webp`
+    const progress = [0, 0, 0]
+    const updateOverallProgress = () => {
+      setUploadProgress(Math.round((progress[0] + progress[1] + progress[2]) / 3))
+    }
+
+    try {
+      const idToken = await authService.getCurrentIdToken()
+      const [mediumFile, thumbFile] = await Promise.all([
+        imageCompression(file, {
+          maxWidthOrHeight: 2048,
+          initialQuality: 0.90,
+          useWebWorker: true,
+          fileType: 'image/webp',
+        }),
+        imageCompression(file, {
+          maxWidthOrHeight: 800,
+          initialQuality: 0.92,
+          useWebWorker: true,
+          fileType: 'image/webp',
+        }),
+      ])
+
+      await Promise.all([
+        mediaService.uploadFileToPath(file, originalPath, (value) => {
+          progress[0] = Number(value || 0)
+          updateOverallProgress()
+        }, idToken),
+        mediaService.uploadFileToPath(mediumFile, mediumPath, (value) => {
+          progress[1] = Number(value || 0)
+          updateOverallProgress()
+        }, idToken),
+        mediaService.uploadFileToPath(thumbFile, thumbPath, (value) => {
+          progress[2] = Number(value || 0)
+          updateOverallProgress()
+        }, idToken),
+      ])
+
+      setDraftCoverKey(originalPath)
+      setCoverFocalPoint({ x: 50, y: 50 })
+      setCoverPickerOpen(false)
+    } catch (error) {
+      console.error(error)
+      alert('Nu am putut încărca coperta galeriei.')
+    } finally {
+      setUploading(false)
+      setUploadProgress(0)
+      if (event.target) event.target.value = ''
+    }
+  }
+
+  const handleSelectCoverFromGallery = (photoKey) => {
+    if (!photoKey) return
+    setDraftCoverKey(photoKey)
+    setCoverFocalPoint({ x: 50, y: 50 })
+    setCoverPickerOpen(false)
+  }
 
   const handleCoverFocalPointClick = (event) => {
     if (!coverPreviewUrl) return
@@ -482,6 +636,13 @@ export default function GallerySettingsModal({
 
               <section className="gallery-config-card">
                 <label className="gallery-config-label">Copertă galerie</label>
+                <input
+                  ref={coverUploadInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="dashboard-file-input-hidden"
+                  onChange={handleDirectCoverUpload}
+                />
                 {coverPreviewUrl ? (
                   <>
                     <div
@@ -519,6 +680,48 @@ export default function GallerySettingsModal({
                   <p className="gallery-config-sub-label">
                     Coperta se poate poziționa după ce galeria are cel puțin o fotografie.
                   </p>
+                )}
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => coverUploadInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? `Se încarcă... ${uploadProgress}%` : 'Încarcă copertă'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setCoverPickerOpen((prev) => !prev)}
+                    disabled={availableCoverPhotos.length === 0}
+                  >
+                    Alege din galerie
+                  </button>
+                </div>
+                {coverPickerOpen && (
+                  <div style={{ marginTop: 16 }}>
+                    {availableCoverPhotos.length > 0 ? (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))',
+                          gap: 12,
+                        }}
+                      >
+                        {availableCoverPhotos.map((photo) => (
+                          <CoverPhotoOption
+                            key={photo.key}
+                            photoKey={photo.key}
+                            isSelected={photo.key === draftCoverKey}
+                            onSelect={handleSelectCoverFromGallery}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="gallery-config-sub-label">Galeria nu are încă poze disponibile pentru selecția copertei.</p>
+                    )}
+                  </div>
                 )}
               </section>
 
