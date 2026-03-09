@@ -529,6 +529,14 @@ export default function AdminGalleryTable({
     setSelectedGaleriiIds([])
   }
 
+  const handleEmptyTrash = async () => {
+    const trashGalerii = galerii.filter((gallery) => gallery?.status === 'trash')
+    if (!trashGalerii.length || !window.confirm('Ștergi definitiv toate galeriile din coș?')) return
+    for (const gallery of trashGalerii) {
+      await onDeletePermanently?.(gallery.id)
+    }
+  }
+
   const openCreateModal = (files = []) => {
     setCreateModalFiles(Array.isArray(files) ? files : [])
     setCreateModalOpen(true)
@@ -625,6 +633,7 @@ export default function AdminGalleryTable({
   }, [activeTab])
 
   const statsGalerii = galerii.filter((g) => g?.status !== 'trash' && g?.status !== 'archived')
+  const trashGalerii = galerii.filter((g) => g?.status === 'trash')
   const totalPoze = statsGalerii.reduce((sum, g) => sum + (g?.poze || 0), 0)
   const storageBreakdown = useMemo(() => {
     const bytesByStatus = galerii.reduce((acc, gallery) => {
@@ -753,9 +762,21 @@ export default function AdminGalleryTable({
       <div className="dashboard-content">
         <div className="dashboard-section">
           <div className="dashboard-section-header">
-            <h2 className="dashboard-section-title">
-              {activeTab === 'trash' ? 'Coș de gunoi' : statusFilter === 'archived' ? 'Galerii arhivate' : 'Galeriile mele'}
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h2 className="dashboard-section-title">
+                {activeTab === 'trash' ? 'Coș de gunoi' : statusFilter === 'archived' ? 'Galerii arhivate' : 'Galeriile mele'}
+              </h2>
+              {activeTab === 'trash' && trashGalerii.length > 0 && (
+                <button
+                  type="button"
+                  className="gallery-bulk-btn gallery-bulk-btn-delete"
+                  onClick={handleEmptyTrash}
+                >
+                  <Trash2 size={18} />
+                  Golește coșul
+                </button>
+              )}
+            </div>
             {showAddButton && (
               <button
                 onClick={() => openCreateModal()}
