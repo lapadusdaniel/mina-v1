@@ -540,7 +540,7 @@ export default function AdminGalleryTable({
     if (!trashGalerii.length) return
     if (!window.confirm('Ștergi definitiv toate galeriile din coș?')) return
     for (const gallery of trashGalerii) {
-      await onDeletePermanently?.(gallery.id)
+      await onDeletePermanently?.(gallery.id, { skipConfirm: true })
     }
   }
 

@@ -681,8 +681,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
   }
 
-  const handleDeletePermanently = async (id) => {
-    if (!window.confirm('Această acțiune va șterge definitiv toate fotografiile din stocarea Cloudflare și nu poate fi anulată. Ștergi definitiv?')) return
+  const handleDeletePermanently = async (id, { skipConfirm = false } = {}) => {
+    if (!skipConfirm && !window.confirm('Această acțiune va șterge definitiv toate fotografiile din stocarea Cloudflare și nu poate fi anulată. Ștergi definitiv?')) return
     try {
       const idToken = await authService.getCurrentIdToken()
       const explicitFunctionUrl = String(import.meta.env.VITE_DELETE_GALLERY_ASSETS_URL || '').trim()
