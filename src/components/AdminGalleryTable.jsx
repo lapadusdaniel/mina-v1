@@ -546,7 +546,7 @@ export default function AdminGalleryTable({
       if (statusFilter === 'archived') {
         list = list.filter(g => g?.status === 'archived')
       } else {
-        list = list.filter(g => g?.status === 'active')
+        list = list.filter(g => g?.status !== 'trash' && g?.status !== 'archived')
       }
     } else {
       return []
