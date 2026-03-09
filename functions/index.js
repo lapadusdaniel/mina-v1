@@ -1,6 +1,7 @@
 const functionsV1 = require('firebase-functions/v1')
 const admin = require('firebase-admin')
 const Stripe = require('stripe')
+const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3')
 const logger = require('firebase-functions/logger')
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { defineSecret } = require('firebase-functions/params')
@@ -166,6 +167,69 @@ async function verifyRequestAuth(req) {
   } catch (err) {
     throw new HttpsError('unauthenticated', 'Token invalid sau expirat.')
   }
+}
+
+function getR2S3Client() {
+  const accountId = String(process.env.R2_ACCOUNT_ID || '').trim()
+  const accessKeyId = String(process.env.R2_ACCESS_KEY_ID || '').trim()
+  const secretAccessKey = String(process.env.R2_SECRET_ACCESS_KEY || '').trim()
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new HttpsError('internal', 'Lipsesc credențialele R2.')
+  }
+
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  })
+}
+
+function getR2BucketName() {
+  const bucketName = String(process.env.R2_BUCKET_NAME || '').trim()
+  if (!bucketName) {
+    throw new HttpsError('internal', 'Lipsește R2_BUCKET_NAME.')
+  }
+  return bucketName
+}
+
+async function deleteR2Prefix(prefix) {
+  const client = getR2S3Client()
+  const bucketName = getR2BucketName()
+  let deletedTotal = 0
+
+  while (true) {
+    const listResponse = await client.send(new ListObjectsV2Command({
+      Bucket: bucketName,
+      Prefix: prefix,
+      MaxKeys: 1000,
+    }))
+
+    const objects = (listResponse.Contents || [])
+      .map((item) => ({ Key: String(item?.Key || '').trim() }))
+      .filter((item) => item.Key)
+
+    if (!objects.length) break
+
+    const deleteResponse = await client.send(new DeleteObjectsCommand({
+      Bucket: bucketName,
+      Delete: {
+        Objects: objects,
+        Quiet: true,
+      },
+    }))
+
+    if (Array.isArray(deleteResponse?.Errors) && deleteResponse.Errors.length) {
+      throw new Error(`R2 bulk delete failed for ${deleteResponse.Errors.length} objects.`)
+    }
+
+    deletedTotal += objects.length
+  }
+
+  return deletedTotal
 }
 
 function normalizePlanName(value) {
@@ -1367,11 +1431,9 @@ exports.deleteGalleryAssets = onRequest(
     }
 
     let uid = ''
-    let authHeader = ''
     let galleryId = ''
 
     try {
-      authHeader = readBearerAuthHeader(req)
       uid = await verifyRequestAuth(req)
     } catch (authError) {
       const code = authError instanceof HttpsError ? authError.code : 'unauthenticated'
@@ -1404,21 +1466,7 @@ exports.deleteGalleryAssets = onRequest(
       }
 
       const prefix = `galerii/${galleryId}/`
-      const workerResponse = await fetch(
-        `${getR2WorkerBaseUrl()}?prefix=${encodeURIComponent(prefix)}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: authHeader },
-        }
-      )
-
-      if (!workerResponse.ok) {
-        const workerMessage = String(await workerResponse.text().catch(() => '') || '').trim()
-        res.status(workerResponse.status).json({
-          error: workerMessage || `Ștergerea asset-urilor a eșuat (${workerResponse.status}).`,
-        })
-        return
-      }
+      const deletedObjects = await deleteR2Prefix(prefix)
 
       const gallerySlug = String(galleryData.slug || '').trim().toLowerCase()
       const removedBytes = Math.max(0, Number(galleryData.storageBytes || 0))
@@ -1442,11 +1490,10 @@ exports.deleteGalleryAssets = onRequest(
 
       await batch.commit()
 
-      const workerPayload = await workerResponse.json().catch(() => ({}))
       res.status(200).json({
         ok: true,
         galleryId,
-        deleted: Number(workerPayload?.deleted || 0),
+        deleted: deletedObjects,
       })
     } catch (error) {
       logger.error('deleteGalleryAssets failed', {
