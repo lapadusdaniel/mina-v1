@@ -374,7 +374,7 @@ export default function GalleryDetailView({
                 <button
                   type="button"
                   onClick={() => onCancelUpload?.()}
-                  style={{ background: '#ff3b30', color: 'white', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}
+                  style={{ background: 'transparent', color: '#86868b', border: '1px solid #d1d1d6', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13 }}
                 >
                   ✕ Oprește
                 </button>
