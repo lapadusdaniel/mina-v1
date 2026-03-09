@@ -356,11 +356,11 @@ export default function GalleryDetailView({
           <style>{uploadProgressOverlayCss}</style>
           <div className="gallery-upload-progress-overlay" role="status" aria-live="polite">
             <div className="gallery-upload-progress-overlay__row">
-              <span className="gallery-upload-progress-overlay__count">
-                {uploadedCount} / {totalCount} poze
-              </span>
               <span className="gallery-upload-progress-overlay__speed">
                 {uploadSpeedMbPerSecond.toFixed(1)} MB/s
+              </span>
+              <span className="gallery-upload-progress-overlay__count">
+                {uploadedCount} / {totalCount} poze
               </span>
             </div>
             <progress
