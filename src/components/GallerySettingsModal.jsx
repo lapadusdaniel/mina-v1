@@ -317,11 +317,6 @@ export default function GallerySettingsModal({
                 type="date"
                 value={formState.shootDate}
                 onChange={(event) => setField('shootDate', event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Tab') event.preventDefault()
-                }}
-                onPaste={(event) => event.preventDefault()}
-                inputMode="none"
                 className="gallery-config-input gallery-config-date-input"
               />
 
