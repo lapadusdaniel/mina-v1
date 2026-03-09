@@ -165,6 +165,7 @@ export default function GalleryDetailView({
   onCreateFolder,
   onDeleteFolder,
   onUploadPoze,
+  onCancelUpload,
   onDeletePoza,
   onDeleteGallery
 }) {
@@ -363,11 +364,22 @@ export default function GalleryDetailView({
                 {uploadedCount} / {totalCount} poze
               </span>
             </div>
-            <progress
-              className="gallery-upload-progress-overlay__bar"
-              max="100"
-              value={uploadProgress}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <progress
+                className="gallery-upload-progress-overlay__bar"
+                max="100"
+                value={uploadProgress}
+              />
+              {uploading && (
+                <button
+                  type="button"
+                  onClick={() => onCancelUpload?.()}
+                  style={{ background: '#ff3b30', color: 'white', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}
+                >
+                  ✕ Oprește
+                </button>
+              )}
+            </div>
             <div className="gallery-upload-progress-overlay__percent">
               {uploadProgress}%
             </div>

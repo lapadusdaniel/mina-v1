@@ -101,6 +101,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const metadataBackfillQueueRef = useRef(new Set())
   const lastSyncedStorageBytesRef = useRef(null)
   const suppressAutoReopenRef = useRef(false)
+  const cancelUploadRef = useRef(false)
 
   const persistActiveGalleryId = useCallback((galleryId) => {
     try {
@@ -405,6 +406,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const handleUploadPoze = async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length || !galerieActiva) return
+    cancelUploadRef.current = false
     setUploading(true)
     setUploadProgress(0)
     setUploadedCount(0)
@@ -515,6 +517,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           uploadedStorageBytes += uploadedSize
           if (!firstUploadedOriginal) firstUploadedOriginal = originalPath
         })
+
+        if (cancelUploadRef.current) break
       }
 
       if (uploadFolderId) {
@@ -545,6 +549,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       setUploadStartedAt(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  const handleCancelUpload = () => {
+    cancelUploadRef.current = true
   }
 
   const handleDeletePoza = async (pozaKey) => {
@@ -927,6 +935,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             onCreateFolder={handleCreateFolder}
             onDeleteFolder={handleDeleteFolder}
             onUploadPoze={handleUploadPoze}
+            onCancelUpload={handleCancelUpload}
             onDeletePoza={handleDeletePoza}
             onDeleteGallery={handleMoveToTrash}
           />

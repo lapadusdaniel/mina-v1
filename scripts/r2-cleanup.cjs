@@ -1,134 +1,209 @@
 /**
- * R2 Cleanup Script
- * Compară directoarele din R2 cu galeriile din Firestore.
- * Cu --dry-run: doar listează ce ar fi șters.
- * Fără --dry-run: șterge efectiv.
+ * Curăță prefixele orfane din R2 care nu mai au galerie activă în Firestore.
  *
  * Rulare:
- *   node scripts/r2-cleanup.js --dry-run
- *   node scripts/r2-cleanup.js
+ *   node scripts/r2-cleanup.cjs --dry-run
+ *   node scripts/r2-cleanup.cjs
  */
 
-const { initializeApp, cert } = require('firebase-admin/app')
-const { getFirestore } = require('firebase-admin/firestore')
+const fs = require('fs')
+const path = require('path')
+const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3')
+const admin = require('firebase-admin')
 
-// ── CONFIG ──────────────────────────────────────────────────────────────────
-const CF_ACCOUNT_ID = 'f948bc6542801c804f5ab6e8b3c2f597'
-const CF_TOKEN = 'Cu8DjA-AKTslJw5UYG1unDLeG9m6wruv2z6xo5gS'
-const CF_BUCKET = 'mina-v1-media'
 const R2_PREFIX = 'galerii/'
-
-// Calea către service account JSON descărcat din Firebase Console
-// Dashboard Firebase → Setări proiect → Conturi de serviciu → Generați cheie privată
-const SERVICE_ACCOUNT_PATH = process.env.FIREBASE_SERVICE_ACCOUNT || './serviceAccount.json'
-// ────────────────────────────────────────────────────────────────────────────
-
+const R2_BUCKET_NAME = 'mina-v1-media'
+const DELETE_BATCH_SIZE = 50
 const DRY_RUN = process.argv.includes('--dry-run')
 
-async function listR2Directories() {
-  const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/r2/buckets/${CF_BUCKET}/objects?prefix=${encodeURIComponent(R2_PREFIX)}&delimiter=%2F`
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${CF_TOKEN}` },
-  })
-  const json = await res.json()
-  if (!json.success) {
-    throw new Error('R2 list failed: ' + JSON.stringify(json.errors))
+function getRequiredEnv(name) {
+  const value = String(process.env[name] || '').trim()
+  if (!value) {
+    throw new Error(`Lipsește variabila de environment ${name}.`)
   }
-  // common_prefixes = directoare (ex: "galerii/ABC123/")
-  const prefixes = json.result?.common_prefixes || []
-  return prefixes.map((p) => p.replace(R2_PREFIX, '').replace('/', ''))
+  return value
 }
 
-async function listAllR2Objects(prefix) {
-  const objects = []
-  let cursor = null
-  while (true) {
-    const params = new URLSearchParams({ prefix })
-    if (cursor) params.set('cursor', cursor)
-    const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/r2/buckets/${CF_BUCKET}/objects?${params}`
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${CF_TOKEN}` },
+function createR2Client() {
+  const accountId = getRequiredEnv('R2_ACCOUNT_ID')
+  const accessKeyId = getRequiredEnv('R2_ACCESS_KEY_ID')
+  const secretAccessKey = getRequiredEnv('R2_SECRET_ACCESS_KEY')
+
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  })
+}
+
+function initializeFirestore() {
+  const serviceAccountPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS')
+  const resolvedPath = path.resolve(serviceAccountPath)
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Fișierul GOOGLE_APPLICATION_CREDENTIALS nu există: ${resolvedPath}`)
+  }
+
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
     })
-    const json = await res.json()
-    if (!json.success) throw new Error('R2 list objects failed: ' + JSON.stringify(json.errors))
-    const batch = json.result?.objects || []
-    objects.push(...batch.map((o) => o.key))
-    if (!json.result?.truncated) break
-    cursor = json.result?.cursor
   }
-  return objects
+
+  return admin.firestore()
 }
 
-async function deleteR2Object(key) {
-  const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/r2/buckets/${CF_BUCKET}/objects/${encodeURIComponent(key)}`
-  const res = await fetch(url, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${CF_TOKEN}` },
+function getGalleryIdFromPrefix(prefix) {
+  const match = String(prefix || '').match(/^galerii\/([^/]+)\/$/)
+  return match?.[1] || ''
+}
+
+function isActiveGallery(data) {
+  const status = String(data?.status || '').trim().toLowerCase()
+  if (status === 'trash' || status === 'archived') return false
+  if (data?.statusActiv === false) return false
+  return true
+}
+
+async function listR2GalleryIds(client) {
+  const galleryIds = new Set()
+  let continuationToken
+
+  do {
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: R2_BUCKET_NAME,
+        Prefix: R2_PREFIX,
+        Delimiter: '/',
+        ContinuationToken: continuationToken,
+      })
+    )
+
+    for (const item of response.CommonPrefixes || []) {
+      const galleryId = getGalleryIdFromPrefix(item.Prefix)
+      if (galleryId) galleryIds.add(galleryId)
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
+  } while (continuationToken)
+
+  return Array.from(galleryIds).sort()
+}
+
+async function listActiveFirestoreGalleryIds(db) {
+  const snapshot = await db.collection('galerii').get()
+  const galleryIds = new Set()
+
+  snapshot.forEach((doc) => {
+    if (isActiveGallery(doc.data())) {
+      galleryIds.add(doc.id)
+    }
   })
-  if (!res.ok) {
-    throw new Error(`Delete failed for ${key}: ${res.status}`)
-  }
+
+  return galleryIds
 }
 
-async function listFirestoreGalleryIds(db) {
-  const snap = await db.collection('galerii').get()
-  return new Set(snap.docs.map((d) => d.id))
+async function listKeysForPrefix(client, prefix) {
+  const keys = []
+  let continuationToken
+
+  do {
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: R2_BUCKET_NAME,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      })
+    )
+
+    for (const item of response.Contents || []) {
+      if (item.Key) keys.push(item.Key)
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
+  } while (continuationToken)
+
+  return keys
+}
+
+async function deleteKeysInBatches(client, keys) {
+  let deletedCount = 0
+
+  for (let index = 0; index < keys.length; index += DELETE_BATCH_SIZE) {
+    const batch = keys.slice(index, index + DELETE_BATCH_SIZE)
+    if (!batch.length) continue
+
+    const response = await client.send(
+      new DeleteObjectsCommand({
+        Bucket: R2_BUCKET_NAME,
+        Delete: {
+          Objects: batch.map((Key) => ({ Key })),
+          Quiet: false,
+        },
+      })
+    )
+
+    const deletedNow = response.Deleted?.length || 0
+    const errors = response.Errors || []
+    if (errors.length) {
+      throw new Error(`DeleteObjects a eșuat: ${errors.map((item) => `${item.Key}: ${item.Message}`).join('; ')}`)
+    }
+
+    deletedCount += deletedNow
+  }
+
+  return deletedCount
 }
 
 async function main() {
-  console.log(`\n🔍 R2 Cleanup Script ${DRY_RUN ? '(DRY RUN - nu se șterge nimic)' : '(LIVE - se șterge!)'}\n`)
+  console.log(`R2 cleanup ${DRY_RUN ? '(dry-run)' : '(live)'}`)
 
-  // Init Firebase Admin
-  const serviceAccount = require(SERVICE_ACCOUNT_PATH)
-  initializeApp({ credential: cert(serviceAccount) })
-  const db = getFirestore()
+  const client = createR2Client()
+  const db = initializeFirestore()
 
-  console.log('📦 Citesc galeriile din Firestore...')
-  const firestoreIds = await listFirestoreGalleryIds(db)
-  console.log(`   → ${firestoreIds.size} galerii în Firestore\n`)
+  console.log('Citesc prefixele din R2...')
+  const r2GalleryIds = await listR2GalleryIds(client)
+  console.log(`R2: ${r2GalleryIds.length} prefixe unice`)
 
-  console.log('☁️  Citesc directoarele din R2...')
-  const r2Dirs = await listR2Directories()
-  console.log(`   → ${r2Dirs.length} directoare în R2\n`)
+  console.log('Citesc galeriile active din Firestore...')
+  const firestoreGalleryIds = await listActiveFirestoreGalleryIds(db)
+  console.log(`Firestore: ${firestoreGalleryIds.size} galerii active`)
 
-  const orphans = r2Dirs.filter((id) => !firestoreIds.has(id))
-  const valid = r2Dirs.filter((id) => firestoreIds.has(id))
+  const orphanGalleryIds = r2GalleryIds.filter((galleryId) => !firestoreGalleryIds.has(galleryId))
 
-  console.log(`✅ Galerii valide în R2: ${valid.length}`)
-  console.log(`🗑️  Directoare orfane în R2: ${orphans.length}\n`)
-
-  if (orphans.length === 0) {
-    console.log('🎉 Nu există fișiere orfane!')
-    process.exit(0)
+  if (!orphanGalleryIds.length) {
+    console.log('Nu există prefixe orfane în R2.')
+    return
   }
 
-  console.log('Directoare orfane:')
-  orphans.forEach((id) => console.log(`  - galerii/${id}/`))
-  console.log()
+  console.log(`Prefixe orfane găsite: ${orphanGalleryIds.length}`)
+  orphanGalleryIds.forEach((galleryId) => {
+    console.log(`- galerii/${galleryId}/`)
+  })
 
   if (DRY_RUN) {
-    console.log('ℹ️  DRY RUN: rulează fără --dry-run pentru a șterge efectiv.')
-    process.exit(0)
+    console.log('Dry run activ: nu s-a șters nimic.')
+    return
   }
 
-  console.log('🗑️  Șterg fișierele orfane...')
   let totalDeleted = 0
-  for (const id of orphans) {
-    const prefix = `${R2_PREFIX}${id}/`
-    console.log(`\n  Procesez: ${prefix}`)
-    const objects = await listAllR2Objects(prefix)
-    console.log(`    ${objects.length} fișiere`)
-    for (const key of objects) {
-      await deleteR2Object(key)
-      totalDeleted++
-    }
-    console.log(`    ✓ Șters`)
+
+  for (const galleryId of orphanGalleryIds) {
+    const prefix = `${R2_PREFIX}${galleryId}/`
+    const keys = await listKeysForPrefix(client, prefix)
+    if (!keys.length) continue
+
+    const deletedCount = await deleteKeysInBatches(client, keys)
+    totalDeleted += deletedCount
+    console.log(`Șters ${deletedCount} obiecte din ${prefix}`)
   }
 
-  console.log(`\n✅ Gata! ${totalDeleted} fișiere șterse din ${orphans.length} directoare orfane.`)
+  console.log(`Cleanup complet. Obiecte șterse: ${totalDeleted}`)
 }
 
-main().catch((err) => {
-  console.error('❌ Eroare:', err.message)
+main().catch((error) => {
+  console.error('Cleanup eșuat:', error?.message || String(error))
   process.exit(1)
 })
