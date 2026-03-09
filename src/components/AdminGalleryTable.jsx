@@ -531,7 +531,8 @@ export default function AdminGalleryTable({
 
   const handleEmptyTrash = async () => {
     const trashGalerii = galerii.filter((gallery) => gallery?.status === 'trash')
-    if (!trashGalerii.length || !window.confirm('Ștergi definitiv toate galeriile din coș?')) return
+    if (!trashGalerii.length) return
+    if (!window.confirm('Ștergi definitiv toate galeriile din coș?')) return
     for (const gallery of trashGalerii) {
       await onDeletePermanently?.(gallery.id)
     }
@@ -769,10 +770,9 @@ export default function AdminGalleryTable({
               {activeTab === 'trash' && trashGalerii.length > 0 && (
                 <button
                   type="button"
-                  className="gallery-bulk-btn gallery-bulk-btn-delete"
                   onClick={handleEmptyTrash}
+                  style={{ color: '#c0392b', background: 'transparent', border: '1px solid #c0392b', borderRadius: 8, padding: '4px 12px', fontSize: 13, cursor: 'pointer' }}
                 >
-                  <Trash2 size={18} />
                   Golește coșul
                 </button>
               )}
