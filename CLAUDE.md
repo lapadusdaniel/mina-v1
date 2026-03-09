@@ -39,7 +39,7 @@ Mina este o platformă SaaS dedicată fotografilor de eveniment din România. Co
 
 **Target:** Fotografi de eveniment din România, 500–2000 lei/eveniment, activi intensiv aprilie–octombrie. Expansiune europeană planificată post-lansare RO.
 
-**Domeniu:** `cloudbymina.com` — cumpărat, neconectat încă.
+**Domeniu:** `cloudbymina.com` — cumpărat,conectat
 
 **Live:** `https://mina-v1-aea51.web.app`
 

@@ -540,6 +540,7 @@ export default function AdminGalleryTable({
 
   const filteredGalerii = useMemo(() => {
     let list = galerii
+    console.log('FILTER DEBUG', { activeTab, statusFilter, galerii: list.map(g => ({ id: g.id, status: g.status })) })
     if (activeTab === 'trash') {
       list = list.filter(g => g?.status === 'trash')
     } else if (activeTab === 'galerii') {
