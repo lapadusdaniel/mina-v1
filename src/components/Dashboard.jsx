@@ -505,7 +505,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             })
 
             return {
-              uploadedSize: Number(file.size || 0),
+              uploadedSize: Number(file.size || 0) + Number(mediumFile.size || 0) + Number(thumbFile.size || 0),
               originalPath: origPath,
             }
           })
