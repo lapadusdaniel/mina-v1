@@ -232,7 +232,11 @@ function GalleryRow({
   const showUnarchiveInMenu = isArchivedView && onUnarchive
 
   return (
-    <div ref={rowRef} className={`gallery-row ${isTrashView ? 'gallery-row-trash' : ''}`}>
+    <div
+      ref={rowRef}
+      className={`gallery-row ${isTrashView ? 'gallery-row-trash' : ''}`}
+      style={{ position: 'relative', zIndex: isMenuOpen ? 200 : 1 }}
+    >
       <div
         className="gallery-row-col gallery-row-col-branding"
         onClick={() => onDeschide(galerie)}
