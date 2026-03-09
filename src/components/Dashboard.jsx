@@ -60,6 +60,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [loadingPoze, setLoadingPoze] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploading, setUploading] = useState(false)
+  const [uploadedCount, setUploadedCount] = useState(0)
+  const [uploadTotalCount, setUploadTotalCount] = useState(0)
+  const [uploadedBytes, setUploadedBytes] = useState(0)
+  const [uploadStartedAt, setUploadStartedAt] = useState(null)
   const [galleryFolders, setGalleryFolders] = useState([])
   const [loadingFolders, setLoadingFolders] = useState(false)
   const [activeFolderId, setActiveFolderId] = useState('all')
@@ -403,14 +407,56 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     if (!files.length || !galerieActiva) return
     setUploading(true)
     setUploadProgress(0)
-    const totalSteps = files.length * 3
-    const reportProgress = (stepIndex, percent) => {
-      setUploadProgress(Math.round(((stepIndex + percent / 100) / totalSteps) * 100))
+    setUploadedCount(0)
+    setUploadTotalCount(files.length)
+    setUploadedBytes(0)
+    setUploadStartedAt(Date.now())
+
+    const progressPerFile = Array(files.length).fill(0)
+    const uploadPartsPerFile = Array.from({ length: files.length }, () => [0, 0, 0])
+    const uploadedBytesPerFile = Array.from({ length: files.length }, () => [0, 0, 0])
+    let totalTransferredBytes = 0
+
+    const syncUploadProgress = () => {
+      const totalProgress = progressPerFile.reduce((sum, value) => sum + value, 0)
+      setUploadProgress(Math.round(totalProgress / files.length))
+    }
+
+    const reportProgress = (fileIndex, variantIndex, percent, variantSize = 0) => {
+      const safePercent = Math.max(0, Math.min(100, Number(percent) || 0))
+      const safeVariantSize = Math.max(0, Number(variantSize) || 0)
+
+      uploadPartsPerFile[fileIndex][variantIndex] = safePercent
+      progressPerFile[fileIndex] = uploadPartsPerFile[fileIndex]
+        .reduce((sum, value) => sum + value, 0) / 3
+      syncUploadProgress()
+
+      const nextTransferredBytes = safeVariantSize * (safePercent / 100)
+      const previousTransferredBytes = uploadedBytesPerFile[fileIndex][variantIndex]
+      uploadedBytesPerFile[fileIndex][variantIndex] = nextTransferredBytes
+      totalTransferredBytes += nextTransferredBytes - previousTransferredBytes
+      setUploadedBytes(Math.round(totalTransferredBytes))
+    }
+
+    const markFileUploaded = (fileIndex, variantSizes) => {
+      variantSizes.forEach((variantSize, variantIndex) => {
+        uploadPartsPerFile[fileIndex][variantIndex] = 100
+        progressPerFile[fileIndex] = 100
+
+        const safeVariantSize = Math.max(0, Number(variantSize) || 0)
+        const previousTransferredBytes = uploadedBytesPerFile[fileIndex][variantIndex]
+        uploadedBytesPerFile[fileIndex][variantIndex] = safeVariantSize
+        totalTransferredBytes += safeVariantSize - previousTransferredBytes
+      })
+
+      syncUploadProgress()
+      setUploadedBytes(Math.round(totalTransferredBytes))
+      setUploadedCount((count) => count + 1)
     }
     try {
       const idToken = await authService.getCurrentIdToken()
       const uploadFolderId = activeFolderId !== 'all' ? activeFolderId : null
-      let uploadedBytes = 0
+      let uploadedStorageBytes = 0
       let firstUploadedOriginal = ''
       const BATCH_SIZE = 5
 
@@ -438,12 +484,18 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
               initialQuality: THUMB_QUALITY,
               useWebWorker: true,
             })
+            const variantSizes = [
+              Number(file.size || 0),
+              Number(mediumFile?.size || 0),
+              Number(thumbFile?.size || 0),
+            ]
 
             await Promise.all([
-              mediaService.uploadPhoto(file, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex * 3, p), origPath, idToken),
-              mediaService.uploadPhoto(mediumFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex * 3 + 1, p), mediumPath, idToken),
-              mediaService.uploadPhoto(thumbFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex * 3 + 2, p), thumbPath, idToken),
+              mediaService.uploadPhoto(file, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex, 0, p, variantSizes[0]), origPath, idToken),
+              mediaService.uploadPhoto(mediumFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex, 1, p, variantSizes[1]), mediumPath, idToken),
+              mediaService.uploadPhoto(thumbFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex, 2, p, variantSizes[2]), thumbPath, idToken),
             ])
+            markFileUploaded(fileIndex, variantSizes)
 
             await galleriesService.upsertPhotoMetadata(galerieActiva.id, origPath, {
               folderId: uploadFolderId,
@@ -460,7 +512,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         )
 
         batchResults.forEach(({ uploadedSize, originalPath }) => {
-          uploadedBytes += uploadedSize
+          uploadedStorageBytes += uploadedSize
           if (!firstUploadedOriginal) firstUploadedOriginal = originalPath
         })
       }
@@ -473,10 +525,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       const currentBytes = Number(galerieActiva?.storageBytes || 0)
       await galleriesService.updateGallery(galerieActiva.id, {
         poze: currentPhotoCount + files.length,
-        storageBytes: currentBytes + uploadedBytes,
+        storageBytes: currentBytes + uploadedStorageBytes,
         coverKey: galerieActiva?.coverKey || firstUploadedOriginal || '',
       })
-      await galleriesService.adjustUserStorageUsed(user.uid, uploadedBytes)
+      await galleriesService.adjustUserStorageUsed(user.uid, uploadedStorageBytes)
       await handleDeschideGalerie(galerieActiva)
       if (uploadFolderId) {
         setActiveFolderId(uploadFolderId)
@@ -487,6 +539,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     } finally {
       setUploading(false)
       setUploadProgress(0)
+      setUploadedCount(0)
+      setUploadTotalCount(0)
+      setUploadedBytes(0)
+      setUploadStartedAt(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -850,6 +906,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             user={user}
             uploading={uploading}
             uploadProgress={uploadProgress}
+            uploadedCount={uploadedCount}
+            totalCount={uploadTotalCount}
+            uploadedBytes={uploadedBytes}
+            uploadStartedAt={uploadStartedAt}
             fileInputRef={fileInputRef}
             onBack={closeActiveGallery}
             onPreview={handlePreview}

@@ -74,6 +74,10 @@ export default function GalleryDetailView({
   user,
   uploading = false,
   uploadProgress = 0,
+  uploadedCount = 0,
+  totalCount = 0,
+  uploadedBytes = 0,
+  uploadStartedAt = null,
   fileInputRef,
   onBack,
   onPreview,
@@ -85,6 +89,7 @@ export default function GalleryDetailView({
   onDeleteGallery
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
 
   const masonryBreakpoints = {
     default: 4,
@@ -92,6 +97,17 @@ export default function GalleryDetailView({
     800: 2,
     500: 1
   }
+
+  useEffect(() => {
+    if (!uploading || !uploadStartedAt) return undefined
+
+    setNow(Date.now())
+    const intervalId = window.setInterval(() => {
+      setNow(Date.now())
+    }, 500)
+
+    return () => window.clearInterval(intervalId)
+  }, [uploadStartedAt, uploading])
 
   const totalPhotosCount = Array.isArray(allPozeGalerie) ? allPozeGalerie.length : pozeGalerie.length
   const selectedFolder = useMemo(
@@ -101,6 +117,12 @@ export default function GalleryDetailView({
   const subtitle = activeFolderId === 'all'
     ? `${galerie.categoria || 'Galerie'} • ${totalPhotosCount} poze`
     : `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
+  const elapsedSeconds = uploadStartedAt
+    ? Math.max((now - uploadStartedAt) / 1000, 0.001)
+    : 0
+  const uploadSpeedMbPerSecond = elapsedSeconds > 0
+    ? uploadedBytes / (1024 * 1024) / elapsedSeconds
+    : 0
 
   return (
     <div className="dashboard-root">
@@ -155,9 +177,14 @@ export default function GalleryDetailView({
       </div>
 
       {uploading && (
-        <div className="dashboard-progress-bar">
-          <div className="dashboard-progress-fill" style={{ width: `${uploadProgress}%` }} />
-        </div>
+        <>
+          <div className="dashboard-progress-bar">
+            <div className="dashboard-progress-fill" style={{ width: `${uploadProgress}%` }} />
+          </div>
+          <div style={{ marginTop: 8, color: '#86868b', fontSize: 14 }}>
+            {uploadedCount} / {totalCount} poze încărcate • {uploadSpeedMbPerSecond.toFixed(2)} MB/s
+          </div>
+        </>
       )}
 
       <div className="dashboard-folders-section">
