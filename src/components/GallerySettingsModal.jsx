@@ -323,9 +323,15 @@ export default function GallerySettingsModal({
           storageBytes: 0,
         })
       } else if (galerie?.id) {
+        const coverKey = String(draftCoverKey || '').trim()
+        const coverUrl = coverKey
+          ? await mediaService.getPhotoUrl(coverKey, 'medium')
+          : null
+
         await galleriesService.updateGallery(galerie.id, {
           ...payload,
-          coverKey: draftCoverKey,
+          coverKey,
+          coverUrl,
           coverFocalPoint: normalizeFocalPoint(coverFocalPoint),
         })
       }
