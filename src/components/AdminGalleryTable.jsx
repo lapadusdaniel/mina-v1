@@ -557,6 +557,15 @@ export default function AdminGalleryTable({
     return list
   }, [galerii, searchTerm, activeTab, categoryFilter, statusFilter])
 
+  useEffect(() => {
+    console.log('[AdminGalleryTable] openMenuId changed', {
+      openMenuId,
+      activeTab,
+      galeriiCount: galerii.length,
+      filteredCount: filteredGalerii.length,
+    })
+  }, [openMenuId, activeTab, galerii.length, filteredGalerii.length])
+
   const { pinnedGalerii, restGalerii } = useMemo(() => {
     if (activeTab !== 'galerii') return { pinnedGalerii: [], restGalerii: filteredGalerii }
     const pinned = filteredGalerii.filter(g => pinnedGaleriiIds.includes(g?.id))
