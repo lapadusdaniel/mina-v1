@@ -1,3 +1,6 @@
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+
 /**
  * Cloudflare Worker — proxy securizat pentru R2.
  *
@@ -145,6 +148,62 @@ function parsePrefixInfo(rawPrefix) {
   }
 
   return null
+}
+
+function createR2S3Client(env) {
+  const accountId = String(env?.R2_ACCOUNT_ID || '').trim()
+  const accessKeyId = String(env?.R2_ACCESS_KEY_ID || '').trim()
+  const secretAccessKey = String(env?.R2_SECRET_ACCESS_KEY || '').trim()
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error('R2 S3 credentials are not configured')
+  }
+
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  })
+}
+
+function normalizePresignFilesInput(files, galleryId) {
+  if (!Array.isArray(files) || files.length === 0) return null
+
+  const normalized = []
+  for (const file of files) {
+    const key = normalizePath(file?.key || '')
+    const contentType = String(file?.contentType || '').trim().toLowerCase()
+    const pathInfo = parsePathInfo(key)
+    if (!key || !contentType || !ALLOWED_TYPES.has(contentType)) return null
+    if (!pathInfo || pathInfo.kind !== 'gallery-file' || pathInfo.galleryId !== galleryId) return null
+    normalized.push({ key, contentType })
+  }
+
+  return normalized
+}
+
+async function createPresignedPutUrls({ files, env }) {
+  const bucketName = String(env?.R2_BUCKET_NAME || '').trim()
+  if (!bucketName) {
+    throw new Error('R2 bucket name is not configured')
+  }
+
+  const client = createR2S3Client(env)
+  const urls = await Promise.all(
+    files.map(async ({ key, contentType }) => {
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        ContentType: contentType,
+      })
+      const url = await getSignedUrl(client, command, { expiresIn: 3600 })
+      return { key, url }
+    })
+  )
+
+  return urls
 }
 
 function requireBearerToken(request) {
@@ -984,6 +1043,32 @@ export default {
     const prefix = prefixParam ? normalizePath(decodeURIComponent(prefixParam)) : null
 
     try {
+      const isPresignRoute = url.pathname === '/presign' || url.pathname === '/presign/'
+      if (request.method === 'POST' && isPresignRoute) {
+        const authContext = await requireAuthContext(request, env)
+        if (authContext.error) return authContext.error
+
+        const body = await request.json().catch(() => null)
+        const galleryIdRaw = normalizePath(body?.galleryId || '')
+        const galleryId = galleryIdRaw.includes('/') ? '' : galleryIdRaw
+        if (!galleryId) return text('Missing or invalid galleryId', 400)
+
+        const files = normalizePresignFilesInput(body?.files, galleryId)
+        if (!files) return text('Missing or invalid files payload', 400)
+
+        const ownerUid = await getGalleryOwnerUid({
+          galleryId,
+          idToken: authContext.idToken,
+          projectId: env.FIREBASE_PROJECT_ID,
+        })
+
+        if (!ownerUid) return text('Gallery not found', 404)
+        if (ownerUid !== authContext.uid) return text('Forbidden', 403)
+
+        const urls = await createPresignedPutUrls({ files, env })
+        return json({ urls }, 200)
+      }
+
       const isShareTokenRoute = url.pathname === '/share-token' || url.pathname === '/share-token/'
       if (request.method === 'POST' && isShareTokenRoute) {
         const authContext = await requireAuthContext(request, env)

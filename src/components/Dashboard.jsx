@@ -462,18 +462,64 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       let uploadedStorageBytes = 0
       let firstUploadedOriginal = ''
       const BATCH_SIZE = 5
+      const uploadPlans = files.map((file, fileIndex) => {
+        const baseName = `${Date.now()}-${fileIndex}-${(file.name || 'image').replace(/[^a-zA-Z0-9.-]/g, '_')}`
+        const baseNameNoExt = baseName.replace(/\.[^.]+$/, '')
+        return {
+          file,
+          fileIndex,
+          origPath: `galerii/${galerieActiva.id}/originals/${baseName}`,
+          mediumPath: `galerii/${galerieActiva.id}/medium/${baseNameNoExt}.webp`,
+          thumbPath: `galerii/${galerieActiva.id}/thumbnails/${baseNameNoExt}.webp`,
+        }
+      })
+      const presignedUrlByKey = new Map()
+      const workerBaseUrl = String(import.meta.env.VITE_R2_WORKER_URL || '').trim().replace(/\/+$/, '')
 
-      for (let batchStart = 0; batchStart < files.length; batchStart += BATCH_SIZE) {
-        const batch = files.slice(batchStart, batchStart + BATCH_SIZE)
+      if (workerBaseUrl) {
+        const presignFiles = uploadPlans.flatMap(({ file, origPath, mediumPath, thumbPath }) => ([
+          { key: origPath, contentType: file.type || 'image/jpeg' },
+          { key: mediumPath, contentType: 'image/webp' },
+          { key: thumbPath, contentType: 'image/webp' },
+        ]))
+
+        try {
+          for (let presignStart = 0; presignStart < presignFiles.length; presignStart += 100) {
+            if (cancelUploadRef.current) break
+
+            const chunk = presignFiles.slice(presignStart, presignStart + 100)
+            const response = await fetch(`${workerBaseUrl}/presign`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({
+                galleryId: galerieActiva.id,
+                files: chunk,
+              }),
+            })
+
+            if (!response.ok) {
+              throw new Error(`Presign failed (${response.status})`)
+            }
+
+            const payload = await response.json().catch(() => ({}))
+            const urls = Array.isArray(payload?.urls) ? payload.urls : []
+            urls.forEach(({ key, url }) => {
+              if (key && url) presignedUrlByKey.set(key, url)
+            })
+          }
+        } catch (error) {
+          console.warn('Presigned upload unavailable, falling back to Worker PUT.', error)
+        }
+      }
+
+      for (let batchStart = 0; batchStart < uploadPlans.length; batchStart += BATCH_SIZE) {
+        const batch = uploadPlans.slice(batchStart, batchStart + BATCH_SIZE)
 
         const batchResults = await Promise.all(
-          batch.map(async (file, batchIndex) => {
-            const fileIndex = batchStart + batchIndex
-            const baseName = `${Date.now()}-${fileIndex}-${(file.name || 'image').replace(/[^a-zA-Z0-9.-]/g, '_')}`
-            const baseNameNoExt = baseName.replace(/\.[^.]+$/, '')
-            const origPath = `galerii/${galerieActiva.id}/originals/${baseName}`
-            const mediumPath = `galerii/${galerieActiva.id}/medium/${baseNameNoExt}.webp`
-            const thumbPath = `galerii/${galerieActiva.id}/thumbnails/${baseNameNoExt}.webp`
+          batch.map(async ({ file, fileIndex, origPath, mediumPath, thumbPath }) => {
 
             const mediumFile = await imageCompression(file, {
               maxWidthOrHeight: MEDIUM_MAX_DIMENSION,
@@ -493,10 +539,34 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
               Number(thumbFile?.size || 0),
             ]
 
+            const uploadVariant = async (variantFile, targetPath, variantIndex) => {
+              const presignedUrl = presignedUrlByKey.get(targetPath)
+              if (presignedUrl) {
+                const response = await fetch(presignedUrl, {
+                  method: 'PUT',
+                  body: variantFile,
+                })
+                if (!response.ok) {
+                  throw new Error(`Presigned upload failed (${response.status})`)
+                }
+                reportProgress(fileIndex, variantIndex, 100, variantSizes[variantIndex])
+                return targetPath
+              }
+
+              return mediaService.uploadPhoto(
+                variantFile,
+                galerieActiva.id,
+                user.uid,
+                (p) => reportProgress(fileIndex, variantIndex, p, variantSizes[variantIndex]),
+                targetPath,
+                idToken,
+              )
+            }
+
             await Promise.all([
-              mediaService.uploadPhoto(file, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex, 0, p, variantSizes[0]), origPath, idToken),
-              mediaService.uploadPhoto(mediumFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex, 1, p, variantSizes[1]), mediumPath, idToken),
-              mediaService.uploadPhoto(thumbFile, galerieActiva.id, user.uid, (p) => reportProgress(fileIndex, 2, p, variantSizes[2]), thumbPath, idToken),
+              uploadVariant(file, origPath, 0),
+              uploadVariant(mediumFile, mediumPath, 1),
+              uploadVariant(thumbFile, thumbPath, 2),
             ])
             markFileUploaded(fileIndex, variantSizes)
 
