@@ -461,6 +461,10 @@ service cloud.firestore {
       allow update, delete: if isGalleryOwnerById(galleryId) || isAdmin();
     }
 
+    match /{path=**}/subscriptions/{subscriptionId} {
+      allow read: if isAdmin();
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;
