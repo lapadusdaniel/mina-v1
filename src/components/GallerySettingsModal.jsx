@@ -45,6 +45,26 @@ function sanitizeFileName(name) {
   return String(name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
+function resolveCoverAssetPath(key, type = 'original') {
+  const str = String(key || '').trim()
+  if (!str) return ''
+  const match = str.match(/^galerii\/([^/]+)\/originals\/(.+)$/)
+  if (match) {
+    const [, galerieId, fileName] = match
+    const base = fileName.replace(/\.[^.]+$/, '')
+    if (type === 'thumb') return `galerii/${galerieId}/thumbnails/${base}.webp`
+    if (type === 'medium') return `galerii/${galerieId}/medium/${base}.webp`
+  }
+  return str
+}
+
+function buildWorkerAssetUrl(path) {
+  const workerUrl = String(import.meta.env.VITE_R2_WORKER_URL || '').trim()
+  if (!workerUrl || !path) return null
+  const normalizedWorkerUrl = workerUrl.endsWith('/') ? workerUrl : `${workerUrl}/`
+  return `${normalizedWorkerUrl}${encodeURIComponent(path)}`
+}
+
 function fileLabel(fileCount) {
   if (fileCount <= 0) return 'Niciun fișier adăugat'
   if (fileCount === 1) return '1 fișier pregătit pentru upload'
@@ -325,7 +345,7 @@ export default function GallerySettingsModal({
       } else if (galerie?.id) {
         const coverKey = String(draftCoverKey || '').trim()
         const coverUrl = coverKey
-          ? await mediaService.getPhotoUrl(coverKey, 'medium')
+          ? buildWorkerAssetUrl(resolveCoverAssetPath(coverKey, 'medium'))
           : null
         console.log('GALLERY SAVE DEBUG', {
           galleryId: galerie.id,
