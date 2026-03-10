@@ -419,7 +419,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     const uploadPartsPerFile = Array.from({ length: files.length }, () => [0, 0, 0])
     const uploadedBytesPerFile = Array.from({ length: files.length }, () => [0, 0, 0])
     let totalTransferredBytes = 0
-    let uploadedCountInSession = 0
 
     const syncUploadProgress = () => {
       const totalProgress = progressPerFile.reduce((sum, value) => sum + value, 0)
@@ -455,7 +454,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
       syncUploadProgress()
       setUploadedBytes(Math.round(totalTransferredBytes))
-      uploadedCountInSession += 1
       setUploadedCount((count) => count + 1)
     }
     try {
@@ -508,6 +506,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
               lastModified: file.lastModified ? new Date(file.lastModified) : null,
               createdAt: new Date(),
             })
+            await galleriesService.updateGallery(galerieActiva.id, { poze: increment(1) })
 
             return {
               uploadedSize: Number(file.size || 0) + Number(mediumFile.size || 0) + Number(thumbFile.size || 0),
@@ -528,10 +527,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         await galleriesService.incrementFolderPhotoCount(galerieActiva.id, uploadFolderId, files.length).catch(() => {})
       }
 
-      const uploadedCount = uploadedCountInSession
       const currentBytes = Number(galerieActiva?.storageBytes || 0)
       await galleriesService.updateGallery(galerieActiva.id, {
-        poze: increment(uploadedCount),
         storageBytes: currentBytes + uploadedStorageBytes,
         coverKey: galerieActiva?.coverKey || firstUploadedOriginal || '',
       })
