@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import imageCompression from 'browser-image-compression'
+import { increment } from 'firebase/firestore'
 import './Dashboard.css'
 import { useUserSubscription } from '../hooks/useUserSubscription'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
@@ -418,6 +419,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     const uploadPartsPerFile = Array.from({ length: files.length }, () => [0, 0, 0])
     const uploadedBytesPerFile = Array.from({ length: files.length }, () => [0, 0, 0])
     let totalTransferredBytes = 0
+    let uploadedCountInSession = 0
 
     const syncUploadProgress = () => {
       const totalProgress = progressPerFile.reduce((sum, value) => sum + value, 0)
@@ -453,6 +455,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
       syncUploadProgress()
       setUploadedBytes(Math.round(totalTransferredBytes))
+      uploadedCountInSession += 1
       setUploadedCount((count) => count + 1)
     }
     try {
@@ -525,10 +528,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         await galleriesService.incrementFolderPhotoCount(galerieActiva.id, uploadFolderId, files.length).catch(() => {})
       }
 
-      const currentPhotoCount = Number(galerieActiva?.poze ?? pozeGalerie.length ?? 0)
+      const uploadedCount = uploadedCountInSession
       const currentBytes = Number(galerieActiva?.storageBytes || 0)
       await galleriesService.updateGallery(galerieActiva.id, {
-        poze: currentPhotoCount + files.length,
+        poze: increment(uploadedCount),
         storageBytes: currentBytes + uploadedStorageBytes,
         coverKey: galerieActiva?.coverKey || firstUploadedOriginal || '',
       })
