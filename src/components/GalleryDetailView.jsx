@@ -204,13 +204,17 @@ export default function GalleryDetailView({
     ? allPozeGalerie.filter((photo) => getEffectiveFolderId(photo?.folderId) === DEFAULT_FOLDER_ID).length
     : totalPhotosCount
   const showDefaultTab = !hasExplicitFolders || defaultPhotosCount > 0
+  const defaultFolder = useMemo(
+    () => ({ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, photoCount: defaultPhotosCount }),
+    [defaultPhotosCount]
+  )
   const selectedFolder = useMemo(
     () => galleryFolders.find((folder) => folder.id === activeFolderId) || (
       activeFolderId === DEFAULT_FOLDER_ID && showDefaultTab
-        ? { id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, photoCount: defaultPhotosCount }
+        ? defaultFolder
         : null
     ),
-    [activeFolderId, defaultPhotosCount, galleryFolders, showDefaultTab]
+    [activeFolderId, defaultFolder, galleryFolders, showDefaultTab]
   )
   const subtitle = activeFolderId === DEFAULT_FOLDER_ID
     ? (hasExplicitFolders
@@ -226,12 +230,20 @@ export default function GalleryDetailView({
 
   useEffect(() => {
     if (!editingFolderId) return
+    if (editingFolderId === DEFAULT_FOLDER_ID) {
+      if (!showDefaultTab) {
+        setEditingFolderId(null)
+        setEditingFolderName('')
+        setRenamingFolderId(null)
+      }
+      return
+    }
     if (!galleryFolders.some((folder) => folder.id === editingFolderId)) {
       setEditingFolderId(null)
       setEditingFolderName('')
       setRenamingFolderId(null)
     }
-  }, [editingFolderId, galleryFolders])
+  }, [editingFolderId, galleryFolders, showDefaultTab])
 
   const startFolderRename = (folder) => {
     setEditingFolderId(folder.id)
@@ -321,14 +333,67 @@ export default function GalleryDetailView({
       <div className="dashboard-folders-section">
         <div className="dashboard-folders-list">
           {showDefaultTab && (
-            <button
-              type="button"
-              className={`dashboard-folder-chip ${activeFolderId === DEFAULT_FOLDER_ID ? 'is-active' : ''}`}
-              onClick={() => onSelectFolder?.(DEFAULT_FOLDER_ID)}
+            <div
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
-              <span>{DEFAULT_FOLDER_NAME}</span>
-              <span className="dashboard-folder-chip-count">{defaultPhotosCount}</span>
-            </button>
+              {editingFolderId === DEFAULT_FOLDER_ID ? (
+                <input
+                  type="text"
+                  value={editingFolderName}
+                  autoFocus
+                  disabled={renamingFolderId === DEFAULT_FOLDER_ID}
+                  onChange={(event) => setEditingFolderName(event.target.value)}
+                  onBlur={() => {
+                    if (skipBlurSaveRef.current) {
+                      skipBlurSaveRef.current = false
+                      return
+                    }
+                    saveFolderRename(defaultFolder)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      saveFolderRename(defaultFolder)
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      skipBlurSaveRef.current = true
+                      cancelFolderRename()
+                    }
+                  }}
+                  className="dashboard-folder-chip is-active"
+                  style={{ minWidth: 120 }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={`dashboard-folder-chip ${activeFolderId === DEFAULT_FOLDER_ID ? 'is-active' : ''}`}
+                  onClick={() => onSelectFolder?.(DEFAULT_FOLDER_ID)}
+                >
+                  <span>{DEFAULT_FOLDER_NAME}</span>
+                  <span className="dashboard-folder-chip-count">{defaultPhotosCount}</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => startFolderRename(defaultFolder)}
+                disabled={renamingFolderId === DEFAULT_FOLDER_ID}
+                aria-label={`Redenumește folderul ${DEFAULT_FOLDER_NAME}`}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#86868b',
+                  padding: 4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
           )}
 
           {hasExplicitFolders && galleryFolders.map((folder) => (
