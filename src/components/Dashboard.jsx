@@ -704,6 +704,27 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
   }
 
+  const handleRenameFolder = async (folderId, nextName) => {
+    if (!galerieActiva?.id || !folderId) return
+    const name = String(nextName || '').trim()
+    if (!name) {
+      throw new Error('Numele folderului este obligatoriu.')
+    }
+
+    try {
+      await galleriesService.updateFolder(galerieActiva.id, folderId, { name })
+      setGalleryFolders((prev) => prev.map((folder) => (
+        folder.id === folderId
+          ? { ...folder, name }
+          : folder
+      )))
+    } catch (error) {
+      console.error('Error renaming folder:', error)
+      alert('Nu am putut redenumi folderul. Încearcă din nou.')
+      throw error
+    }
+  }
+
   const handleDeleteFolder = async (folderId) => {
     if (!galerieActiva?.id || !folderId || folderId === DEFAULT_FOLDER_ID) return
     const folder = galleryFolders.find((f) => f.id === folderId)
@@ -1029,6 +1050,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             onPreview={handlePreview}
             onSelectFolder={setActiveFolderId}
             onCreateFolder={handleCreateFolder}
+            onRenameFolder={handleRenameFolder}
             onDeleteFolder={handleDeleteFolder}
             onUploadPoze={handleUploadPoze}
             onCancelUpload={handleCancelUpload}
