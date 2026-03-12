@@ -173,6 +173,7 @@ export default function GalleryDetailView({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
+  const getEffectiveFolderId = (folderId) => String(folderId || '').trim() || DEFAULT_FOLDER_ID
 
   const masonryBreakpoints = {
     default: 4,
@@ -194,17 +195,23 @@ export default function GalleryDetailView({
 
   const totalPhotosCount = Array.isArray(allPozeGalerie) ? allPozeGalerie.length : pozeGalerie.length
   const hasExplicitFolders = galleryFolders.length > 0
+  const defaultPhotosCount = hasExplicitFolders
+    ? allPozeGalerie.filter((photo) => getEffectiveFolderId(photo?.folderId) === DEFAULT_FOLDER_ID).length
+    : totalPhotosCount
+  const showDefaultTab = !hasExplicitFolders || defaultPhotosCount > 0
   const selectedFolder = useMemo(
     () => galleryFolders.find((folder) => folder.id === activeFolderId) || (
-      hasExplicitFolders
-        ? null
-        : { id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, photoCount: totalPhotosCount }
+      activeFolderId === DEFAULT_FOLDER_ID && showDefaultTab
+        ? { id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, photoCount: defaultPhotosCount }
+        : null
     ),
-    [activeFolderId, galleryFolders, hasExplicitFolders, totalPhotosCount]
+    [activeFolderId, defaultPhotosCount, galleryFolders, showDefaultTab]
   )
-  const subtitle = hasExplicitFolders
-    ? `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
-    : `${DEFAULT_FOLDER_NAME} • ${totalPhotosCount} poze`
+  const subtitle = activeFolderId === DEFAULT_FOLDER_ID
+    ? (hasExplicitFolders
+      ? `${DEFAULT_FOLDER_NAME} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
+      : `${DEFAULT_FOLDER_NAME} • ${totalPhotosCount} poze`)
+    : `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
   const elapsedSeconds = uploadStartedAt
     ? Math.max((now - uploadStartedAt) / 1000, 0.001)
     : 0
@@ -266,8 +273,18 @@ export default function GalleryDetailView({
 
       <div className="dashboard-folders-section">
         <div className="dashboard-folders-list">
-          {hasExplicitFolders ? (
-            galleryFolders.map((folder) => (
+          {showDefaultTab && (
+            <button
+              type="button"
+              className={`dashboard-folder-chip ${activeFolderId === DEFAULT_FOLDER_ID ? 'is-active' : ''}`}
+              onClick={() => onSelectFolder?.(DEFAULT_FOLDER_ID)}
+            >
+              <span>{DEFAULT_FOLDER_NAME}</span>
+              <span className="dashboard-folder-chip-count">{defaultPhotosCount}</span>
+            </button>
+          )}
+
+          {hasExplicitFolders && galleryFolders.map((folder) => (
               <button
                 key={folder.id}
                 type="button"
@@ -278,17 +295,7 @@ export default function GalleryDetailView({
                 <span>{folder.name}</span>
                 <span className="dashboard-folder-chip-count">{Number(folder.photoCount || 0)}</span>
               </button>
-            ))
-          ) : (
-            <button
-              type="button"
-              className={`dashboard-folder-chip ${activeFolderId === DEFAULT_FOLDER_ID ? 'is-active' : ''}`}
-              onClick={() => onSelectFolder?.(DEFAULT_FOLDER_ID)}
-            >
-              <span>{DEFAULT_FOLDER_NAME}</span>
-              <span className="dashboard-folder-chip-count">{totalPhotosCount}</span>
-            </button>
-          )}
+            ))}
 
           {loadingFolders && (
             <span className="dashboard-folder-loading">Se încarcă foldere...</span>
@@ -329,7 +336,7 @@ export default function GalleryDetailView({
           <div className="dashboard-empty-state">
             <p className="dashboard-empty-icon">📸</p>
             <p className="dashboard-empty-text">
-              {hasExplicitFolders ? 'Acest folder nu are poze încă' : 'Galeria mea nu are poze încă'}
+              {activeFolderId === DEFAULT_FOLDER_ID ? 'Galeria mea nu are poze încă' : 'Acest folder nu are poze încă'}
             </p>
             <button onClick={() => fileInputRef.current?.click()} className="btn-primary">
               + Adaugă prima poză

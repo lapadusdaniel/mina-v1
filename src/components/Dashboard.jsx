@@ -132,6 +132,11 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     setGalleryFolders(nextFolders)
   }, [attachFolderCounts])
 
+  const normalizePhotoFolderId = useCallback(
+    (folderId) => String(folderId || '').trim() || DEFAULT_FOLDER_ID,
+    []
+  )
+
   // Auto-cleanup: șterge galeriile din coș mai vechi de TRASH_RETENTION_DAYS (R2 + Firestore)
   useEffect(() => {
     if (!user?.uid) return
@@ -276,6 +281,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
 
   useEffect(() => {
+    const hasDefaultPhotos = pozeGalerie.some(
+      (photo) => normalizePhotoFolderId(photo?.folderId) === DEFAULT_FOLDER_ID
+    )
+
     if (!galleryFolders.length) {
       if (activeFolderId !== DEFAULT_FOLDER_ID) {
         setActiveFolderId(DEFAULT_FOLDER_ID)
@@ -283,10 +292,15 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       return
     }
 
-    if (!galleryFolders.some((folder) => folder.id === activeFolderId)) {
+    if (activeFolderId === DEFAULT_FOLDER_ID && !hasDefaultPhotos) {
       setActiveFolderId(galleryFolders[0]?.id || DEFAULT_FOLDER_ID)
+      return
     }
-  }, [activeFolderId, galleryFolders])
+
+    if (!galleryFolders.some((folder) => folder.id === activeFolderId)) {
+      setActiveFolderId(hasDefaultPhotos ? DEFAULT_FOLDER_ID : (galleryFolders[0]?.id || DEFAULT_FOLDER_ID))
+    }
+  }, [activeFolderId, galleryFolders, normalizePhotoFolderId, pozeGalerie])
   const closeActiveGallery = useCallback(() => {
     suppressAutoReopenRef.current = true
     setGalerieActiva(null)
@@ -337,7 +351,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       setPozeGalerie(normalizedPhotos)
 
       syncFolderCounts(galerie.id, folders || [], photoMetadata || [])
-      setActiveFolderId((folders || []).length ? folders[0].id : DEFAULT_FOLDER_ID)
+      const hasDefaultPhotos = normalizedPhotos.some(
+        (photo) => normalizePhotoFolderId(photo?.folderId) === DEFAULT_FOLDER_ID
+      )
+      setActiveFolderId(hasDefaultPhotos ? DEFAULT_FOLDER_ID : ((folders || [])[0]?.id || DEFAULT_FOLDER_ID))
 
       // Backfill metadata once for older galleries to avoid future N+1 listing in table rows.
       const needsBackfill = !galerie?.coverKey || typeof galerie?.storageBytes !== 'number'
@@ -461,7 +478,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       const explicitFolderIds = new Set(galleryFolders.map((folder) => folder.id))
       const hasExplicitFolders = explicitFolderIds.size > 0
       const uploadFolderId = hasExplicitFolders
-        ? (explicitFolderIds.has(activeFolderId) ? activeFolderId : (galleryFolders[0]?.id || DEFAULT_FOLDER_ID))
+        ? ((activeFolderId === DEFAULT_FOLDER_ID || explicitFolderIds.has(activeFolderId))
+          ? activeFolderId
+          : (galleryFolders[0]?.id || DEFAULT_FOLDER_ID))
         : DEFAULT_FOLDER_ID
       let uploadedStorageBytes = 0
       let firstUploadedOriginal = ''
@@ -937,9 +956,12 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   }
 
   const pozeGalerieFiltrate = useMemo(() => {
-    if (!galleryFolders.length) return pozeGalerie
-    return pozeGalerie.filter((photo) => photo.folderId === activeFolderId)
-  }, [activeFolderId, galleryFolders, pozeGalerie])
+    if (activeFolderId === DEFAULT_FOLDER_ID) {
+      if (!galleryFolders.length) return pozeGalerie
+      return pozeGalerie.filter((photo) => normalizePhotoFolderId(photo?.folderId) === DEFAULT_FOLDER_ID)
+    }
+    return pozeGalerie.filter((photo) => normalizePhotoFolderId(photo?.folderId) === activeFolderId)
+  }, [activeFolderId, galleryFolders, normalizePhotoFolderId, pozeGalerie])
 
   const renderSidebar = () => (
     <div className="dashboard-sidebar">
