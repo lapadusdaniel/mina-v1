@@ -125,18 +125,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }))
   }, [])
 
-  const syncFolderCounts = useCallback(async (galleryId, folders = [], photos = []) => {
+  const syncFolderCounts = useCallback((galleryId, folders = [], photos = []) => {
     if (!galleryId || !folders.length) return
     const nextFolders = attachFolderCounts(folders, photos)
     setGalleryFolders(nextFolders)
-
-    const updates = nextFolders
-      .filter((folder) => Number(folder.photoCount || 0) !== Number(folder._storedPhotoCount || 0))
-      .map((folder) => galleriesService.setFolderPhotoCount(galleryId, folder.id, folder.photoCount).catch(() => {}))
-
-    if (updates.length) {
-      await Promise.all(updates)
-    }
   }, [attachFolderCounts])
 
   // Auto-cleanup: șterge galeriile din coș mai vechi de TRASH_RETENTION_DAYS (R2 + Firestore)
@@ -337,7 +329,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         .filter(Boolean)
       setPozeGalerie(normalizedPhotos)
 
-      await syncFolderCounts(galerie.id, folders || [], normalizedPhotos)
+      syncFolderCounts(galerie.id, folders || [], photoMetadata || [])
 
       // Backfill metadata once for older galleries to avoid future N+1 listing in table rows.
       const needsBackfill = !galerie?.coverKey || typeof galerie?.storageBytes !== 'number'
