@@ -7,6 +7,8 @@ import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { getGalleryPublicPath } from '../utils/publicLinks'
 
 const { media: mediaService } = getAppServices()
+const DEFAULT_FOLDER_ID = 'default'
+const DEFAULT_FOLDER_NAME = 'Galeria mea'
 const uploadProgressOverlayCss = `
   .gallery-upload-progress-overlay {
     position: fixed;
@@ -150,7 +152,7 @@ export default function GalleryDetailView({
   loadingPoze,
   loadingFolders = false,
   galleryFolders = [],
-  activeFolderId = 'all',
+  activeFolderId = DEFAULT_FOLDER_ID,
   user,
   uploading = false,
   uploadProgress = 0,
@@ -191,13 +193,18 @@ export default function GalleryDetailView({
   }, [uploadStartedAt, uploading])
 
   const totalPhotosCount = Array.isArray(allPozeGalerie) ? allPozeGalerie.length : pozeGalerie.length
+  const hasExplicitFolders = galleryFolders.length > 0
   const selectedFolder = useMemo(
-    () => galleryFolders.find((folder) => folder.id === activeFolderId) || null,
-    [activeFolderId, galleryFolders]
+    () => galleryFolders.find((folder) => folder.id === activeFolderId) || (
+      hasExplicitFolders
+        ? null
+        : { id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, photoCount: totalPhotosCount }
+    ),
+    [activeFolderId, galleryFolders, hasExplicitFolders, totalPhotosCount]
   )
-  const subtitle = activeFolderId === 'all'
-    ? `${galerie.categoria || 'Galerie'} • ${totalPhotosCount} poze`
-    : `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
+  const subtitle = hasExplicitFolders
+    ? `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
+    : `${DEFAULT_FOLDER_NAME} • ${totalPhotosCount} poze`
   const elapsedSeconds = uploadStartedAt
     ? Math.max((now - uploadStartedAt) / 1000, 0.001)
     : 0
@@ -259,27 +266,29 @@ export default function GalleryDetailView({
 
       <div className="dashboard-folders-section">
         <div className="dashboard-folders-list">
-          <button
-            type="button"
-            className={`dashboard-folder-chip ${activeFolderId === 'all' ? 'is-active' : ''}`}
-            onClick={() => onSelectFolder?.('all')}
-          >
-            <span>Toate</span>
-            <span className="dashboard-folder-chip-count">{totalPhotosCount}</span>
-          </button>
-
-          {galleryFolders.map((folder) => (
+          {hasExplicitFolders ? (
+            galleryFolders.map((folder) => (
+              <button
+                key={folder.id}
+                type="button"
+                className={`dashboard-folder-chip ${activeFolderId === folder.id ? 'is-active' : ''}`}
+                onClick={() => onSelectFolder?.(folder.id)}
+                title={folder.name}
+              >
+                <span>{folder.name}</span>
+                <span className="dashboard-folder-chip-count">{Number(folder.photoCount || 0)}</span>
+              </button>
+            ))
+          ) : (
             <button
-              key={folder.id}
               type="button"
-              className={`dashboard-folder-chip ${activeFolderId === folder.id ? 'is-active' : ''}`}
-              onClick={() => onSelectFolder?.(folder.id)}
-              title={folder.name}
+              className={`dashboard-folder-chip ${activeFolderId === DEFAULT_FOLDER_ID ? 'is-active' : ''}`}
+              onClick={() => onSelectFolder?.(DEFAULT_FOLDER_ID)}
             >
-              <span>{folder.name}</span>
-              <span className="dashboard-folder-chip-count">{Number(folder.photoCount || 0)}</span>
+              <span>{DEFAULT_FOLDER_NAME}</span>
+              <span className="dashboard-folder-chip-count">{totalPhotosCount}</span>
             </button>
-          ))}
+          )}
 
           {loadingFolders && (
             <span className="dashboard-folder-loading">Se încarcă foldere...</span>
@@ -296,7 +305,7 @@ export default function GalleryDetailView({
             <span>Folder nou</span>
           </button>
 
-          {activeFolderId !== 'all' && (
+          {hasExplicitFolders && activeFolderId !== DEFAULT_FOLDER_ID && (
             <button
               type="button"
               className="dashboard-folder-delete-btn"
@@ -320,7 +329,7 @@ export default function GalleryDetailView({
           <div className="dashboard-empty-state">
             <p className="dashboard-empty-icon">📸</p>
             <p className="dashboard-empty-text">
-              {activeFolderId === 'all' ? 'Nicio poză încă' : 'Acest folder nu are poze încă'}
+              {hasExplicitFolders ? 'Acest folder nu are poze încă' : 'Galeria mea nu are poze încă'}
             </p>
             <button onClick={() => fileInputRef.current?.click()} className="btn-primary">
               + Adaugă prima poză

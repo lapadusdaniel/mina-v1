@@ -48,6 +48,7 @@ const MEDIUM_QUALITY = 0.90
 const THUMB_MAX_DIMENSION = 800
 const THUMB_QUALITY = 0.92
 const CARD_LOGO_PATH = (userId) => `branding/${userId}/logo.png`
+const DEFAULT_FOLDER_ID = 'default'
 
 function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const navigate = useNavigate()
@@ -67,7 +68,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [uploadStartedAt, setUploadStartedAt] = useState(null)
   const [galleryFolders, setGalleryFolders] = useState([])
   const [loadingFolders, setLoadingFolders] = useState(false)
-  const [activeFolderId, setActiveFolderId] = useState('all')
+  const [activeFolderId, setActiveFolderId] = useState(DEFAULT_FOLDER_ID)
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
 
   const { userPlan, storageLimit, checkAccess } = useUserSubscription(user?.uid)
@@ -275,9 +276,15 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
 
   useEffect(() => {
-    if (activeFolderId === 'all') return
+    if (!galleryFolders.length) {
+      if (activeFolderId !== DEFAULT_FOLDER_ID) {
+        setActiveFolderId(DEFAULT_FOLDER_ID)
+      }
+      return
+    }
+
     if (!galleryFolders.some((folder) => folder.id === activeFolderId)) {
-      setActiveFolderId('all')
+      setActiveFolderId(galleryFolders[0]?.id || DEFAULT_FOLDER_ID)
     }
   }, [activeFolderId, galleryFolders])
   const closeActiveGallery = useCallback(() => {
@@ -285,7 +292,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     setGalerieActiva(null)
     setPozeGalerie([])
     setGalleryFolders([])
-    setActiveFolderId('all')
+    setActiveFolderId(DEFAULT_FOLDER_ID)
     persistActiveGalleryId(null)
   }, [persistActiveGalleryId])
 
@@ -296,7 +303,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     setGalerieActiva(galerie)
     setLoadingPoze(true)
     setLoadingFolders(true)
-    setActiveFolderId('all')
+    setActiveFolderId(DEFAULT_FOLDER_ID)
     setPozeGalerie([])
     setGalleryFolders([])
     persistActiveGalleryId(galerie.id)
@@ -330,6 +337,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       setPozeGalerie(normalizedPhotos)
 
       syncFolderCounts(galerie.id, folders || [], photoMetadata || [])
+      setActiveFolderId((folders || []).length ? folders[0].id : DEFAULT_FOLDER_ID)
 
       // Backfill metadata once for older galleries to avoid future N+1 listing in table rows.
       const needsBackfill = !galerie?.coverKey || typeof galerie?.storageBytes !== 'number'
@@ -450,7 +458,11 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
     try {
       const idToken = await authService.getCurrentIdToken()
-      const uploadFolderId = activeFolderId !== 'all' ? activeFolderId : null
+      const explicitFolderIds = new Set(galleryFolders.map((folder) => folder.id))
+      const hasExplicitFolders = explicitFolderIds.size > 0
+      const uploadFolderId = hasExplicitFolders
+        ? (explicitFolderIds.has(activeFolderId) ? activeFolderId : (galleryFolders[0]?.id || DEFAULT_FOLDER_ID))
+        : DEFAULT_FOLDER_ID
       let uploadedStorageBytes = 0
       let firstUploadedOriginal = ''
       const BATCH_SIZE = 5
@@ -585,7 +597,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         if (cancelUploadRef.current) break
       }
 
-      if (uploadFolderId) {
+      if (explicitFolderIds.has(uploadFolderId)) {
         await galleriesService.incrementFolderPhotoCount(galerieActiva.id, uploadFolderId, files.length).catch(() => {})
       }
 
@@ -626,7 +638,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
       if (galerieActiva?.id) {
         await galleriesService.deletePhotoMetadata(galerieActiva.id, pozaKey)
-        if (removedPhoto?.folderId) {
+        if (galleryFolders.some((folder) => folder.id === removedPhoto?.folderId)) {
           await galleriesService.incrementFolderPhotoCount(galerieActiva.id, removedPhoto.folderId, -1).catch(() => {})
         }
       }
@@ -674,7 +686,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   }
 
   const handleDeleteFolder = async (folderId) => {
-    if (!galerieActiva?.id || !folderId || folderId === 'all') return
+    if (!galerieActiva?.id || !folderId || folderId === DEFAULT_FOLDER_ID) return
     const folder = galleryFolders.find((f) => f.id === folderId)
     const folderName = folder?.name || 'Acest folder'
     const photosInFolder = pozeGalerie.filter((photo) => photo.folderId === folderId)
@@ -711,7 +723,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       const nextFolders = galleryFolders.filter((item) => item.id !== folderId)
       setPozeGalerie(nextPhotos)
       setGalleryFolders(nextFolders)
-      setActiveFolderId('all')
+      setActiveFolderId(nextFolders[0]?.id || DEFAULT_FOLDER_ID)
 
       await syncFolderCounts(galerieActiva.id, nextFolders, nextPhotos)
 
@@ -925,9 +937,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   }
 
   const pozeGalerieFiltrate = useMemo(() => {
-    if (activeFolderId === 'all') return pozeGalerie
+    if (!galleryFolders.length) return pozeGalerie
     return pozeGalerie.filter((photo) => photo.folderId === activeFolderId)
-  }, [activeFolderId, pozeGalerie])
+  }, [activeFolderId, galleryFolders, pozeGalerie])
 
   const renderSidebar = () => (
     <div className="dashboard-sidebar">
