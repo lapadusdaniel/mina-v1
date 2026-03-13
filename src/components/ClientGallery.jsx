@@ -17,6 +17,8 @@ const GALLERY_UNLOCK_STORAGE_KEY_PREFIX = 'mina_gallery_unlock_';
 const LIGHTBOX_PRELOAD_OFFSETS_DESKTOP = [0, -1, 1, -2, 2];
 const LIGHTBOX_PRELOAD_OFFSETS_MOBILE = [0, -1, 1];
 const MAX_URL_CACHE_ENTRIES = 400;
+const DEFAULT_FOLDER_ID = 'default';
+const DEFAULT_FOLDER_NAME = 'Galeria mea';
 
 const urlCache = new Map();
 const { galleries: galleriesService, media: mediaService, sites: sitesService } = getAppServices();
@@ -529,12 +531,18 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       galleriesService.listPhotoMetadata(galleryData.id).catch(() => []),
     ]);
 
-    const folders = Array.isArray(foldersRaw) ? foldersRaw : [];
-    const validFolderIds = new Set(folders.map((folder) => folder.id));
+    const explicitFolders = (Array.isArray(foldersRaw) ? foldersRaw : [])
+      .filter((folder) => folder?.id && folder.id !== DEFAULT_FOLDER_ID);
+    const validFolderIds = new Set(explicitFolders.map((folder) => folder.id));
     const photoMetaByKey = new Map(
       (Array.isArray(photoMetadataRaw) ? photoMetadataRaw : [])
         .filter((meta) => meta?.key)
-        .map((meta) => [meta.key, validFolderIds.has(meta.folderId) ? meta.folderId : null])
+        .map((meta) => [
+          meta.key,
+          meta.folderId === DEFAULT_FOLDER_ID
+            ? DEFAULT_FOLDER_ID
+            : (validFolderIds.has(meta.folderId) ? meta.folderId : DEFAULT_FOLDER_ID),
+        ])
     );
 
     const pozeKeys = (Array.isArray(pozeRaw) ? pozeRaw : [])
@@ -544,18 +552,22 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         return {
           key,
           size: p.size ?? p.Size,
-          folderId: photoMetaByKey.get(key) || null,
+          folderId: photoMetaByKey.get(key) || DEFAULT_FOLDER_ID,
         };
       })
       .filter((p) => p?.key);
+    const hasDefaultFolder = pozeKeys.some((photo) => photo.folderId === DEFAULT_FOLDER_ID);
+    const nextFolders = hasDefaultFolder
+      ? [{ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME }, ...explicitFolders]
+      : explicitFolders;
 
-    setClientFolders(folders);
+    setClientFolders(nextFolders);
     setPoze(pozeKeys);
     setActiveClientFolderId((prev) => {
-      if (!folders.length) return 'all';
-      return folders.some((folder) => folder.id === prev)
+      if (!nextFolders.length) return 'all';
+      return nextFolders.some((folder) => folder.id === prev)
         ? prev
-        : (folders[0]?.id || 'all');
+        : (nextFolders[0]?.id || 'all');
     });
 
     if (pozeKeys[0]) {
