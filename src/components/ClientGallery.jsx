@@ -6,7 +6,7 @@ import { Zoom, Thumbnails } from 'yet-another-react-lightbox/plugins';
 import 'yet-another-react-lightbox/plugins/thumbnails.css';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
 import Masonry from 'react-masonry-css';
-import { ChevronDown, Share2, Download, Heart, Instagram, MessageCircle, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Share2, Download, Heart, Instagram, MessageCircle, Loader2 } from 'lucide-react';
 
 const VALID_THEMES = ['luxos', 'minimal', 'indraznet', 'cald'];
 const BATCH_SIZE = 24;
@@ -350,6 +350,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const [lightboxMediumUrls, setLightboxMediumUrls] = useState({});
   const [loading, setLoading] = useState(true);
   const [eroare, setEroare] = useState(null);
+  const [showScrollTopButton, setShowScrollTopButton] = useState(false);
   const loadMoreRef = useRef(null);
 
   const [coverVisible, setCoverVisible] = useState(true);
@@ -842,10 +843,24 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     }
   }, [lightboxOpen])
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTopButton(window.scrollY > 400);
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const handleEnterGallery = () => {
     setCoverVisible(false);
     setTimeout(() => { contentRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 100);
   };
+
+  const handleScrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const handleShare = async () => {
     try {
@@ -1453,6 +1468,17 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         </footer>
       </div>
 
+      {showScrollTopButton && (
+        <button
+          type="button"
+          className="cg-scroll-top-btn"
+          onClick={handleScrollToTop}
+          aria-label="Mergi la începutul paginii"
+        >
+          <ChevronUp size={16} strokeWidth={1.8} />
+        </button>
+      )}
+
       {/* ── MODAL NUME ── */}
       {showNameModal && (
         <div className="cg-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowNameModal(false); setPendingFavAction(null); } }}>
@@ -1910,6 +1936,31 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           font-weight: 600;
           color: #6a6a70;
         }
+        .cg-scroll-top-btn {
+          position: fixed;
+          right: 24px;
+          bottom: 24px;
+          width: 42px;
+          height: 42px;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 999px;
+          background: rgba(255,255,255,0.96);
+          color: #1d1d1f;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 10px 24px rgba(0,0,0,0.12);
+          cursor: pointer;
+          z-index: 60;
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+        .cg-scroll-top-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 14px 28px rgba(0,0,0,0.16);
+          background: #fff;
+        }
 
         /* ── Gallery ── */
         .cg-gallery { padding: 48px 40px 0; }
@@ -2272,6 +2323,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-item-overlay { opacity: 1; background: linear-gradient(to top, rgba(0,0,0,0.35) 0%, transparent 60%); }
           .cg-action-btn { width: 36px; height: 36px; }
           .cg-footer { padding: 40px 16px 32px; margin-top: 32px; }
+          .cg-scroll-top-btn {
+            right: 16px;
+            bottom: 16px;
+            width: 40px;
+            height: 40px;
+          }
         }
 
         /* ── Lightbox mobile overrides ── */
