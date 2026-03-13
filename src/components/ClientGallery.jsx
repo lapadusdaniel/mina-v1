@@ -384,10 +384,40 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const reviewSectionRef = useRef(null);
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
+  const effectiveActiveClientFolderId = useMemo(() => {
+    if (!clientFolders.length) return 'all';
+    return clientFolders.some((folder) => folder.id === activeClientFolderId)
+      ? activeClientFolderId
+      : clientFolders[0].id;
+  }, [activeClientFolderId, clientFolders]);
   const pozeFiltratePeFolder = useMemo(() => {
-    if (activeClientFolderId === 'all') return poze;
-    return poze.filter((photo) => photo.folderId === activeClientFolderId);
-  }, [activeClientFolderId, poze]);
+    if (!clientFolders.length || effectiveActiveClientFolderId === 'all') return poze;
+
+    const selectedFolderIndex = clientFolders.findIndex((folder) => folder.id === effectiveActiveClientFolderId);
+    const visibleFolders = selectedFolderIndex >= 0
+      ? clientFolders.slice(selectedFolderIndex)
+      : clientFolders;
+    const visibleFolderIds = new Set(visibleFolders.map((folder) => folder.id));
+    const validFolderIds = new Set(clientFolders.map((folder) => folder.id));
+    const photosByFolder = new Map(visibleFolders.map((folder) => [folder.id, []]));
+    const orphanPhotos = [];
+
+    poze.forEach((photo) => {
+      if (visibleFolderIds.has(photo.folderId)) {
+        photosByFolder.get(photo.folderId)?.push(photo);
+        return;
+      }
+
+      if (!photo.folderId || !validFolderIds.has(photo.folderId)) {
+        orphanPhotos.push(photo);
+      }
+    });
+
+    return [
+      ...visibleFolders.flatMap((folder) => photosByFolder.get(folder.id) || []),
+      ...orphanPhotos,
+    ];
+  }, [clientFolders, effectiveActiveClientFolderId, poze]);
 
   const pozeAfisate = useMemo(
     () => (galerie
@@ -521,6 +551,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
     setClientFolders(folders);
     setPoze(pozeKeys);
+    setActiveClientFolderId((prev) => {
+      if (!folders.length) return 'all';
+      return folders.some((folder) => folder.id === prev)
+        ? prev
+        : (folders[0]?.id || 'all');
+    });
 
     if (pozeKeys[0]) {
       const coverKey = pozeKeys[0].key;
@@ -711,9 +747,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [doarFavorite, activeClientFolderId]);
 
   useEffect(() => {
-    if (activeClientFolderId === 'all') return;
+    if (!clientFolders.length) {
+      if (activeClientFolderId !== 'all') setActiveClientFolderId('all');
+      return;
+    }
+
     if (!clientFolders.some((folder) => folder.id === activeClientFolderId)) {
-      setActiveClientFolderId('all');
+      setActiveClientFolderId(clientFolders[0]?.id || 'all');
     }
   }, [activeClientFolderId, clientFolders]);
 
@@ -1075,7 +1115,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     : 'center';
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
   const favCount = galerie?.favorite?.length ?? 0;
-  const activeClientFolder = clientFolders.find((folder) => folder.id === activeClientFolderId) || null;
+  const activeClientFolder = clientFolders.find((folder) => folder.id === effectiveActiveClientFolderId) || null;
   const activeClientFolderName = activeClientFolder?.name || '';
   const isArchived = galerie?.status === 'archived';
   const isExpired = isGalleryExpired(galerie);
@@ -1152,21 +1192,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         {/* Sticky Toolbar */}
         <div className="cg-toolbar">
           <div className="cg-toolbar-left" role="tablist" aria-label="Foldere galerie">
-            <button
-              type="button"
-              className={`cg-tab-all ${activeClientFolderId === 'all' ? 'is-active' : ''}`}
-              onClick={() => setActiveClientFolderId('all')}
-              aria-pressed={activeClientFolderId === 'all'}
-            >
-              Toate fotografiile
-            </button>
             {clientFolders.map((folder) => (
               <button
                 key={folder.id}
                 type="button"
-                className={`cg-tab-all ${activeClientFolderId === folder.id ? 'is-active' : ''}`}
+                className={`cg-tab-all ${effectiveActiveClientFolderId === folder.id ? 'is-active' : ''}`}
                 onClick={() => setActiveClientFolderId(folder.id)}
-                aria-pressed={activeClientFolderId === folder.id}
+                aria-pressed={effectiveActiveClientFolderId === folder.id}
               >
                 {folder.name}
               </button>
@@ -1223,7 +1255,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
             <div className="cg-empty">
               {doarFavorite
                 ? 'Nu ai selectat nicio fotografie încă.'
-                : (activeClientFolderId === 'all'
+                : (!clientFolders.length
                     ? 'Galeria este goală.'
                     : `Folderul "${activeClientFolderName || 'selectat'}" nu conține fotografii.`)}
             </div>
