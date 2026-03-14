@@ -5,6 +5,74 @@ import { httpsCallable } from 'firebase/functions'
 import { db, functions as firebaseFunctions } from '../firebase'
 import './LandingPage.css'
 
+const PLANS = [
+  {
+    key: 'free',
+    name: 'Free',
+    storage: '15 GB',
+    monthly: { display: '0 lei', priceId: null },
+    yearly:  { display: '0 lei', equiv: null, priceId: null },
+    features: ['15 GB stocare', '3 galerii active', 'Galerii cu parolă', 'Selecții favorite'],
+    lockedFeatures: ['Fără site de prezentare'],
+    desc: 'Pentru început, fără card.',
+    cta: 'Începe gratuit',
+    ctaStyle: 'fl-btn-plan-ghost',
+    featured: false,
+  },
+  {
+    key: 'esential',
+    name: 'Esențial',
+    storage: '100 GB',
+    monthly: { display: '29 lei', priceId: import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_MONTHLY },
+    yearly:  { display: '289 lei', equiv: '~24 lei/lună', priceId: import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_YEARLY },
+    features: ['100 GB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    desc: 'Pentru fotograful care livrează constant.',
+    cta: 'Alege Esențial',
+    ctaStyle: 'fl-btn-plan-ghost',
+    featured: false,
+  },
+  {
+    key: 'plus',
+    name: 'Plus',
+    storage: '500 GB',
+    monthly: { display: '49 lei', priceId: import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY },
+    yearly:  { display: '489 lei', equiv: '~41 lei/lună', priceId: import.meta.env.VITE_STRIPE_PRICE_PLUS_YEARLY },
+    features: ['500 GB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    desc: 'Volumul de care ai nevoie în sezon.',
+    cta: 'Alege Plus',
+    ctaStyle: 'fl-btn-plan-gold',
+    featured: true,
+  },
+  {
+    key: 'pro',
+    name: 'Pro',
+    storage: '1 TB',
+    monthly: { display: '79 lei', priceId: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY },
+    yearly:  { display: '789 lei', equiv: '~66 lei/lună', priceId: import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY },
+    features: ['1 TB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    desc: 'Profesioniști cu volum mare.',
+    cta: 'Alege Pro',
+    ctaStyle: 'fl-btn-plan-ghost',
+    featured: false,
+  },
+  {
+    key: 'studio',
+    name: 'Studio',
+    storage: '2 TB',
+    monthly: { display: '129 lei', priceId: import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY },
+    yearly:  { display: '1.289 lei', equiv: '~107 lei/lună', priceId: import.meta.env.VITE_STRIPE_PRICE_STUDIO_YEARLY },
+    features: ['2 TB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    desc: 'Fără compromisuri.',
+    cta: 'Alege Studio',
+    ctaStyle: 'fl-btn-plan-ghost',
+    featured: false,
+  },
+]
+
 function LandingPage({ user }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -12,6 +80,7 @@ function LandingPage({ user }) {
   const [contactForm, setContactForm] = useState({ nume: '', email: '', mesaj: '' })
   const [contactSending, setContactSending] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
+  const [billingCycle, setBillingCycle] = useState('monthly')
 
   useEffect(() => {
     if (galerieSlug) navigate(`/${galerieSlug}`, { replace: true })
@@ -183,90 +252,68 @@ function LandingPage({ user }) {
               Simplu și <em>transparent.</em>
             </h2>
             <p className="fl-pricing-sub">Alegi planul potrivit pentru volumul tău de lucru.</p>
-            <p className="fl-pricing-sub">Add-on 500 GB: 49 lei/lună.</p>
+
+            <div className="fl-billing-toggle">
+              <button
+                className={`fl-billing-option${billingCycle === 'monthly' ? ' fl-billing-option-active' : ''}`}
+                onClick={() => setBillingCycle('monthly')}
+              >
+                Lunar
+              </button>
+              <button
+                className={`fl-billing-option${billingCycle === 'yearly' ? ' fl-billing-option-active' : ''}`}
+                onClick={() => setBillingCycle('yearly')}
+              >
+                Anual
+                <span className="fl-billing-save">−17%</span>
+              </button>
+            </div>
           </div>
 
-          <div className="fl-pricing-grid">
-            <div className="fl-plan fl-reveal">
-              <h3 className="fl-plan-name">Free</h3>
-              <p className="fl-plan-storage">30 GB stocare</p>
-              <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">0 lei</span>
-              </div>
-              <div className="fl-plan-divider" />
-              <ul className="fl-plan-features">
-                <li>30 GB stocare</li>
-                <li>3 galerii active</li>
-                <li>Galerii protejate cu parolă</li>
-                <li>Selecții favorite pentru clienți</li>
-                <li className="fl-plan-feature-muted">Fără site de prezentare</li>
-              </ul>
-              <p className="fl-plan-desc">Pentru început, fără card.</p>
-              <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
-                Începe gratuit
-              </button>
-            </div>
-
-            <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.1s' }}>
-              <h3 className="fl-plan-name">Starter</h3>
-              <p className="fl-plan-storage">150 GB stocare</p>
-              <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">39 lei<span>/lună</span></span>
-              </div>
-              <div className="fl-plan-divider" />
-              <ul className="fl-plan-features">
-                <li>150 GB stocare</li>
-                <li>Galerii nelimitate</li>
-                <li>Galerii protejate cu parolă</li>
-                <li>Selecții favorite pentru clienți</li>
-                <li>Site de prezentare inclus</li>
-              </ul>
-              <p className="fl-plan-desc">Pentru fotograful care livrează constant.</p>
-              <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
-                Alege Starter
-              </button>
-            </div>
-
-            <div className="fl-plan fl-plan-featured fl-reveal" style={{ transitionDelay: '0.2s' }}>
-              <span className="fl-plan-badge">Recomandat</span>
-              <h3 className="fl-plan-name">Pro</h3>
-              <p className="fl-plan-storage">600 GB stocare</p>
-              <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">79 lei<span>/lună</span></span>
-              </div>
-              <div className="fl-plan-divider" />
-              <ul className="fl-plan-features">
-                <li>600 GB stocare</li>
-                <li>Galerii nelimitate</li>
-                <li>Galerii protejate cu parolă</li>
-                <li>Selecții favorite pentru clienți</li>
-                <li>Site de prezentare inclus</li>
-              </ul>
-              <p className="fl-plan-desc">Volumul de care ai nevoie în sezon.</p>
-              <button className="fl-btn-plan fl-btn-plan-gold" onClick={() => navigate('/register')}>
-                Alege Pro
-              </button>
-            </div>
-
-            <div className="fl-plan fl-reveal" style={{ transitionDelay: '0.3s' }}>
-              <h3 className="fl-plan-name">Studio</h3>
-              <p className="fl-plan-storage">2 TB stocare</p>
-              <div className="fl-plan-price">
-                <span className="fl-plan-price-amount">129 lei<span>/lună</span></span>
-              </div>
-              <div className="fl-plan-divider" />
-              <ul className="fl-plan-features">
-                <li>2 TB stocare</li>
-                <li>Galerii nelimitate</li>
-                <li>Galerii protejate cu parolă</li>
-                <li>Selecții favorite pentru clienți</li>
-                <li>Site de prezentare inclus</li>
-              </ul>
-              <p className="fl-plan-desc">Pentru volum mare, fără compromisuri.</p>
-              <button className="fl-btn-plan fl-btn-plan-ghost" onClick={() => navigate('/register')}>
-                Alege Studio
-              </button>
-            </div>
+          <div className="fl-pricing-grid fl-pricing-grid-5">
+            {PLANS.map((plan, i) => {
+              const price = billingCycle === 'yearly' ? plan.yearly : plan.monthly
+              const delay = i * 0.07
+              return (
+                <div
+                  key={plan.key}
+                  className={`fl-plan fl-reveal${plan.featured ? ' fl-plan-featured' : ''}`}
+                  style={{ transitionDelay: `${delay}s` }}
+                >
+                  {plan.featured && <span className="fl-plan-badge">Recomandat</span>}
+                  <h3 className="fl-plan-name">{plan.name}</h3>
+                  <p className="fl-plan-storage">{plan.storage} stocare</p>
+                  <div className="fl-plan-price">
+                    <span className="fl-plan-price-amount">
+                      {price.display}
+                      {plan.key !== 'free' && billingCycle === 'monthly' && <span>/lună</span>}
+                      {plan.key !== 'free' && billingCycle === 'yearly' && <span>/an</span>}
+                    </span>
+                    {billingCycle === 'yearly' && price.equiv && (
+                      <p className="fl-plan-price-equiv">{price.equiv}</p>
+                    )}
+                  </div>
+                  <div className="fl-plan-divider" />
+                  <ul className="fl-plan-features">
+                    {plan.features.map((f) => <li key={f}>{f}</li>)}
+                    {plan.lockedFeatures.map((f) => (
+                      <li key={f} className="fl-plan-feature-muted">{f}</li>
+                    ))}
+                  </ul>
+                  <p className="fl-plan-desc">{plan.desc}</p>
+                  <button
+                    className={`fl-btn-plan ${plan.ctaStyle}`}
+                    onClick={() => navigate(
+                      plan.key === 'free'
+                        ? '/register'
+                        : `/register?plan=${plan.key}&cycle=${billingCycle}`
+                    )}
+                  >
+                    {plan.cta}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </section>
 
