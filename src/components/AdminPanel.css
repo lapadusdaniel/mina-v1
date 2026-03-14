@@ -260,10 +260,11 @@
   font-weight: 500;
 }
 
-.ap-plan-pill--free { background: #f0f0f5; color: #6e6e73; }
+.ap-plan-pill--free    { background: #f0f0f5; color: #6e6e73; }
 .ap-plan-pill--starter { background: rgba(110,110,115,0.14); color: #6e6e73; }
-.ap-plan-pill--pro { background: rgba(184,150,90,0.12); color: #b8965a; }
-.ap-plan-pill--studio { background: rgba(46,125,50,0.1); color: #2e7d32; }
+.ap-plan-pill--plus    { background: rgba(90,126,184,0.12); color: #3a5f9e; }
+.ap-plan-pill--pro     { background: rgba(184,150,90,0.12); color: #b8965a; }
+.ap-plan-pill--studio  { background: rgba(46,125,50,0.1); color: #2e7d32; }
 
 /* ── Section card ── */
 .ap-card {
@@ -387,10 +388,11 @@
   white-space: nowrap;
 }
 
-.ap-badge-plan--free { background: #f0f0f5; color: #6e6e73; }
+.ap-badge-plan--free    { background: #f0f0f5; color: #6e6e73; }
 .ap-badge-plan--starter { background: rgba(110,110,115,0.14); color: #6e6e73; }
-.ap-badge-plan--pro { background: rgba(184,150,90,0.12); color: #b8965a; }
-.ap-badge-plan--studio { background: rgba(46,125,50,0.1); color: #2e7d32; }
+.ap-badge-plan--plus    { background: rgba(90,126,184,0.12); color: #3a5f9e; }
+.ap-badge-plan--pro     { background: rgba(184,150,90,0.12); color: #b8965a; }
+.ap-badge-plan--studio  { background: rgba(46,125,50,0.1); color: #2e7d32; }
 
 .ap-badge-status {
   display: inline-flex;

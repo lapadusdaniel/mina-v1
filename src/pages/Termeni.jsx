@@ -30,7 +30,7 @@ export default function Termeni() {
           <strong>4.1. Înregistrare:</strong> Pentru utilizarea serviciilor Mina este necesară crearea unui cont cu adresă de email validă și parolă. Sunteți responsabil pentru securitatea credențialelor contului dumneavoastră.
         </p>
         <p>
-          <strong>4.2. Planuri disponibile:</strong> Free: 30 GB stocare, 0 lei/lună — disponibil permanent. Starter: 150 GB stocare, galerii nelimitate, 39 lei/lună. Pro: 600 GB stocare, galerii nelimitate, 79 lei/lună. Studio: 2 TB stocare, galerii nelimitate, 129 lei/lună.
+          <strong>4.2. Planuri disponibile:</strong> Free: 15 GB stocare, 0 lei/lună — disponibil permanent. Esențial: 100 GB stocare, galerii nelimitate, 29 lei/lună. Plus: 500 GB stocare, galerii nelimitate, 49 lei/lună. Pro: 1 TB stocare, galerii nelimitate, 79 lei/lună. Studio: 2 TB stocare, galerii nelimitate, 129 lei/lună.
         </p>
         <p>
           <strong>4.3. Facturare:</strong> Abonamentele plătite sunt facturate lunar, în avans. Plata se procesează prin Stripe. Prin furnizarea datelor de plată, autorizați taxarea automată lunară.

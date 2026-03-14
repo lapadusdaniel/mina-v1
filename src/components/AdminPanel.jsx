@@ -20,14 +20,28 @@ function hasAdminAccess(user) {
 }
 
 const PLAN_PRICES = {
-  [import.meta.env.VITE_STRIPE_PRICE_STARTER || 'price_1T6a3S1ax2jGrLZHmevohZWA']: 'Starter',
-  [import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T6a4F1ax2jGrLZH92vUsGzE']: 'Pro',
-  [import.meta.env.VITE_STRIPE_PRICE_STUDIO || 'price_1T6a501ax2jGrLZHgLBbkzT4']: 'Studio',
+  [import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_MONTHLY  || '']: 'Esențial',
+  [import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_YEARLY   || '']: 'Esențial',
+  [import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY      || '']: 'Plus',
+  [import.meta.env.VITE_STRIPE_PRICE_PLUS_YEARLY       || '']: 'Plus',
+  [import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY       || '']: 'Pro',
+  [import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY        || '']: 'Pro',
+  [import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY    || '']: 'Studio',
+  [import.meta.env.VITE_STRIPE_PRICE_STUDIO_YEARLY     || '']: 'Studio',
+  // legacy fallbacks
+  [import.meta.env.VITE_STRIPE_PRICE_STARTER || '']: 'Esențial',
+  [import.meta.env.VITE_STRIPE_PRICE_PRO     || '']: 'Pro',
+  [import.meta.env.VITE_STRIPE_PRICE_STUDIO  || '']: 'Studio',
 }
 
-const STRIPE_PRICE_STARTER = import.meta.env.VITE_STRIPE_PRICE_STARTER || 'price_1T6a3S1ax2jGrLZHmevohZWA'
-const STRIPE_PRICE_PRO = import.meta.env.VITE_STRIPE_PRICE_PRO || 'price_1T6a4F1ax2jGrLZH92vUsGzE'
-const STRIPE_PRICE_STUDIO = import.meta.env.VITE_STRIPE_PRICE_STUDIO || 'price_1T6a501ax2jGrLZHgLBbkzT4'
+const STRIPE_PRICE_ESENTIAL_MONTHLY = import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_MONTHLY || ''
+const STRIPE_PRICE_ESENTIAL_YEARLY  = import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_YEARLY  || ''
+const STRIPE_PRICE_PLUS_MONTHLY     = import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY     || ''
+const STRIPE_PRICE_PLUS_YEARLY      = import.meta.env.VITE_STRIPE_PRICE_PLUS_YEARLY      || ''
+const STRIPE_PRICE_PRO_MONTHLY      = import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY      || ''
+const STRIPE_PRICE_PRO_YEARLY       = import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY       || ''
+const STRIPE_PRICE_STUDIO_MONTHLY   = import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY   || ''
+const STRIPE_PRICE_STUDIO_YEARLY    = import.meta.env.VITE_STRIPE_PRICE_STUDIO_YEARLY    || ''
 
 const ADMIN_ACTIVE_SECTION_STORAGE_KEY = 'adminActiveSection'
 const ADMIN_ALLOWED_SECTIONS = ['overview', 'users', 'galerii', 'abonamente', 'financiar', 'mesaje', 'setari']
@@ -41,15 +55,19 @@ const formatDate = (val) => {
 }
 
 function PlanBadge({ plan }) {
-  const normalizedPlan = plan === 'Unlimited' ? 'Studio' : plan
-  const cls = normalizedPlan === 'Pro'
-    ? 'ap-badge-plan--pro'
-    : normalizedPlan === 'Studio'
-      ? 'ap-badge-plan--studio'
-      : normalizedPlan === 'Starter'
-        ? 'ap-badge-plan--starter'
-        : 'ap-badge-plan--free'
-  return <span className={`ap-badge-plan ${cls}`}>{normalizedPlan || 'Free'}</span>
+  const normalizedPlan = (plan === 'Unlimited' || plan === 'Studio') ? 'Studio'
+    : (plan === 'Starter' || plan === 'Esențial') ? 'Esențial'
+    : plan || 'Free'
+  const cls = normalizedPlan === 'Studio'
+    ? 'ap-badge-plan--studio'
+    : normalizedPlan === 'Pro'
+      ? 'ap-badge-plan--pro'
+      : normalizedPlan === 'Plus'
+        ? 'ap-badge-plan--plus'
+        : normalizedPlan === 'Esențial'
+          ? 'ap-badge-plan--starter'
+          : 'ap-badge-plan--free'
+  return <span className={`ap-badge-plan ${cls}`}>{normalizedPlan}</span>
 }
 
 function StatusBadge({ status }) {
@@ -87,9 +105,10 @@ function ChangePlanModal({ user, onClose, onSave }) {
           <div className="ap-modal-field">
             <label>Plan nou</label>
             <select className="ap-modal-select" value={plan} onChange={e => setPlan(e.target.value)}>
-              <option value="Free">Free (30 GB)</option>
-              <option value="Starter">Starter (150 GB)</option>
-              <option value="Pro">Pro (600 GB)</option>
+              <option value="Free">Free (15 GB)</option>
+              <option value="Esențial">Esențial (100 GB)</option>
+              <option value="Plus">Plus (500 GB)</option>
+              <option value="Pro">Pro (1 TB)</option>
               <option value="Studio">Studio (2 TB)</option>
             </select>
           </div>
@@ -189,7 +208,8 @@ function OverviewSection({ stats, users = [] }) {
           </div>
           <div className="ap-stat-trend">
             <div className="ap-plan-pills">
-              <span className="ap-plan-pill ap-plan-pill--starter">Starter: {stats.starterUsers}</span>
+              <span className="ap-plan-pill ap-plan-pill--starter">Esențial: {stats.esentialUsers}</span>
+              <span className="ap-plan-pill ap-plan-pill--plus">Plus: {stats.plusUsers}</span>
               <span className="ap-plan-pill ap-plan-pill--pro">Pro: {stats.proUsers}</span>
               <span className="ap-plan-pill ap-plan-pill--studio">Studio: {stats.studioUsers}</span>
             </div>
@@ -227,10 +247,11 @@ function OverviewSection({ stats, users = [] }) {
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           {[
-            { label: 'Free', count: stats.freeUsers, color: '#e5e5e7', pct: stats.totalUsers ? Math.round((stats.freeUsers / stats.totalUsers) * 100) : 0 },
-            { label: 'Starter', count: stats.starterUsers, color: '#6e6e73', pct: stats.totalUsers ? Math.round((stats.starterUsers / stats.totalUsers) * 100) : 0 },
-            { label: 'Pro', count: stats.proUsers, color: '#b8965a', pct: stats.totalUsers ? Math.round((stats.proUsers / stats.totalUsers) * 100) : 0 },
-            { label: 'Studio', count: stats.studioUsers, color: '#2e7d32', pct: stats.totalUsers ? Math.round((stats.studioUsers / stats.totalUsers) * 100) : 0 },
+            { label: 'Free',    count: stats.freeUsers,     color: '#e5e5e7', pct: stats.totalUsers ? Math.round((stats.freeUsers    / stats.totalUsers) * 100) : 0 },
+            { label: 'Esențial', count: stats.esentialUsers, color: '#6e6e73', pct: stats.totalUsers ? Math.round((stats.esentialUsers / stats.totalUsers) * 100) : 0 },
+            { label: 'Plus',   count: stats.plusUsers,     color: '#5a7eb8', pct: stats.totalUsers ? Math.round((stats.plusUsers    / stats.totalUsers) * 100) : 0 },
+            { label: 'Pro',    count: stats.proUsers,      color: '#b8965a', pct: stats.totalUsers ? Math.round((stats.proUsers     / stats.totalUsers) * 100) : 0 },
+            { label: 'Studio', count: stats.studioUsers,   color: '#2e7d32', pct: stats.totalUsers ? Math.round((stats.studioUsers  / stats.totalUsers) * 100) : 0 },
           ].map(({ label, count, color, pct }) => (
             <div key={label} style={{ flex: 1, minWidth: 140 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -255,11 +276,15 @@ function UsersSection({ users, loading, onChangePlan, onToggleSuspend, onToggleA
   const [selectedUser, setSelectedUser] = useState(null)
   const [changePlanUser, setChangePlanUser] = useState(null)
   const PLAN_STORAGE_LIMITS_GB = {
-    free: 30,
-    starter: 150,
-    pro: 600,
-    studio: 2048,
-    unlimited: 2048,
+    free: 15,
+    esential: 100,
+    'esențial': 100,
+    plus: 500,
+    pro: 1000,
+    studio: 2000,
+    unlimited: 2000,
+    // legacy
+    starter: 100,
   }
 
   const getPlanStorageLimitGb = (plan) => PLAN_STORAGE_LIMITS_GB[String(plan || 'free').toLowerCase()] || 30
@@ -297,7 +322,8 @@ function UsersSection({ users, loading, onChangePlan, onToggleSuspend, onToggleA
             <select className="ap-filter-select" value={filterPlan} onChange={e => setFilterPlan(e.target.value)}>
               <option value="all">Toate planurile</option>
               <option value="Free">Free</option>
-              <option value="Starter">Starter</option>
+              <option value="Esențial">Esențial</option>
+              <option value="Plus">Plus</option>
               <option value="Pro">Pro</option>
               <option value="Studio">Studio</option>
             </select>
@@ -587,14 +613,16 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
   const activeStatuses = new Set(['active', 'trialing'])
   const activeSubscriptions = subscriptions.filter((sub) => activeStatuses.has(String(sub.status || '').toLowerCase()))
 
-  const starterActive = activeSubscriptions.filter((sub) => sub.plan === 'Starter').length
-  const proActive = activeSubscriptions.filter((sub) => sub.plan === 'Pro').length
-  const studioActive = activeSubscriptions.filter((sub) => sub.plan === 'Studio').length
+  const esentialActive = activeSubscriptions.filter((sub) => sub.plan === 'Esențial' || sub.plan === 'Starter').length
+  const plusActive    = activeSubscriptions.filter((sub) => sub.plan === 'Plus').length
+  const proActive     = activeSubscriptions.filter((sub) => sub.plan === 'Pro').length
+  const studioActive  = activeSubscriptions.filter((sub) => sub.plan === 'Studio').length
 
-  const starterMRR = starterActive * 39
-  const proMRR = proActive * 79
-  const studioMRR = studioActive * 129
-  const totalMRR = starterMRR + proMRR + studioMRR
+  const esentialMRR = esentialActive * 29
+  const plusMRR    = plusActive    * 49
+  const proMRR     = proActive     * 79
+  const studioMRR  = studioActive  * 129
+  const totalMRR   = esentialMRR + plusMRR + proMRR + studioMRR
 
   const bytesInGb = 1024 ** 3
 
@@ -638,11 +666,16 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
         <p className="ap-page-sub">MRR, costuri infrastructură și profit estimat</p>
       </div>
 
-      <div className="ap-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="ap-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <div className="ap-stat-card">
-          <div className="ap-stat-label">MRR Starter</div>
-          <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(starterMRR)} lei`}</div>
-          <div className="ap-stat-trend">{starterActive} abonamente active × 39 lei</div>
+          <div className="ap-stat-label">MRR Esențial</div>
+          <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(esentialMRR)} lei`}</div>
+          <div className="ap-stat-trend">{esentialActive} abonamente active × 29 lei</div>
+        </div>
+        <div className="ap-stat-card">
+          <div className="ap-stat-label">MRR Plus</div>
+          <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(plusMRR)} lei`}</div>
+          <div className="ap-stat-trend">{plusActive} abonamente active × 49 lei</div>
         </div>
         <div className="ap-stat-card">
           <div className="ap-stat-label">MRR Pro</div>
@@ -919,9 +952,14 @@ export default function AdminPanel({ user }) {
         await authService.getCurrentUser().catch(() => null)
 
         snapshot = await adminService.getAdminSnapshot({
-          stripePriceStarter: STRIPE_PRICE_STARTER,
-          stripePricePro: STRIPE_PRICE_PRO,
-          stripePriceStudio: STRIPE_PRICE_STUDIO,
+          stripePriceEsentialMonthly: STRIPE_PRICE_ESENTIAL_MONTHLY,
+          stripePriceEsentialYearly:  STRIPE_PRICE_ESENTIAL_YEARLY,
+          stripePricePlusMonthly:     STRIPE_PRICE_PLUS_MONTHLY,
+          stripePricePlusYearly:      STRIPE_PRICE_PLUS_YEARLY,
+          stripePriceProMonthly:      STRIPE_PRICE_PRO_MONTHLY,
+          stripePriceProYearly:       STRIPE_PRICE_PRO_YEARLY,
+          stripePriceStudioMonthly:   STRIPE_PRICE_STUDIO_MONTHLY,
+          stripePriceStudioYearly:    STRIPE_PRICE_STUDIO_YEARLY,
         })
       } catch (listErr) {
         setUsersLoadError('Nu pot citi lista completă de utilizatori (permisiuni Firestore).')
@@ -1015,10 +1053,11 @@ export default function AdminPanel({ user }) {
   }, [])
 
   // ── Statistici ──
-  const starterUsers = subscriptions.filter(s => s.plan === 'Starter' && ['active', 'trialing'].includes(s.status)).length
-  const proUsers = subscriptions.filter(s => s.plan === 'Pro' && ['active', 'trialing'].includes(s.status)).length
-  const studioUsers = subscriptions.filter(s => s.plan === 'Studio' && ['active', 'trialing'].includes(s.status)).length
-  const paidUsers = starterUsers + proUsers + studioUsers
+  const esentialUsers = subscriptions.filter(s => (s.plan === 'Esențial' || s.plan === 'Starter') && ['active', 'trialing'].includes(s.status)).length
+  const plusUsers    = subscriptions.filter(s => s.plan === 'Plus'    && ['active', 'trialing'].includes(s.status)).length
+  const proUsers     = subscriptions.filter(s => s.plan === 'Pro'     && ['active', 'trialing'].includes(s.status)).length
+  const studioUsers  = subscriptions.filter(s => s.plan === 'Studio'  && ['active', 'trialing'].includes(s.status)).length
+  const paidUsers    = esentialUsers + plusUsers + proUsers + studioUsers
   const freeUsers = Math.max(0, users.length - paidUsers)
   const newMessages = messages.filter(m => !m.read).length
 
@@ -1027,7 +1066,7 @@ export default function AdminPanel({ user }) {
     totalUsers: users.length,
     totalGalerii: galerii.filter(g => !g.status || g.status === 'active').length,
     totalGaleriiAll: galerii.length,
-    paidUsers, starterUsers, proUsers, studioUsers, freeUsers,
+    paidUsers, esentialUsers, plusUsers, proUsers, studioUsers, freeUsers,
     newMessages,
   }
 

@@ -69,17 +69,19 @@ export default function LaunchChecklist() {
     const firebaseAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || ''
     const workerUrl = import.meta.env.VITE_R2_WORKER_URL || ''
     const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
-    const stripeStarter = import.meta.env.VITE_STRIPE_PRICE_STARTER || ''
-    const stripePro = import.meta.env.VITE_STRIPE_PRICE_PRO || ''
-    const stripeStudio = import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || ''
+    const stripeEsential = import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_MONTHLY || ''
+    const stripePlus     = import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY     || ''
+    const stripePro      = import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY      || ''
+    const stripeStudio   = import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY   || ''
 
     const firebaseOk = Boolean(firebaseProjectId && firebaseAuthDomain)
     const workerOk = /^https:\/\//i.test(workerUrl)
-    const stripeConfigured = Boolean(stripeKey && stripeStarter && stripePro && stripeStudio)
+    const stripeConfigured = Boolean(stripeKey && stripeEsential && stripePlus && stripePro && stripeStudio)
     const stripeLive =
       stripeConfigured &&
       stripeKey.startsWith('pk_live_') &&
-      stripeStarter.startsWith('price_') &&
+      stripeEsential.startsWith('price_') &&
+      stripePlus.startsWith('price_') &&
       stripePro.startsWith('price_') &&
       stripeStudio.startsWith('price_')
 
