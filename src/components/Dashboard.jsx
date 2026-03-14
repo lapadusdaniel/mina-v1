@@ -473,7 +473,12 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
       syncUploadProgress()
       setUploadedBytes(Math.round(totalTransferredBytes))
-      setUploadedCount((count) => count + 1)
+      // Guard: only increment if this closure's session is still the active one.
+      // This prevents stale markFileUploaded calls from a cancelled/superseded
+      // upload from inflating the counter (e.g. "160/100" display bug).
+      if (uploadSessionRef.current === sessionId) {
+        setUploadedCount((count) => Math.min(count + 1, files.length))
+      }
     }
     try {
       const idToken = await authService.getCurrentIdToken()

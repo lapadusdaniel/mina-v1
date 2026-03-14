@@ -203,7 +203,10 @@ export default function GalleryDetailView({
   const defaultPhotosCount = hasExplicitFolders
     ? allPozeGalerie.filter((photo) => getEffectiveFolderId(photo?.folderId) === DEFAULT_FOLDER_ID).length
     : totalPhotosCount
-  const showDefaultTab = !hasExplicitFolders || defaultPhotosCount > 0
+  // Keep "Galeria mea" visible during an active upload: newly-uploaded photos
+  // aren't in allPozeGalerie yet, so defaultPhotosCount may be 0 even when
+  // the upload is targeting the default folder.
+  const showDefaultTab = !hasExplicitFolders || defaultPhotosCount > 0 || uploading
   const defaultFolder = useMemo(
     () => ({ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, photoCount: defaultPhotosCount }),
     [defaultPhotosCount]
