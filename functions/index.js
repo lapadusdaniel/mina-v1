@@ -32,10 +32,15 @@ const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
 const DEFAULT_R2_WORKER_URL = 'https://mina-v1-r2-worker.lapadusdaniel.workers.dev'
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
-  starter: 'price_1T6a3S1ax2jGrLZHmevohZWA',
-  pro: 'price_1T6a4F1ax2jGrLZH92vUsGzE',
-  studio: 'price_1T6a501ax2jGrLZHgLBbkzT4',
-  addon: 'price_1T6a5e1ax2jGrLZHbnDNHkwM',
+  esential_monthly: 'price_1TAwpq1pBe1FB1ICMrpWiGvp',
+  esential_yearly:  'price_1TAwpq1pBe1FB1ICPafRQt8m',
+  plus_monthly:     'price_1TAwpr1pBe1FB1ICoADRS2t1',
+  plus_yearly:      'price_1TAwps1pBe1FB1IC4jUywXzL',
+  pro_monthly:      'price_1TAwpt1pBe1FB1ICWbscU6NL',
+  pro_yearly:       'price_1TAwpt1pBe1FB1ICYt0RrpQA',
+  studio_monthly:   'price_1TAwpu1pBe1FB1ICDvu7ghLj',
+  studio_yearly:    'price_1TAwpv1pBe1FB1ICYIhJiX7v',
+  addon:            'price_1T6a5e1ax2jGrLZHbnDNHkwM',
 })
 
 const SUPPORTED_STRIPE_EVENTS = new Set([
@@ -46,10 +51,15 @@ const SUPPORTED_STRIPE_EVENTS = new Set([
 ])
 
 const PLAN_BY_PRICE_ID = Object.freeze({
-  [FALLBACK_STRIPE_PRICE_IDS.starter]: 'Starter',
-  [FALLBACK_STRIPE_PRICE_IDS.pro]: 'Pro',
-  [FALLBACK_STRIPE_PRICE_IDS.studio]: 'Studio',
-  [FALLBACK_STRIPE_PRICE_IDS.addon]: 'Studio',
+  [FALLBACK_STRIPE_PRICE_IDS.esential_monthly]: 'Esential',
+  [FALLBACK_STRIPE_PRICE_IDS.esential_yearly]:  'Esential',
+  [FALLBACK_STRIPE_PRICE_IDS.plus_monthly]:     'Plus',
+  [FALLBACK_STRIPE_PRICE_IDS.plus_yearly]:      'Plus',
+  [FALLBACK_STRIPE_PRICE_IDS.pro_monthly]:      'Pro',
+  [FALLBACK_STRIPE_PRICE_IDS.pro_yearly]:       'Pro',
+  [FALLBACK_STRIPE_PRICE_IDS.studio_monthly]:   'Studio',
+  [FALLBACK_STRIPE_PRICE_IDS.studio_yearly]:    'Studio',
+  [FALLBACK_STRIPE_PRICE_IDS.addon]:            'Studio',
 })
 
 function sanitizePriceId(value) {
@@ -57,14 +67,24 @@ function sanitizePriceId(value) {
 }
 
 function getAllowedCheckoutPriceIds() {
-  const starter = sanitizePriceId(process.env.STRIPE_PRICE_STARTER) || FALLBACK_STRIPE_PRICE_IDS.starter
-  const pro = sanitizePriceId(process.env.STRIPE_PRICE_PRO) || FALLBACK_STRIPE_PRICE_IDS.pro
-  const studio = sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio
-  return new Set([starter, pro, studio].filter(Boolean))
+  const ids = [
+    sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.esential_monthly,
+    sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_YEARLY)  || FALLBACK_STRIPE_PRICE_IDS.esential_yearly,
+    sanitizePriceId(process.env.STRIPE_PRICE_PLUS_MONTHLY)     || FALLBACK_STRIPE_PRICE_IDS.plus_monthly,
+    sanitizePriceId(process.env.STRIPE_PRICE_PLUS_YEARLY)      || FALLBACK_STRIPE_PRICE_IDS.plus_yearly,
+    sanitizePriceId(process.env.STRIPE_PRICE_PRO_MONTHLY)      || FALLBACK_STRIPE_PRICE_IDS.pro_monthly,
+    sanitizePriceId(process.env.STRIPE_PRICE_PRO_YEARLY)       || FALLBACK_STRIPE_PRICE_IDS.pro_yearly,
+    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_MONTHLY)   || FALLBACK_STRIPE_PRICE_IDS.studio_monthly,
+    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_YEARLY)    || FALLBACK_STRIPE_PRICE_IDS.studio_yearly,
+  ]
+  return new Set(ids.filter(Boolean))
 }
 
-function getStudioPriceId() {
-  return sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio
+function getStudioPriceIdSet() {
+  return new Set([
+    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.studio_monthly,
+    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_YEARLY)  || FALLBACK_STRIPE_PRICE_IDS.studio_yearly,
+  ].filter(Boolean))
 }
 
 function getAddonPriceId() {
@@ -111,14 +131,14 @@ async function hasStudioPlanInFirestore(uid) {
     return true
   }
 
-  const studioPriceId = getStudioPriceId()
+  const studioPriceIds = getStudioPriceIdSet()
   for (const subDoc of subsSnap.docs) {
     const sub = subDoc.data() || {}
     const status = String(sub.status || '').trim().toLowerCase()
     if (!['active', 'trialing'].includes(status)) continue
 
     const priceId = extractPrimarySubscriptionPriceId(sub)
-    if (priceId && priceId === studioPriceId) return true
+    if (priceId && studioPriceIds.has(priceId)) return true
 
     if (
       isStudioPlanName(sub.plan)
@@ -241,7 +261,8 @@ function normalizePlanName(value) {
   if (!normalized) return ''
   if (normalized.includes('studio') || normalized.includes('unlimited')) return 'Studio'
   if (normalized.includes('pro')) return 'Pro'
-  if (normalized.includes('starter')) return 'Starter'
+  if (normalized.includes('plus')) return 'Plus'
+  if (normalized.includes('esential') || normalized.includes('starter')) return 'Esential'
   if (normalized.includes('free')) return 'Free'
   return ''
 }
@@ -251,10 +272,15 @@ function resolvePlanFromPriceId(priceId) {
   if (!id) return ''
 
   const envMap = {
-    [sanitizePriceId(process.env.STRIPE_PRICE_STARTER) || FALLBACK_STRIPE_PRICE_IDS.starter]: 'Starter',
-    [sanitizePriceId(process.env.STRIPE_PRICE_PRO) || FALLBACK_STRIPE_PRICE_IDS.pro]: 'Pro',
-    [sanitizePriceId(process.env.STRIPE_PRICE_STUDIO) || FALLBACK_STRIPE_PRICE_IDS.studio]: 'Studio',
-    [sanitizePriceId(process.env.STRIPE_PRICE_ADDON) || FALLBACK_STRIPE_PRICE_IDS.addon]: 'Studio',
+    [sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.esential_monthly]: 'Esential',
+    [sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_YEARLY)  || FALLBACK_STRIPE_PRICE_IDS.esential_yearly]:  'Esential',
+    [sanitizePriceId(process.env.STRIPE_PRICE_PLUS_MONTHLY)     || FALLBACK_STRIPE_PRICE_IDS.plus_monthly]:     'Plus',
+    [sanitizePriceId(process.env.STRIPE_PRICE_PLUS_YEARLY)      || FALLBACK_STRIPE_PRICE_IDS.plus_yearly]:      'Plus',
+    [sanitizePriceId(process.env.STRIPE_PRICE_PRO_MONTHLY)      || FALLBACK_STRIPE_PRICE_IDS.pro_monthly]:      'Pro',
+    [sanitizePriceId(process.env.STRIPE_PRICE_PRO_YEARLY)       || FALLBACK_STRIPE_PRICE_IDS.pro_yearly]:       'Pro',
+    [sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_MONTHLY)   || FALLBACK_STRIPE_PRICE_IDS.studio_monthly]:   'Studio',
+    [sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_YEARLY)    || FALLBACK_STRIPE_PRICE_IDS.studio_yearly]:    'Studio',
+    [sanitizePriceId(process.env.STRIPE_PRICE_ADDON)            || FALLBACK_STRIPE_PRICE_IDS.addon]:            'Studio',
   }
 
   return envMap[id] || PLAN_BY_PRICE_ID[id] || ''
@@ -263,9 +289,10 @@ function resolvePlanFromPriceId(priceId) {
 function resolvePlanFromAmount(amountMinorUnits) {
   const amount = Number(amountMinorUnits)
   if (!Number.isFinite(amount)) return ''
-  if (amount === 3900) return 'Starter'
-  if (amount === 7900) return 'Pro'
-  if (amount === 12900) return 'Studio'
+  if (amount === 2900  || amount === 28900)  return 'Esential'
+  if (amount === 4900  || amount === 48900)  return 'Plus'
+  if (amount === 7900  || amount === 78900)  return 'Pro'
+  if (amount === 12900 || amount === 128900) return 'Studio'
   return ''
 }
 
@@ -303,7 +330,7 @@ function resolvePlanNameFromStripePayload({ session = {}, invoice = {}, userData
   )
   if (byAmount) return byAmount
 
-  return 'Starter'
+  return 'Esential'
 }
 
 function sanitizeRedirectUrl(value, fieldName) {

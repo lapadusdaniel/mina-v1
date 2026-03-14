@@ -3,26 +3,35 @@ import { httpsCallable } from 'firebase/functions'
 import { auth } from '../../firebase'
 
 export const STRIPE_PRICES = {
-  starter: (import.meta.env.VITE_STRIPE_PRICE_STARTER || '').trim(),
-  pro: (import.meta.env.VITE_STRIPE_PRICE_PRO || '').trim(),
-  studio: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
-  addon: (import.meta.env.VITE_STRIPE_PRICE_ADDON || 'price_1T6a5e1ax2jGrLZHbnDNHkwM').trim(),
-  unlimited: (import.meta.env.VITE_STRIPE_PRICE_STUDIO || import.meta.env.VITE_STRIPE_PRICE_UNLIMITED || '').trim(),
+  esential_monthly: (import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_MONTHLY || '').trim(),
+  esential_yearly:  (import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_YEARLY  || '').trim(),
+  plus_monthly:     (import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY     || '').trim(),
+  plus_yearly:      (import.meta.env.VITE_STRIPE_PRICE_PLUS_YEARLY      || '').trim(),
+  pro_monthly:      (import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY      || '').trim(),
+  pro_yearly:       (import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY       || '').trim(),
+  studio_monthly:   (import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY   || '').trim(),
+  studio_yearly:    (import.meta.env.VITE_STRIPE_PRICE_STUDIO_YEARLY    || '').trim(),
+  addon:            (import.meta.env.VITE_STRIPE_PRICE_ADDON || 'price_1T6a5e1ax2jGrLZHbnDNHkwM').trim(),
 }
 
 export const PLAN_PRICES = {
-  STARTER: STRIPE_PRICES.starter,
-  PRO: STRIPE_PRICES.pro,
-  STUDIO: STRIPE_PRICES.studio,
-  ADDON: STRIPE_PRICES.addon,
-  UNLIMITED: STRIPE_PRICES.studio,
+  ESENTIAL_MONTHLY: STRIPE_PRICES.esential_monthly,
+  ESENTIAL_YEARLY:  STRIPE_PRICES.esential_yearly,
+  PLUS_MONTHLY:     STRIPE_PRICES.plus_monthly,
+  PLUS_YEARLY:      STRIPE_PRICES.plus_yearly,
+  PRO_MONTHLY:      STRIPE_PRICES.pro_monthly,
+  PRO_YEARLY:       STRIPE_PRICES.pro_yearly,
+  STUDIO_MONTHLY:   STRIPE_PRICES.studio_monthly,
+  STUDIO_YEARLY:    STRIPE_PRICES.studio_yearly,
+  ADDON:            STRIPE_PRICES.addon,
 }
 
 export const STORAGE_LIMITS = {
-  Free: 30,
-  Starter: 150,
-  Pro: 600,
-  Studio: 2000,
+  Free:    15,
+  Esential: 100,
+  Plus:    500,
+  Pro:     1000,
+  Studio:  2000,
 }
 
 export const BILLING_TYPES = {
@@ -89,9 +98,11 @@ function validateBillingDetails(details) {
 
 function priceIdToPlan(priceId) {
   if (!priceId) return 'Free'
-  if (priceId === PLAN_PRICES.STUDIO || priceId === PLAN_PRICES.UNLIMITED) return 'Studio'
-  if (priceId === PLAN_PRICES.PRO) return 'Pro'
-  if (priceId === PLAN_PRICES.STARTER) return 'Starter'
+  if (priceId === PLAN_PRICES.STUDIO_MONTHLY || priceId === PLAN_PRICES.STUDIO_YEARLY) return 'Studio'
+  if (priceId === PLAN_PRICES.PRO_MONTHLY    || priceId === PLAN_PRICES.PRO_YEARLY)    return 'Pro'
+  if (priceId === PLAN_PRICES.PLUS_MONTHLY   || priceId === PLAN_PRICES.PLUS_YEARLY)   return 'Plus'
+  if (priceId === PLAN_PRICES.ESENTIAL_MONTHLY || priceId === PLAN_PRICES.ESENTIAL_YEARLY) return 'Esential'
+  if (priceId === PLAN_PRICES.ADDON) return 'Studio'
   return 'Free'
 }
 
@@ -210,7 +221,8 @@ function normalizePlanName(value) {
   const raw = String(value || '').trim().toLowerCase()
   if (raw === 'studio' || raw === 'unlimited') return 'Studio'
   if (raw === 'pro') return 'Pro'
-  if (raw === 'starter') return 'Starter'
+  if (raw === 'plus') return 'Plus'
+  if (raw === 'esential' || raw === 'starter') return 'Esential'
   return 'Free'
 }
 
@@ -386,7 +398,8 @@ export function createBillingModule({ db, functions }) {
               const derived = priceIdToPlan(priceId)
               if (derived === 'Studio') nextPlan = 'Studio'
               else if (derived === 'Pro' && nextPlan !== 'Studio') nextPlan = 'Pro'
-              else if (derived === 'Starter' && nextPlan !== 'Studio' && nextPlan !== 'Pro') nextPlan = 'Starter'
+              else if (derived === 'Plus' && nextPlan !== 'Studio' && nextPlan !== 'Pro') nextPlan = 'Plus'
+              else if (derived === 'Esential' && nextPlan !== 'Studio' && nextPlan !== 'Pro' && nextPlan !== 'Plus') nextPlan = 'Esential'
             })
 
             currentPlan = nextPlan
