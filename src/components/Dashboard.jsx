@@ -104,6 +104,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const lastSyncedStorageBytesRef = useRef(null)
   const suppressAutoReopenRef = useRef(false)
   const cancelUploadRef = useRef(false)
+  const uploadSessionRef = useRef(0)
 
   const persistActiveGalleryId = useCallback((galleryId) => {
     try {
@@ -425,6 +426,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     const files = Array.from(e.target.files)
     if (!files.length || !galerieActiva) return
     cancelUploadRef.current = false
+    const sessionId = ++uploadSessionRef.current
     setUploading(true)
     setUploadProgress(0)
     setUploadedCount(0)
@@ -634,12 +636,17 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       console.error('Error uploading:', error)
       alert('Eroare la upload!')
     } finally {
-      setUploading(false)
-      setUploadProgress(0)
-      setUploadedCount(0)
-      setUploadTotalCount(0)
-      setUploadedBytes(0)
-      setUploadStartedAt(null)
+      // Only the most-recent upload session resets the overlay state.
+      // This prevents a stale finally block from hiding the overlay
+      // when a new upload has already started (e.g. rapid re-trigger).
+      if (uploadSessionRef.current === sessionId) {
+        setUploading(false)
+        setUploadProgress(0)
+        setUploadedCount(0)
+        setUploadTotalCount(0)
+        setUploadedBytes(0)
+        setUploadStartedAt(null)
+      }
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }

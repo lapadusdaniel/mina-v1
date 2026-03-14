@@ -711,6 +711,24 @@ export default function GallerySettingsModal({
               </section>
 
               <section className="gallery-config-card">
+                <label className="gallery-config-label">Layout grilă</label>
+                <div className="gallery-config-grid-picker">
+                  {GRID_LAYOUTS.map((layout) => (
+                    <button
+                      key={layout.key}
+                      type="button"
+                      className={`gallery-config-grid-opt${formState.gridLayout === layout.key ? ' is-active' : ''}`}
+                      onClick={(e) => { e.stopPropagation(); setField('gridLayout', layout.key) }}
+                      aria-pressed={formState.gridLayout === layout.key}
+                    >
+                      <span className="gallery-config-grid-icon">{layout.icon}</span>
+                      <span className="gallery-config-grid-label">{layout.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="gallery-config-card">
                 <label className="gallery-config-label">Copertă galerie</label>
                 <input
                   ref={coverUploadInputRef}
@@ -799,24 +817,6 @@ export default function GallerySettingsModal({
                     )}
                   </div>
                 )}
-              </section>
-
-              <section className="gallery-config-card">
-                <label className="gallery-config-label">Layout grilă</label>
-                <div className="gallery-config-grid-picker">
-                  {GRID_LAYOUTS.map((layout) => (
-                    <button
-                      key={layout.key}
-                      type="button"
-                      className={`gallery-config-grid-opt${formState.gridLayout === layout.key ? ' is-active' : ''}`}
-                      onClick={() => setField('gridLayout', layout.key)}
-                      aria-pressed={formState.gridLayout === layout.key}
-                    >
-                      <span className="gallery-config-grid-icon">{layout.icon}</span>
-                      <span className="gallery-config-grid-label">{layout.label}</span>
-                    </button>
-                  ))}
-                </div>
               </section>
 
               {isCreate && (

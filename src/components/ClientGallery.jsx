@@ -2008,6 +2008,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-grid--3col { grid-template-columns: repeat(3, 1fr); }
         .cg-grid--4col { grid-template-columns: repeat(4, 1fr); }
         .cg-grid .cg-item { aspect-ratio: 3 / 2; margin-bottom: 0; }
+        .cg-grid--2col .cg-item { aspect-ratio: 3 / 4; }
         .cg-grid .cg-item-inner { height: 100%; }
         .cg-grid .cg-item-img { height: 100%; object-fit: cover; }
         .cg-grid .cg-item-placeholder { aspect-ratio: unset; height: 100%; }
