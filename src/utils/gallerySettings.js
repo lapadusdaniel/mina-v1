@@ -142,6 +142,7 @@ export function buildGalleryFormState(gallery = null) {
     storeUntil,
     settings,
     privacyPassword: '',
+    gridLayout: gallery?.gridLayout || '4col',
   }
 }
 
@@ -192,6 +193,7 @@ export async function buildGalleryPayload({
     dataExpirare: expiryIso,
     storageDuration: formState.storageMode === 'lifetime' ? String(formState.storageDuration || '1year') : null,
     settings,
+    gridLayout: formState.gridLayout || '4col',
 
     // Compatibility fields already consumed in existing flows.
     numeSelectieClient: settings.favorites.favoritesName || 'Selecție fotografii',

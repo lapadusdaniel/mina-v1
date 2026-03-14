@@ -1137,6 +1137,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const coverImageUrl = galerie.coverUrl || coverMediumUrl || coverThumbUrl;
   const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverMediumUrl;
   const coverFocalPoint = galerie?.coverFocalPoint;
+  const gridLayout = galerie?.gridLayout || '4col';
   const coverObjectPosition = (Number.isFinite(Number(coverFocalPoint?.x)) && Number.isFinite(Number(coverFocalPoint?.y)))
     ? Math.max(0, Math.min(100, Number(coverFocalPoint.x))) + '% ' + Math.max(0, Math.min(100, Number(coverFocalPoint.y))) + '%'
     : 'center';
@@ -1288,34 +1289,59 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
             </div>
           ) : (
             <>
-              <Masonry
-                breakpointCols={{ default: 4, 1320: 3, 900: 2, 640: 2, 340: 1 }}
-                className="cg-masonry"
-                columnClassName="cg-masonry-col"
-              >
-                {pozeVizibile.map((poza) => (
-                  <LazyGalleryImage
-                    key={poza.key}
-                    pozaKey={poza.key}
-                    isFav={galerie.favorite?.includes(poza.key)}
-                    onFavoriteClick={handleFavoriteClick}
-                    accentColor={profile.accentColor}
-                    allowPhotoSelection={allowPhotoSelection}
-                    allowOriginalDownloads={allowOriginalDownloads}
-                    watermarkEnabled={watermarkEnabled}
-                    watermarkLabel={watermarkLabel}
-                    onClick={() => {
-                      const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
-                      if (nextIndex < 0) return;
-
-                      setSelectedImage(nextIndex >= 0 ? nextIndex : 0);
-                      setLightboxDownloading(false);
-                      seedLightboxSources(nextIndex);
-                      void preloadMediumForLightbox(poza.key);
-                    }}
-                  />
-                ))}
-              </Masonry>
+              {gridLayout === 'masonry' ? (
+                <Masonry
+                  breakpointCols={{ default: 4, 1320: 3, 900: 2, 640: 2, 340: 1 }}
+                  className="cg-masonry"
+                  columnClassName="cg-masonry-col"
+                >
+                  {pozeVizibile.map((poza) => (
+                    <LazyGalleryImage
+                      key={poza.key}
+                      pozaKey={poza.key}
+                      isFav={galerie.favorite?.includes(poza.key)}
+                      onFavoriteClick={handleFavoriteClick}
+                      accentColor={profile.accentColor}
+                      allowPhotoSelection={allowPhotoSelection}
+                      allowOriginalDownloads={allowOriginalDownloads}
+                      watermarkEnabled={watermarkEnabled}
+                      watermarkLabel={watermarkLabel}
+                      onClick={() => {
+                        const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
+                        if (nextIndex < 0) return;
+                        setSelectedImage(nextIndex >= 0 ? nextIndex : 0);
+                        setLightboxDownloading(false);
+                        seedLightboxSources(nextIndex);
+                        void preloadMediumForLightbox(poza.key);
+                      }}
+                    />
+                  ))}
+                </Masonry>
+              ) : (
+                <div className={`cg-grid cg-grid--${gridLayout}`}>
+                  {pozeVizibile.map((poza) => (
+                    <LazyGalleryImage
+                      key={poza.key}
+                      pozaKey={poza.key}
+                      isFav={galerie.favorite?.includes(poza.key)}
+                      onFavoriteClick={handleFavoriteClick}
+                      accentColor={profile.accentColor}
+                      allowPhotoSelection={allowPhotoSelection}
+                      allowOriginalDownloads={allowOriginalDownloads}
+                      watermarkEnabled={watermarkEnabled}
+                      watermarkLabel={watermarkLabel}
+                      onClick={() => {
+                        const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
+                        if (nextIndex < 0) return;
+                        setSelectedImage(nextIndex >= 0 ? nextIndex : 0);
+                        setLightboxDownloading(false);
+                        seedLightboxSources(nextIndex);
+                        void preloadMediumForLightbox(poza.key);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
               {visibleCount < pozeAfisate.length && (
                 <div ref={loadMoreRef} style={{ height: 1, marginTop: 20 }} aria-hidden="true" />
               )}
@@ -1975,6 +2001,21 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-masonry { display: flex; margin-left: -16px; width: auto; }
         .cg-masonry-col { padding-left: 16px; background-clip: padding-box; }
         .cg-masonry-col > div { margin-bottom: 16px; }
+
+        /* ── Uniform grid layouts ── */
+        .cg-grid { display: grid; gap: 8px; }
+        .cg-grid--2col { grid-template-columns: repeat(2, 1fr); }
+        .cg-grid--3col { grid-template-columns: repeat(3, 1fr); }
+        .cg-grid--4col { grid-template-columns: repeat(4, 1fr); }
+        .cg-grid .cg-item { aspect-ratio: 3 / 2; margin-bottom: 0; }
+        .cg-grid .cg-item-inner { height: 100%; }
+        .cg-grid .cg-item-img { height: 100%; object-fit: cover; }
+        .cg-grid .cg-item-placeholder { aspect-ratio: unset; height: 100%; }
+        @media (max-width: 768px) {
+          .cg-grid--2col { grid-template-columns: 1fr; }
+          .cg-grid--3col { grid-template-columns: repeat(2, 1fr); }
+          .cg-grid--4col { grid-template-columns: repeat(2, 1fr); }
+        }
 
         /* ── Item ── */
         .cg-item { cursor: pointer; overflow: hidden; border-radius: 6px; }

@@ -22,6 +22,56 @@ const TABS = [
   { key: 'privacy', label: 'Confidențialitate' },
 ]
 
+const GRID_LAYOUTS = [
+  {
+    key: '2col',
+    label: '2 coloane',
+    icon: (
+      <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="15" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="20" y="1" width="15" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    ),
+  },
+  {
+    key: '3col',
+    label: '3 coloane',
+    icon: (
+      <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="9" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="13.5" y="1" width="9" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="26" y="1" width="9" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    ),
+  },
+  {
+    key: '4col',
+    label: '4 coloane',
+    icon: (
+      <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="10" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="19.5" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="28.5" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'masonry',
+    label: 'Masonry',
+    icon: (
+      <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="9" height="11" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="1" y="15" width="9" height="12" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="13.5" y="1" width="9" height="16" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="13.5" y="20" width="9" height="7" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="26" y="1" width="9" height="8" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="26" y="12" width="9" height="15" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    ),
+  },
+]
+
 function ToggleField({ label, checked, onChange, hint }) {
   return (
     <div className="gallery-config-toggle-row">
@@ -749,6 +799,24 @@ export default function GallerySettingsModal({
                     )}
                   </div>
                 )}
+              </section>
+
+              <section className="gallery-config-card">
+                <label className="gallery-config-label">Layout grilă</label>
+                <div className="gallery-config-grid-picker">
+                  {GRID_LAYOUTS.map((layout) => (
+                    <button
+                      key={layout.key}
+                      type="button"
+                      className={`gallery-config-grid-opt${formState.gridLayout === layout.key ? ' is-active' : ''}`}
+                      onClick={() => setField('gridLayout', layout.key)}
+                      aria-pressed={formState.gridLayout === layout.key}
+                    >
+                      <span className="gallery-config-grid-icon">{layout.icon}</span>
+                      <span className="gallery-config-grid-label">{layout.label}</span>
+                    </button>
+                  ))}
+                </div>
               </section>
 
               {isCreate && (
