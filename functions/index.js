@@ -1309,61 +1309,66 @@ exports.createCheckoutSession = onCall(
     secrets: [STRIPE_EXTENSION_API_KEY, STRIPE_SECRET_KEY],
   },
   async (request) => {
-    const uid = String(request.auth?.uid || '').trim()
-    if (!uid) {
-      throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat pentru checkout.')
-    }
+    try {
+      const uid = String(request.auth?.uid || '').trim()
+      if (!uid) {
+        throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat pentru checkout.')
+      }
 
-    const priceId = sanitizePriceId(request.data?.priceId)
-    const successUrl = sanitizeRedirectUrl(request.data?.successUrl, 'successUrl')
-    const cancelUrl = sanitizeRedirectUrl(request.data?.cancelUrl, 'cancelUrl')
-    const allowPromotionCodes =
-      request.data?.allowPromotionCodes === undefined
-        ? true
-        : Boolean(request.data.allowPromotionCodes)
+      const priceId = sanitizePriceId(request.data?.priceId)
+      const successUrl = sanitizeRedirectUrl(request.data?.successUrl, 'successUrl')
+      const cancelUrl = sanitizeRedirectUrl(request.data?.cancelUrl, 'cancelUrl')
+      const allowPromotionCodes =
+        request.data?.allowPromotionCodes === undefined
+          ? true
+          : Boolean(request.data.allowPromotionCodes)
 
-    const allowedPriceIds = getAllowedCheckoutPriceIds()
-    if (!allowedPriceIds.has(priceId)) {
-      throw new HttpsError('invalid-argument', 'Price ID invalid pentru checkout.')
-    }
+      const allowedPriceIds = getAllowedCheckoutPriceIds()
+      if (!allowedPriceIds.has(priceId)) {
+        throw new HttpsError('invalid-argument', 'Price ID invalid pentru checkout.')
+      }
 
-    const stripeKey = getCheckoutStripeKey()
-    if (!stripeKey) {
-      throw new HttpsError('failed-precondition', 'Cheia Stripe nu este configurată pe server.')
-    }
+      const stripeKey = getCheckoutStripeKey()
+      if (!stripeKey) {
+        throw new HttpsError('failed-precondition', 'Cheia Stripe nu este configurată pe server.')
+      }
 
-    const stripe = new Stripe(stripeKey, {
-      apiVersion: '2024-06-20',
-    })
+      const stripe = new Stripe(stripeKey, {
+        apiVersion: '2024-06-20',
+      })
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      allow_promotion_codes: allowPromotionCodes,
-      client_reference_id: uid,
-      metadata: {
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        allow_promotion_codes: allowPromotionCodes,
+        client_reference_id: uid,
+        metadata: {
+          uid,
+          firebase_uid: uid,
+          priceId,
+          type: 'plan',
+        },
+      })
+
+      if (!session?.url) {
+        throw new HttpsError('internal', 'Stripe nu a returnat URL-ul de checkout.')
+      }
+
+      logger.info('createCheckoutSession success', {
         uid,
-        firebase_uid: uid,
         priceId,
-        type: 'plan',
-      },
-    })
+        sessionId: session.id,
+      })
 
-    if (!session?.url) {
-      throw new HttpsError('internal', 'Stripe nu a returnat URL-ul de checkout.')
-    }
-
-    logger.info('createCheckoutSession success', {
-      uid,
-      priceId,
-      sessionId: session.id,
-    })
-
-    return {
-      url: session.url,
-      sessionId: session.id,
+      return {
+        url: session.url,
+        sessionId: session.id,
+      }
+    } catch (error) {
+      console.error('createCheckoutSession error:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
+      throw error
     }
   }
 )
