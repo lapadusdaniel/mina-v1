@@ -3,7 +3,7 @@ import { getAppServices } from '../core/bootstrap/appBootstrap'
 import './PhotographerSite.css'
 
 const { sites: sitesService, media: mediaService } = getAppServices()
-const VALID_THEMES = ['luxos', 'minimal', 'indraznet', 'cald']
+const VALID_THEMES = ['minimal']
 
 // ── Helpers ──────────────────────────────────
 const normalizeUrl = (url) => {

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 
-const VALID_THEMES = ['luxos', 'minimal', 'indraznet', 'cald']
-const DEFAULT_THEME = 'luxos'
+const VALID_THEMES = ['minimal']
+const DEFAULT_THEME = 'minimal'
 
 export function useTheme(uid) {
   const [theme, setThemeState] = useState(DEFAULT_THEME)

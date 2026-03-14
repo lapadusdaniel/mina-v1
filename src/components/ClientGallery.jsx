@@ -8,7 +8,7 @@ import { getAppServices } from '../core/bootstrap/appBootstrap';
 import Masonry from 'react-masonry-css';
 import { ChevronDown, ChevronUp, Share2, Download, Heart, Instagram, MessageCircle, Loader2 } from 'lucide-react';
 
-const VALID_THEMES = ['luxos', 'minimal', 'indraznet', 'cald'];
+const VALID_THEMES = ['minimal'];
 const BATCH_SIZE = 24;
 const INITIAL_VISIBLE = 24;
 const SELECTION_NAME_STORAGE_KEY = 'mina_nume_client';

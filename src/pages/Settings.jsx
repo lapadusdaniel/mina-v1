@@ -68,10 +68,7 @@ export default function Settings({ user, theme, setTheme, userPlan, storageLimit
 
           <div className="settings-theme-grid">
             {[
-              { id: 'luxos', label: 'Luxos', bg: '#0d0900', accent: '#d4af64', text: '#f5e6c0', desc: 'Dark auriu, serif elegant' },
               { id: 'minimal', label: 'Minimal', bg: '#ffffff', accent: '#111111', text: '#1d1d1f', desc: 'Alb pur, fără distrageri' },
-              { id: 'indraznet', label: 'Îndrăzneț', bg: '#0a0a1a', accent: '#a970ff', text: '#ffffff', desc: 'Dark violet, modern' },
-              { id: 'cald', label: 'Cald', bg: '#faf6f0', accent: '#8b6040', text: '#2d1f0f', desc: 'Bej crem, organic' },
             ].map((t) => (
               <button
                 key={t.id}
