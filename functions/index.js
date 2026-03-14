@@ -1263,7 +1263,31 @@ exports.sendWelcomeEmail = functionsV1
   .auth.user()
   .onCreate(async (user) => {
     try {
-      const result = await getEmailService().sendWelcomeEmail(user)
+      // Wait briefly for the client-side Firestore write (users/{uid}) to land,
+      // since updateProfile + setDoc happen after Firebase Auth user creation.
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+
+      // Resolve the photographer's name: Auth displayName → Firestore → fallback
+      let displayName = String(user.displayName || '').trim()
+      if (!displayName) {
+        try {
+          const userDoc = await db.collection('users').doc(user.uid).get()
+          if (userDoc.exists) {
+            const data = userDoc.data() || {}
+            displayName = String(data.name || data.brandName || '').trim()
+          }
+        } catch (fsErr) {
+          logger.warn('sendWelcomeEmail: could not read Firestore user doc', {
+            uid: user.uid,
+            error: fsErr?.message,
+          })
+        }
+      }
+
+      const result = await getEmailService().sendWelcomeEmail({
+        email: user.email,
+        displayName,
+      })
       logger.info('sendWelcomeEmail finished', {
         uid: user.uid,
         ...result,

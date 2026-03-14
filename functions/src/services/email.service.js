@@ -95,21 +95,129 @@ function buildWelcomeEmailHtml({ displayName = '', dashboardUrl = '' } = {}) {
   const safeDisplayName = escapeHtml(displayName || 'Fotograf')
   const safeDashboardUrl = escapeHtml(dashboardUrl)
 
-  return `
-    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
-      <h2 style="margin:0 0 12px">Bun venit în Mina!</h2>
-      <p style="margin:0 0 12px">Salut, ${safeDisplayName} 👋</p>
-      <p style="margin:0 0 18px">
-        Contul tău a fost creat cu succes, iar dashboard-ul este pregătit pentru primele galerii.
-      </p>
-      <p style="margin:0 0 18px">
-        <a href="${safeDashboardUrl}" style="display:inline-block;padding:10px 16px;background:#111111;color:#ffffff;text-decoration:none;border-radius:8px">
-          Intră în dashboard
-        </a>
-      </p>
-      <p style="margin:0;color:#666">Echipa Mina</p>
-    </div>
-  `
+  return `<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bun venit în Mina</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'DM Sans','Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f5f5f7;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:580px;">
+
+          <!-- Logo / Header -->
+          <tr>
+            <td align="center" style="padding-bottom:28px;">
+              <span style="font-family:-apple-system,BlinkMacSystemFont,'DM Sans',Arial,sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.3px;color:#1d1d1f;">
+                mina
+              </span>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td style="background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.07);">
+
+              <!-- Gold accent bar -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td style="height:4px;background:linear-gradient(90deg,#bf9b30 0%,#d4af37 50%,#bf9b30 100%);"></td>
+                </tr>
+              </table>
+
+              <!-- Body -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:40px 40px 36px;">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 6px;font-size:13px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:#bf9b30;">
+                      Bun venit
+                    </p>
+                    <h1 style="margin:0 0 24px;font-size:26px;font-weight:700;line-height:1.25;color:#1d1d1f;letter-spacing:-0.4px;">
+                      Salut, ${safeDisplayName}! 👋
+                    </h1>
+
+                    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#3a3a3c;">
+                      Suntem bucuroși că ești alături de noi. Contul tău Mina este activ și dashboard-ul îți stă la dispoziție — gata să primească primele galerii.
+                    </p>
+
+                    <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:#3a3a3c;">
+                      Cu Mina poți livra fotografii profesional, cu branding propriu și control complet — fără Google Drive, fără WeTransfer.
+                    </p>
+
+                    <!-- CTA Button -->
+                    <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:32px;">
+                      <tr>
+                        <td style="border-radius:10px;background-color:#1d1d1f;">
+                          <a href="${safeDashboardUrl}"
+                             style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;letter-spacing:-0.1px;border-radius:10px;">
+                            Deschide dashboard-ul &rarr;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Steps -->
+                    <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                           style="background-color:#f5f5f7;border-radius:10px;padding:20px 24px;margin-bottom:8px;">
+                      <tr>
+                        <td>
+                          <p style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:#86868b;">
+                            Primii pași
+                          </p>
+                          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                            <tr>
+                              <td style="padding:5px 0;font-size:14px;color:#3a3a3c;line-height:1.5;">
+                                <span style="color:#bf9b30;font-weight:700;margin-right:8px;">①</span>
+                                Creează prima galerie și copiază link-ul
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding:5px 0;font-size:14px;color:#3a3a3c;line-height:1.5;">
+                                <span style="color:#bf9b30;font-weight:700;margin-right:8px;">②</span>
+                                Încarcă fotografiile — thumbnails generate automat
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding:5px 0;font-size:14px;color:#3a3a3c;line-height:1.5;">
+                                <span style="color:#bf9b30;font-weight:700;margin-right:8px;">③</span>
+                                Trimite link-ul clientului și urmărește selecțiile
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding:28px 16px 8px;">
+              <p style="margin:0 0 6px;font-size:13px;color:#86868b;line-height:1.6;">
+                O zi cu lumină frumoasă,<br />
+                <strong style="color:#1d1d1f;">Echipa Mina</strong>
+              </p>
+              <p style="margin:8px 0 0;font-size:12px;color:#aeaeb2;">
+                Ai primit acest email pentru că te-ai înregistrat pe
+                <a href="https://cloudbymina.com" style="color:#86868b;text-decoration:underline;">cloudbymina.com</a>.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 function buildPaymentSuccessEmailHtml({ displayName = '', planName = 'Starter', storageLimitGb = 150, dashboardUrl = '' } = {}) {
