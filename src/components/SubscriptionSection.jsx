@@ -47,6 +47,64 @@ function statusClass(status) {
   return 'is-muted'
 }
 
+const DASH_PLANS = [
+  {
+    id: 'free',
+    name: 'Free',
+    storage: '15 GB',
+    monthly: { display: '0 lei', planId: null },
+    yearly:  { display: '0 lei', equiv: null, planId: null },
+    features: ['15 GB stocare', '3 galerii active', 'Galerii cu parolă', 'Selecții favorite'],
+    lockedFeatures: ['Fără site de prezentare'],
+    highlight: false,
+    cta: 'Plan gratuit',
+  },
+  {
+    id: 'esential',
+    name: 'Esențial',
+    storage: '100 GB',
+    monthly: { display: '29 lei', planId: 'esential_monthly' },
+    yearly:  { display: '289 lei', equiv: '~24 lei/lună', planId: 'esential_yearly' },
+    features: ['100 GB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    highlight: false,
+    cta: 'Alege Esențial',
+  },
+  {
+    id: 'plus',
+    name: 'Plus',
+    storage: '500 GB',
+    monthly: { display: '49 lei', planId: 'plus_monthly' },
+    yearly:  { display: '489 lei', equiv: '~41 lei/lună', planId: 'plus_yearly' },
+    features: ['500 GB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    highlight: true,
+    cta: 'Alege Plus',
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    storage: '1 TB',
+    monthly: { display: '79 lei', planId: 'pro_monthly' },
+    yearly:  { display: '789 lei', equiv: '~66 lei/lună', planId: 'pro_yearly' },
+    features: ['1 TB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    highlight: false,
+    cta: 'Alege Pro',
+  },
+  {
+    id: 'studio',
+    name: 'Studio',
+    storage: '2 TB',
+    monthly: { display: '129 lei', planId: 'studio_monthly' },
+    yearly:  { display: '1.289 lei', equiv: '~107 lei/lună', planId: 'studio_yearly' },
+    features: ['2 TB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
+    lockedFeatures: [],
+    highlight: false,
+    cta: 'Alege Studio',
+  },
+]
+
 const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode = 'full' }) => {
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [openingPortal, setOpeningPortal] = useState(false)
@@ -55,6 +113,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
   const [billingData, setBillingData] = useState(null)
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
+  const [billingCycle, setBillingCycle] = useState('monthly')
   const normalizedRawPlan = String(userPlanProp ?? user?.plan ?? 'Free')
   const userPlan = normalizedRawPlan === 'Unlimited' ? 'Studio' : normalizedRawPlan
   const showPlans = mode === 'full' || mode === 'plansOnly'
@@ -231,144 +290,138 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
     }
   }
 
-  const plans = [
-    {
-      id: 'free',
-      name: 'Free',
-      price: '0 lei',
-      features: ['30 GB stocare', '3 galerii active', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Fără site de prezentare'],
-      description: 'Perfect pentru a începe și a vedea cum funcționează Mina.',
-      isCurrent: userPlan === 'Free',
-      cta: 'Plan gratuit'
-    },
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: '39 lei',
-      period: '/lună',
-      features: ['150 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
-      description: 'Pentru fotograful care livrează constant și vrea să arate profesional.',
-      isCurrent: userPlan === 'Starter',
-      cta: 'Alege Starter',
-      highlight: false
-    },
-    {
-      id: 'pro',
-      name: 'Pro',
-      price: '79 lei',
-      period: '/lună',
-      features: ['600 GB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
-      description: 'Volumul și viteza de care ai nevoie în sezonul aglomerat.',
-      isCurrent: userPlan === 'Pro',
-      cta: 'Alege Pro',
-      highlight: true
-    },
-    {
-      id: 'studio',
-      name: 'Studio',
-      price: '129 lei',
-      period: '/lună',
-      features: ['2 TB stocare', 'Galerii nelimitate', 'Galerii protejate cu parolă', 'Selecții favorite pentru clienți', 'Site de prezentare inclus'],
-      description: 'Pentru cei care nu fac compromisuri. Arhivă, livrări masive, totul într-un singur loc.',
-      isCurrent: userPlan === 'Studio',
-      cta: 'Alege Studio',
-      highlight: false
-    }
-  ];
-
   return (
     <div className="sub-wrapper">
       {showPlans && (
         <>
           <div className="sub-header">
-        <h2 className="sub-display-title">Alege planul potrivit <em>viziunii tale.</em></h2>
-        <p className="sub-display-sub">Scalabilitate maximă pentru portofoliul tău profesional.</p>
-        <p className="sub-display-sub">Add-on 500 GB disponibil: 49 lei/lună.</p>
-      </div>
+            <h2 className="sub-display-title">Alege planul potrivit <em>viziunii tale.</em></h2>
+            <p className="sub-display-sub">Scalabilitate maximă pentru portofoliul tău profesional.</p>
 
-      <div className="sub-pricing-grid">
-        {plans.map((plan) => (
-          (() => {
-            const isFreePlan = plan.id === 'free'
-            const isDisabled = plan.isCurrent || Boolean(loadingPlan) || isFreePlan
-            const label = loadingPlan === plan.id
-              ? 'Se încarcă...'
-              : plan.isCurrent
-                ? 'Planul tău'
-                : isFreePlan
-                  ? 'Disponibil după anulare'
-                  : plan.cta
-
-            return (
-          <div key={plan.id} className={`sub-plan-card ${plan.highlight ? 'pro-featured' : ''}`}>
-            {plan.highlight && <div className="sub-plan-badge">Cel mai ales</div>}
-            <h3 className="sub-plan-name">{plan.name}</h3>
-            <div className="sub-plan-price">
-              {plan.price}
-              {plan.period && <span className="sub-period">{plan.period}</span>}
+            <div className="sub-billing-toggle">
+              <button
+                className={`sub-billing-opt${billingCycle === 'monthly' ? ' sub-billing-opt-active' : ''}`}
+                onClick={() => setBillingCycle('monthly')}
+              >
+                Lunar
+              </button>
+              <button
+                className={`sub-billing-opt${billingCycle === 'yearly' ? ' sub-billing-opt-active' : ''}`}
+                onClick={() => setBillingCycle('yearly')}
+              >
+                Anual
+                <span className="sub-billing-save">−17%</span>
+              </button>
             </div>
-            <ul className="sub-plan-features">
-              {plan.features.map((f, i) => (
-                <li key={i}>{f}</li>
-              ))}
-            </ul>
-            <button 
-              className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
-              onClick={() => handleCheckout(plan.id)}
-              disabled={isDisabled}
-            >
-              {label}
-            </button>
-            {!plan.isCurrent && isFreePlan && (
-              <p className="sub-muted" style={{ marginTop: 8 }}>
-                Pentru plan Free, anulezi întâi abonamentul curent la final de perioadă.
-              </p>
-            )}
-
-            {plan.id === 'studio' && (
-              <div className={`sub-addon-card ${addonActive ? 'is-active' : ''}`}>
-                <div className="sub-addon-head">
-                  <h4>Storage Add-on 500 GB</h4>
-                  <span>{addonActive ? 'Activ' : '49 lei/lună'}</span>
-                </div>
-
-                {addonActive ? (
-                  <p className="sub-addon-text">Add-on activ — 2.5 TB total stocare.</p>
-                ) : (
-                  <p className="sub-addon-text">
-                    Extinzi instant planul Studio de la 2 TB la 2.5 TB.
-                  </p>
-                )}
-
-                {plan.isCurrent ? (
-                  addonActive ? (
-                    <button
-                      type="button"
-                      className="sub-addon-btn sub-addon-btn-outline"
-                      onClick={handleDeactivateAddon}
-                      disabled={deactivatingAddon || activatingAddon || openingPortal}
-                    >
-                      {deactivatingAddon ? 'Se deschide portalul Stripe...' : 'Dezactivează'}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="sub-addon-btn sub-addon-btn-solid"
-                      onClick={handleActivateAddon}
-                      disabled={activatingAddon || deactivatingAddon || Boolean(loadingPlan)}
-                    >
-                      {activatingAddon ? 'Se încarcă...' : 'Activează'}
-                    </button>
-                  )
-                ) : (
-                  <p className="sub-muted">Disponibil doar pentru conturile cu plan Studio.</p>
-                )}
-              </div>
-            )}
           </div>
-            )
-          })()
-        ))}
+
+          <div className="sub-pricing-grid sub-pricing-grid-5">
+            {DASH_PLANS.map((plan) => {
+              const isCurrent = userPlan.toLowerCase() === plan.id
+              const price = billingCycle === 'yearly' ? plan.yearly : plan.monthly
+              const isFreePlan = plan.id === 'free'
+              const checkoutId = price.planId
+              const isDisabled = isCurrent || Boolean(loadingPlan) || isFreePlan
+              const label = loadingPlan === checkoutId
+                ? 'Se încarcă...'
+                : isCurrent
+                  ? 'Planul tău'
+                  : isFreePlan
+                    ? 'Disponibil după anulare'
+                    : plan.cta
+
+              return (
+                <div
+                  key={plan.id}
+                  className={[
+                    'sub-plan-card',
+                    plan.highlight ? 'pro-featured' : '',
+                    isCurrent ? 'is-current-plan' : '',
+                  ].filter(Boolean).join(' ')}
+                >
+                  {plan.highlight && !isCurrent && (
+                    <div className="sub-plan-badge">Cel mai ales</div>
+                  )}
+                  {isCurrent && (
+                    <div className="sub-plan-badge sub-plan-badge-current">Plan activ</div>
+                  )}
+
+                  <h3 className="sub-plan-name">{plan.name}</h3>
+                  <p className="sub-plan-storage-tag">{plan.storage} stocare</p>
+
+                  <div className="sub-plan-price">
+                    {price.display}
+                    {!isFreePlan && billingCycle === 'monthly' && (
+                      <span className="sub-period">/lună</span>
+                    )}
+                    {!isFreePlan && billingCycle === 'yearly' && (
+                      <span className="sub-period">/an</span>
+                    )}
+                  </div>
+                  {billingCycle === 'yearly' && price.equiv && (
+                    <p className="sub-plan-equiv">{price.equiv}</p>
+                  )}
+
+                  <ul className="sub-plan-features">
+                    {plan.features.map((f) => <li key={f}>{f}</li>)}
+                    {plan.lockedFeatures.map((f) => (
+                      <li key={f} className="sub-feature-muted">{f}</li>
+                    ))}
+                  </ul>
+
+                  <button
+                    className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
+                    onClick={() => checkoutId && handleCheckout(checkoutId)}
+                    disabled={isDisabled}
+                  >
+                    {label}
+                  </button>
+
+                  {!isCurrent && isFreePlan && (
+                    <p className="sub-muted" style={{ marginTop: 8 }}>
+                      Anulezi întâi abonamentul curent la final de perioadă.
+                    </p>
+                  )}
+
+                  {plan.id === 'studio' && (
+                    <div className={`sub-addon-card ${addonActive ? 'is-active' : ''}`}>
+                      <div className="sub-addon-head">
+                        <h4>Storage Add-on 500 GB</h4>
+                        <span>{addonActive ? 'Activ' : '49 lei/lună'}</span>
+                      </div>
+                      {addonActive ? (
+                        <p className="sub-addon-text">Add-on activ — 2.5 TB total stocare.</p>
+                      ) : (
+                        <p className="sub-addon-text">Extinzi instant planul Studio de la 2 TB la 2.5 TB.</p>
+                      )}
+                      {isCurrent ? (
+                        addonActive ? (
+                          <button
+                            type="button"
+                            className="sub-addon-btn sub-addon-btn-outline"
+                            onClick={handleDeactivateAddon}
+                            disabled={deactivatingAddon || activatingAddon || openingPortal}
+                          >
+                            {deactivatingAddon ? 'Se deschide portalul Stripe...' : 'Dezactivează'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="sub-addon-btn sub-addon-btn-solid"
+                            onClick={handleActivateAddon}
+                            disabled={activatingAddon || deactivatingAddon || Boolean(loadingPlan)}
+                          >
+                            {activatingAddon ? 'Se încarcă...' : 'Activează'}
+                          </button>
+                        )
+                      ) : (
+                        <p className="sub-muted">Disponibil doar pentru conturile cu plan Studio.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </>
       )}

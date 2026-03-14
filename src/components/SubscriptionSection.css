@@ -32,12 +32,94 @@
     margin-top: 8px;
   }
   
+  .sub-billing-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #f2f2f7;
+    border-radius: 100px;
+    padding: 4px;
+    margin-top: 20px;
+  }
+
+  .sub-billing-opt {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #86868b;
+    background: none;
+    border: none;
+    border-radius: 100px;
+    padding: 7px 16px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sub-billing-opt-active {
+    background: #ffffff;
+    color: #1d1d1f;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+
+  .sub-billing-save {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #b8965a;
+    background: rgba(184,150,90,0.12);
+    border-radius: 100px;
+    padding: 2px 6px;
+  }
+
+  .sub-plan-storage-tag {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    color: #86868b;
+    margin: 0 0 8px;
+  }
+
+  .sub-plan-equiv {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    color: #86868b;
+    margin: -14px 0 16px;
+  }
+
+  .sub-feature-muted {
+    opacity: 0.45;
+  }
+
+  .sub-plan-badge-current {
+    background: #1d1d1f !important;
+    color: #fff !important;
+  }
+
+  .is-current-plan {
+    border-color: #1d1d1f !important;
+    box-shadow: 0 0 0 2px rgba(29,29,31,0.15);
+  }
+
+  .pro-featured.is-current-plan {
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15), 0 0 0 2px #b8965a;
+  }
+
   .sub-pricing-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 20px;
     align-items: stretch;
     width: 100%;
+  }
+
+  .sub-pricing-grid-5 {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+  }
+
+  .sub-pricing-grid-5 .sub-plan-card {
+    padding: 24px 18px;
   }
   
   .sub-plan-card {
@@ -410,8 +492,14 @@
   }
   
   /* Ajustări pentru ecrane mici */
+  @media (max-width: 1200px) {
+    .sub-pricing-grid-5 { grid-template-columns: repeat(3, 1fr); }
+  }
+
   @media (max-width: 1000px) {
     .sub-pricing-grid { grid-template-columns: 1fr; }
+    .sub-pricing-grid-5 { grid-template-columns: 1fr; }
+    .sub-pricing-grid-5 .sub-plan-card { padding: 20px 16px; }
     .pro-featured { transform: none; }
     .sub-billing-grid { grid-template-columns: 1fr; }
   }
