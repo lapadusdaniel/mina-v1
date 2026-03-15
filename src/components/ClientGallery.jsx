@@ -135,6 +135,7 @@ function LazyGalleryImage({
   const [url, setUrl] = useState(() => getCachedUrl(`thumb:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [thumbRetryCount, setThumbRetryCount] = useState(0);
+  const [naturalRatio, setNaturalRatio] = useState(null);
 
   useEffect(() => {
     if (url) return;
@@ -166,6 +167,11 @@ function LazyGalleryImage({
     setThumbRetryCount(0);
   }, [pozaKey]);
 
+  const handleImgLoad = useCallback((e) => {
+    const { naturalWidth: w, naturalHeight: h } = e.target;
+    if (w && h) setNaturalRatio(`${w} / ${h}`);
+  }, []);
+
   const handleThumbError = useCallback(() => {
     if (!url) return;
     if (thumbRetryCount >= 2) return;
@@ -190,7 +196,7 @@ function LazyGalleryImage({
   }, [pozaKey, isDownloading]);
 
   return (
-    <div className="cg-item">
+    <div className="cg-item" style={naturalRatio ? { aspectRatio: naturalRatio } : undefined}>
       <div className="cg-item-inner">
         {url ? (
           <img
@@ -199,6 +205,7 @@ function LazyGalleryImage({
             className="cg-item-img"
             loading="lazy"
             onClick={onClick}
+            onLoad={handleImgLoad}
             onError={handleThumbError}
           />
         ) : (
@@ -2007,11 +2014,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-grid--2col { grid-template-columns: repeat(2, 1fr); }
         .cg-grid--3col { grid-template-columns: repeat(3, 1fr); }
         .cg-grid--4col { grid-template-columns: repeat(4, 1fr); }
-        .cg-grid .cg-item { aspect-ratio: 3 / 2; margin-bottom: 0; }
-        .cg-grid--2col .cg-item { aspect-ratio: 2 / 3; }
-        .cg-grid .cg-item-inner { height: 100%; }
-        .cg-grid .cg-item-img { height: 100%; object-fit: cover; }
-        .cg-grid .cg-item-placeholder { aspect-ratio: unset; height: 100%; }
+        .cg-grid .cg-item { margin-bottom: 0; }
+        /* aspect-ratio is set dynamically per photo via inline style (naturalWidth/naturalHeight)
+           so no forced ratio here — photos render at their real orientation */
         @media (max-width: 768px) {
           .cg-grid--2col { grid-template-columns: 1fr; }
           .cg-grid--3col { grid-template-columns: repeat(2, 1fr); }
