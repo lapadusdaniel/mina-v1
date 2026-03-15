@@ -24,16 +24,6 @@ const TABS = [
 
 const GRID_LAYOUTS = [
   {
-    key: '2col',
-    label: '2 coloane',
-    icon: (
-      <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="1" y="1" width="15" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="20" y="1" width="15" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
-      </svg>
-    ),
-  },
-  {
     key: '3col',
     label: '3 coloane',
     icon: (

@@ -1155,7 +1155,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const coverImageUrl = galerie.coverUrl || coverMediumUrl || coverThumbUrl;
   const coverIsBlurred = !galerie.coverUrl && coverThumbUrl && !coverMediumUrl;
   const coverFocalPoint = galerie?.coverFocalPoint;
-  const gridLayout = galerie?.gridLayout || '4col';
+  const rawGridLayout = galerie?.gridLayout || '4col';
+  const gridLayout = rawGridLayout === '2col' ? '4col' : rawGridLayout;
   const coverObjectPosition = (Number.isFinite(Number(coverFocalPoint?.x)) && Number.isFinite(Number(coverFocalPoint?.y)))
     ? Math.max(0, Math.min(100, Number(coverFocalPoint.x))) + '% ' + Math.max(0, Math.min(100, Number(coverFocalPoint.y))) + '%'
     : 'center';
@@ -2022,14 +2023,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
         /* ── Uniform grid layouts ── */
         .cg-grid { display: grid; gap: 8px; }
-        .cg-grid--2col { grid-template-columns: repeat(2, 1fr); }
         .cg-grid--3col { grid-template-columns: repeat(3, 1fr); }
         .cg-grid--4col { grid-template-columns: repeat(4, 1fr); }
         .cg-grid .cg-item { margin-bottom: 0; }
         /* aspect-ratio is set dynamically per photo via inline style (naturalWidth/naturalHeight)
            so no forced ratio here — photos render at their real orientation */
         @media (max-width: 768px) {
-          .cg-grid--2col { grid-template-columns: 1fr; }
           .cg-grid--3col { grid-template-columns: repeat(2, 1fr); }
           .cg-grid--4col { grid-template-columns: repeat(2, 1fr); }
         }
