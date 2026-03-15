@@ -27,10 +27,14 @@ const GRID_LAYOUTS = [
     key: '3col',
     label: '3 coloane',
     icon: (
+      /* 3-column masonry style */
       <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="1" y="1" width="9" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="13.5" y="1" width="9" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="26" y="1" width="9" height="26" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="1" y="1" width="9" height="13" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="1" y="16" width="9" height="11" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="13.5" y="1" width="9" height="8" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="13.5" y="11" width="9" height="16" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="26" y="1" width="9" height="17" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="26" y="20" width="9" height="7" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
       </svg>
     ),
   },
@@ -38,18 +42,24 @@ const GRID_LAYOUTS = [
     key: '4col',
     label: '4 coloane',
     icon: (
+      /* 4-column masonry style */
       <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="1" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="10" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="19.5" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="28.5" y="1" width="6.5" height="26" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="1" y="1" width="6.5" height="14" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="1" y="17" width="6.5" height="10" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="10" y="1" width="6.5" height="9" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="10" y="12" width="6.5" height="15" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="19.5" y="1" width="6.5" height="17" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="19.5" y="20" width="6.5" height="7" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="28.5" y="1" width="6.5" height="11" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="28.5" y="14" width="6.5" height="13" rx="1.5" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
       </svg>
     ),
   },
   {
     key: 'masonry',
-    label: 'Masonry',
+    label: 'Auto',
     icon: (
+      /* responsive masonry: 4→3→2→1 cols */
       <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1" y="1" width="9" height="11" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
         <rect x="1" y="15" width="9" height="12" rx="2" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="1.5"/>
