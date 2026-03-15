@@ -131,12 +131,20 @@ function LazyGalleryImage({
   allowOriginalDownloads = true,
   watermarkEnabled = false,
   watermarkLabel = 'Mina',
+  quality = 'thumb',
 }) {
-  const [url, setUrl] = useState(() => getCachedUrl(`thumb:${pozaKey}`) || null);
+  const [url, setUrl] = useState(() => getCachedUrl(`${quality}:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [thumbRetryCount, setThumbRetryCount] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
   const [naturalRatio, setNaturalRatio] = useState(null);
   const imgRef = useRef(null);
+
+  // Reset when quality changes (e.g. user switches grid mode while component stays mounted).
+  useEffect(() => {
+    setUrl(getCachedUrl(`${quality}:${pozaKey}`) || null);
+    setNaturalRatio(null);
+    setRetryCount(0);
+  }, [quality, pozaKey]);
 
   // Covers the case where the browser resolves the image synchronously from
   // cache before React attaches onLoad — in that case onLoad never fires.
@@ -151,31 +159,27 @@ function LazyGalleryImage({
     if (url) return;
     let cancelled = false;
 
-    const cachedThumb = getCachedUrl(`thumb:${pozaKey}`);
-    if (cachedThumb) {
-      setUrl(cachedThumb);
+    const cachedUrl = getCachedUrl(`${quality}:${pozaKey}`);
+    if (cachedUrl) {
+      setUrl(cachedUrl);
       return () => { cancelled = true; };
     }
 
-    const loadThumb = async () => {
+    const loadUrl = async () => {
       try {
-        const thumb = await mediaService.getPhotoUrl(pozaKey, 'thumb');
+        const loaded = await mediaService.getPhotoUrl(pozaKey, quality);
         if (cancelled) return;
-        cacheUrl(`thumb:${pozaKey}`, thumb);
-        setUrl(thumb);
-        setThumbRetryCount(0);
+        cacheUrl(`${quality}:${pozaKey}`, loaded);
+        setUrl(loaded);
+        setRetryCount(0);
       } catch (_) {
-        // Keep placeholder when thumb is unavailable. Grid should load thumbnails only.
+        // Keep placeholder when URL is unavailable.
       }
     };
 
-    loadThumb();
+    loadUrl();
     return () => { cancelled = true; };
-  }, [pozaKey, url]);
-
-  useEffect(() => {
-    setThumbRetryCount(0);
-  }, [pozaKey]);
+  }, [pozaKey, quality, url]);
 
   const handleImgLoad = useCallback((e) => {
     const { naturalWidth: w, naturalHeight: h } = e.target;
@@ -184,14 +188,14 @@ function LazyGalleryImage({
 
   const handleThumbError = useCallback(() => {
     if (!url) return;
-    if (thumbRetryCount >= 2) return;
-    const cacheKey = `thumb:${pozaKey}`;
-    if (getCachedUrl(cacheKey) === url) {
-      urlCache.delete(cacheKey);
+    if (retryCount >= 2) return;
+    const cKey = `${quality}:${pozaKey}`;
+    if (getCachedUrl(cKey) === url) {
+      urlCache.delete(cKey);
     }
-    setThumbRetryCount((prev) => prev + 1);
+    setRetryCount((prev) => prev + 1);
     setUrl(null);
-  }, [pozaKey, thumbRetryCount, url]);
+  }, [pozaKey, quality, retryCount, url]);
 
   const handleDownload = useCallback(async () => {
     if (isDownloading) return;
@@ -1318,6 +1322,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                     <LazyGalleryImage
                       key={poza.key}
                       pozaKey={poza.key}
+                      quality="medium"
                       isFav={galerie.favorite?.includes(poza.key)}
                       onFavoriteClick={handleFavoriteClick}
                       accentColor={profile.accentColor}
@@ -1342,6 +1347,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                     <LazyGalleryImage
                       key={poza.key}
                       pozaKey={poza.key}
+                      quality={gridLayout === '3col' ? 'medium' : 'thumb'}
                       isFav={galerie.favorite?.includes(poza.key)}
                       onFavoriteClick={handleFavoriteClick}
                       accentColor={profile.accentColor}
