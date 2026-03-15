@@ -136,6 +136,16 @@ function LazyGalleryImage({
   const [isDownloading, setIsDownloading] = useState(false);
   const [thumbRetryCount, setThumbRetryCount] = useState(0);
   const [naturalRatio, setNaturalRatio] = useState(null);
+  const imgRef = useRef(null);
+
+  // Covers the case where the browser resolves the image synchronously from
+  // cache before React attaches onLoad — in that case onLoad never fires.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setNaturalRatio(`${img.naturalWidth} / ${img.naturalHeight}`);
+    }
+  }, [url]);
 
   useEffect(() => {
     if (url) return;
@@ -200,6 +210,7 @@ function LazyGalleryImage({
       <div className="cg-item-inner">
         {url ? (
           <img
+            ref={imgRef}
             src={url}
             alt=""
             className="cg-item-img"
