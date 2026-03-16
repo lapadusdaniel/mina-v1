@@ -358,7 +358,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 20px;
-  padding: 20px 40px;
+  padding: 14px 40px;
   border-bottom: 1px solid var(--theme-border);
   flex-wrap: wrap;
   background: var(--theme-bg);
@@ -508,7 +508,7 @@
    CONTENT AREA
 ══════════════════════════════ */
 .dashboard-content {
-  padding: 36px 40px 72px;
+  padding: 10px 40px 60px;
   flex: 1;
 }
 
@@ -718,7 +718,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
   gap: 16px;
 }
 
