@@ -714,6 +714,49 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   }
 
 
+  const handleBatchDeletePoza = async (pozaKeys) => {
+    if (!pozaKeys || pozaKeys.length === 0) return
+    if (!window.confirm(`Ștergi ${pozaKeys.length} ${pozaKeys.length === 1 ? 'poză' : 'poze'} selectate?`)) return
+    for (const pozaKey of pozaKeys) {
+      try {
+        const removedPhoto = pozeGalerie.find((p) => p.key === pozaKey)
+        const idToken = await authService.getCurrentIdToken()
+        await mediaService.deletePhoto(pozaKey, idToken)
+
+        if (galerieActiva?.id) {
+          await galleriesService.deletePhotoMetadata(galerieActiva.id, pozaKey)
+          if (galleryFolders.some((folder) => folder.id === removedPhoto?.folderId)) {
+            await galleriesService.incrementFolderPhotoCount(galerieActiva.id, removedPhoto.folderId, -1).catch(() => {})
+          }
+        }
+
+        setPozeGalerie((prev) => prev.filter((p) => p.key !== pozaKey))
+
+        if (galerieActiva?.id) {
+          const nextCoverKey = galerieActiva?.coverKey === pozaKey
+            ? (pozeGalerie.filter((p) => p.key !== pozaKey)[0]?.key || '')
+            : (galerieActiva?.coverKey || '')
+          const currentPhotoCount = Number(galerieActiva?.poze ?? pozeGalerie.length ?? 0)
+          const currentBytes = Number(galerieActiva?.storageBytes || 0)
+          const removedBytes = Number(removedPhoto?.size || 0)
+          await galleriesService.updateGallery(galerieActiva.id, {
+            poze: Math.max(0, currentPhotoCount - 1),
+            storageBytes: Math.max(0, currentBytes - removedBytes),
+            coverKey: nextCoverKey,
+          })
+          if (removedBytes > 0) {
+            await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
+          }
+        }
+      } catch (error) {
+        console.error('Error deleting photo:', pozaKey, error)
+      }
+    }
+    if (galerieActiva?.id) {
+      await syncFolderCounts(galerieActiva.id, galleryFolders, pozeGalerie.filter((p) => !pozaKeys.includes(p.key)))
+    }
+  }
+
   const handleCreateFolder = async () => {
     if (!galerieActiva?.id) return
     const rawName = window.prompt('Nume folder nou:')
@@ -1161,6 +1204,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             onUploadPoze={handleUploadPoze}
             onCancelUpload={handleCancelUpload}
             onDeletePoza={handleDeletePoza}
+            onBatchDeletePoza={handleBatchDeletePoza}
             onDeleteGallery={handleMoveToTrash}
           />
         </div>

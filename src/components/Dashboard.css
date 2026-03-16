@@ -1781,6 +1781,102 @@
   background: rgba(192, 57, 43, 0.88);
 }
 
+/* ── Photo checkbox (multi-select) ── */
+.gallery-photo-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  padding: 0;
+}
+
+.dashboard-masonry-item:hover .gallery-photo-checkbox {
+  opacity: 1;
+}
+
+.gallery-photo-checkbox--checked {
+  opacity: 1 !important;
+  background: #1a1a1f;
+  border-color: #1a1a1f;
+}
+
+.dashboard-masonry-item.is-selected {
+  outline: 2.5px solid #1a1a1f;
+  outline-offset: -2.5px;
+}
+
+.dashboard-masonry-item.is-selected::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(26, 26, 31, 0.12);
+  pointer-events: none;
+}
+
+/* ── Selection toolbar ── */
+.gallery-selection-toolbar {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1f;
+  border-radius: 16px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 900;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
+  white-space: nowrap;
+}
+
+.gallery-selection-toolbar__count {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.gallery-selection-toolbar__btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.gallery-selection-toolbar__btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.gallery-selection-toolbar__btn--delete {
+  background: rgba(211, 47, 47, 0.85);
+}
+
+.gallery-selection-toolbar__btn--delete:hover {
+  background: rgba(211, 47, 47, 1);
+}
+
+.gallery-selection-toolbar__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ── Masonry grid ── */
 .masonry-grid {
   display: flex;

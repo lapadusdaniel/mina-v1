@@ -90,8 +90,9 @@ const uploadProgressOverlayCss = `
   }
 `
 
-function GalleryPhotoTile({ photo, onDeletePoza }) {
+function GalleryPhotoTile({ photo, onDeletePoza, isSelected, onToggleSelect, selectionMode }) {
   const [thumbUrl, setThumbUrl] = useState(photo?.url || null)
+  const longPressRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -125,15 +126,57 @@ function GalleryPhotoTile({ photo, onDeletePoza }) {
     }
   }, [photo?.key, photo?.url])
 
+  const handleMouseDown = () => {
+    longPressRef.current = setTimeout(() => {
+      longPressRef.current = null
+      onToggleSelect?.(photo.key)
+    }, 500)
+  }
+
+  const handleMouseUp = () => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+  }
+
+  const handleClick = (e) => {
+    if (selectionMode) {
+      e.preventDefault()
+      e.stopPropagation()
+      onToggleSelect?.(photo.key)
+    }
+  }
+
   return (
-    <div className="dashboard-masonry-item">
+    <div
+      className={`dashboard-masonry-item${isSelected ? ' is-selected' : ''}`}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onTouchStart={handleMouseDown}
+      onTouchEnd={handleMouseUp}
+      onClick={handleClick}
+    >
       {thumbUrl ? (
         <img src={thumbUrl} alt="Poză galerie" className="dashboard-masonry-img" loading="lazy" />
       ) : (
         <div className="dashboard-masonry-placeholder" />
       )}
       <button
-        onClick={() => onDeletePoza(photo.key)}
+        className={`gallery-photo-checkbox${isSelected ? ' gallery-photo-checkbox--checked' : ''}`}
+        onClick={(e) => { e.stopPropagation(); onToggleSelect?.(photo.key) }}
+        aria-label="Selectează poza"
+        tabIndex={-1}
+      >
+        {isSelected && (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); if (!selectionMode) onDeletePoza(photo.key) }}
         className="dashboard-delete-poza-btn"
       >
         ×
@@ -170,6 +213,7 @@ export default function GalleryDetailView({
   onUploadPoze,
   onCancelUpload,
   onDeletePoza,
+  onBatchDeletePoza,
   onDeleteGallery
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -177,7 +221,46 @@ export default function GalleryDetailView({
   const [editingFolderId, setEditingFolderId] = useState(null)
   const [editingFolderName, setEditingFolderName] = useState('')
   const [renamingFolderId, setRenamingFolderId] = useState(null)
+  const [selectedKeys, setSelectedKeys] = useState(new Set())
+  const [batchDeleting, setBatchDeleting] = useState(false)
   const skipBlurSaveRef = useRef(false)
+
+  const selectionMode = selectedKeys.size > 0
+
+  const toggleSelect = (key) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    setSelectedKeys(new Set(pozeGalerie.map((p) => p.key)))
+  }
+
+  const clearSelection = () => {
+    setSelectedKeys(new Set())
+  }
+
+  const handleBatchDelete = async () => {
+    if (batchDeleting || selectedKeys.size === 0) return
+    setBatchDeleting(true)
+    try {
+      await onBatchDeletePoza?.(Array.from(selectedKeys))
+      clearSelection()
+    } finally {
+      setBatchDeleting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectionMode) return
+    const handler = (e) => { if (e.key === 'Escape') clearSelection() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [selectionMode])
   const getEffectiveFolderId = (folderId) => String(folderId || '').trim() || DEFAULT_FOLDER_ID
 
   const masonryBreakpoints = {
@@ -514,15 +597,45 @@ export default function GalleryDetailView({
             </button>
           </div>
         ) : (
-          <Masonry
-            breakpointCols={masonryBreakpoints}
-            className="masonry-grid"
-            columnClassName="masonry-grid_column"
-          >
-            {pozeGalerie.map((poza) => (
-              <GalleryPhotoTile key={poza.key} photo={poza} onDeletePoza={onDeletePoza} />
-            ))}
-          </Masonry>
+          <>
+            <Masonry
+              breakpointCols={masonryBreakpoints}
+              className="masonry-grid"
+              columnClassName="masonry-grid_column"
+            >
+              {pozeGalerie.map((poza) => (
+                <GalleryPhotoTile
+                  key={poza.key}
+                  photo={poza}
+                  onDeletePoza={onDeletePoza}
+                  isSelected={selectedKeys.has(poza.key)}
+                  onToggleSelect={toggleSelect}
+                  selectionMode={selectionMode}
+                />
+              ))}
+            </Masonry>
+
+            {selectionMode && (
+              <div className="gallery-selection-toolbar">
+                <span className="gallery-selection-toolbar__count">
+                  {selectedKeys.size} {selectedKeys.size === 1 ? 'fotografie selectată' : 'fotografii selectate'}
+                </span>
+                <button className="gallery-selection-toolbar__btn" onClick={selectAll}>
+                  Selectează tot
+                </button>
+                <button className="gallery-selection-toolbar__btn" onClick={clearSelection}>
+                  Anulează selecția
+                </button>
+                <button
+                  className="gallery-selection-toolbar__btn gallery-selection-toolbar__btn--delete"
+                  onClick={handleBatchDelete}
+                  disabled={batchDeleting}
+                >
+                  {batchDeleting ? 'Se șterge...' : `Șterge ${selectedKeys.size} ${selectedKeys.size === 1 ? 'poză' : 'poze'}`}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
