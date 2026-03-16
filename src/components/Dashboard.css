@@ -44,7 +44,7 @@
   font-style: italic;
   font-weight: 400;
   font-size: 1.25rem;
-  color: var(--theme-text);
+  color: #1a1a1f;
   letter-spacing: 0.01em;
   margin: 0;
   padding: 0;
@@ -2917,7 +2917,7 @@
     align-items: stretch;
     padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0));
     border-right: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
     z-index: 1000;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
