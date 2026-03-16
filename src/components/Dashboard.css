@@ -1557,6 +1557,34 @@
   opacity: 0.85;
 }
 
+/* ── Add photos FAB ── */
+.dashboard-add-poze-fab {
+  position: fixed;
+  bottom: 32px;
+  right: 40px;
+  z-index: 800;
+  background: #1a1a1f;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  transition: opacity 0.15s, bottom 0.2s, box-shadow 0.15s;
+  font-family: inherit;
+}
+
+.dashboard-add-poze-fab:hover {
+  opacity: 0.88;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.24);
+}
+
+.dashboard-add-poze-fab--shifted {
+  bottom: 100px;
+}
+
 /* ── Folders ── */
 .dashboard-folders-section {
   display: flex;

@@ -58,6 +58,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [galerii, setGalerii] = useState([])
   const [loading, setLoading] = useState(true)
   const [galerieActiva, setGalerieActiva] = useState(null)
+  const [restoringGallery, setRestoringGallery] = useState(() => {
+    try { return !!localStorage.getItem(ACTIVE_GALLERY_STORAGE_KEY) } catch (_) { return false }
+  })
   const [pozeGalerie, setPozeGalerie] = useState([])
   const [loadingPoze, setLoadingPoze] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -322,6 +325,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     setPozeGalerie([])
     setGalleryFolders([])
     setActiveFolderId(DEFAULT_FOLDER_ID)
+    setRestoringGallery(false)
     persistActiveGalleryId(null)
   }, [persistActiveGalleryId])
 
@@ -411,18 +415,25 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     if (activeTab !== 'galerii') return
     if (galerieActiva?.id) return
     if (!galerii.length) return
-    if (suppressAutoReopenRef.current) return
+    if (suppressAutoReopenRef.current) {
+      setRestoringGallery(false)
+      return
+    }
 
     let savedGalleryId = null
     try {
       savedGalleryId = localStorage.getItem(ACTIVE_GALLERY_STORAGE_KEY)
     } catch (_) {
     }
-    if (!savedGalleryId) return
+    if (!savedGalleryId) {
+      setRestoringGallery(false)
+      return
+    }
 
     const target = galerii.find((g) => g.id === savedGalleryId && g.status === 'active')
     if (!target) {
       persistActiveGalleryId(null)
+      setRestoringGallery(false)
       return
     }
 
@@ -1175,6 +1186,17 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   )
 
   const renderMainContent = () => {
+    // Suppress gallery list flash while restoring last active gallery from localStorage
+    if (restoringGallery && !galerieActiva) {
+      return (
+        <div key="view-restoring" className="dashboard-view-animate">
+          <div className="dashboard-loading-state" style={{ paddingTop: 80 }}>
+            <p>Se încarcă galeria...</p>
+          </div>
+        </div>
+      )
+    }
+
     // Vizualizare poze într-o galerie specifică
     if (galerieActiva) {
       return (

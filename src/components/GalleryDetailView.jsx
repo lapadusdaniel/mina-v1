@@ -405,13 +405,6 @@ export default function GalleryDetailView({
             onChange={onUploadPoze}
             className="dashboard-file-input-hidden"
           />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="btn-primary dashboard-add-poze-btn"
-          >
-            {uploading ? `${uploadProgress}%` : '+ Adaugă poze'}
-          </button>
         </div>
       </div>
 
@@ -652,6 +645,16 @@ export default function GalleryDetailView({
         }}
         onClose={() => setSettingsOpen(false)}
       />
+
+      {!uploading && (
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className={`dashboard-add-poze-fab${selectionMode ? ' dashboard-add-poze-fab--shifted' : ''}`}
+        >
+          + Adaugă poze
+        </button>
+      )}
 
       {uploading && (
         <>
