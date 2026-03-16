@@ -70,6 +70,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [loadingFolders, setLoadingFolders] = useState(false)
   const [activeFolderId, setActiveFolderId] = useState(DEFAULT_FOLDER_ID)
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef(null)
 
   const { userPlan, storageLimit, checkAccess } = useUserSubscription(user?.uid)
 
@@ -81,6 +83,18 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       navigate(location.pathname, { replace: true })
     }
   }, [location.search, location.pathname, navigate])
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const handler = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [userMenuOpen])
 
   // Profile / Branding State
   const [profileData, setProfileData] = useState({
@@ -1082,13 +1096,37 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           </button>
         ))}
       </nav>
-      <div className="sidebar-user-area">
-        <div className="sidebar-avatar">{userInitial}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p className="sidebar-user-name">{user?.name || 'Fotograf'}</p>
-          <p className="sidebar-user-email">{user?.email}</p>
-        </div>
-        <button onClick={handleLogout} className="dashboard-logout-link">Ieșire</button>
+      <div className="sidebar-user-area" ref={userMenuRef}>
+        {userMenuOpen && (
+          <div className="sidebar-user-menu">
+            <button
+              className="sidebar-user-menu-item"
+              onClick={() => { setUserMenuOpen(false); navigate('/settings') }}
+            >
+              Profil
+            </button>
+            <button
+              className="sidebar-user-menu-item sidebar-user-menu-item--danger"
+              onClick={() => { setUserMenuOpen(false); handleLogout() }}
+            >
+              Ieșire
+            </button>
+          </div>
+        )}
+        <button
+          className="sidebar-user-trigger"
+          onClick={() => setUserMenuOpen((v) => !v)}
+          aria-expanded={userMenuOpen}
+        >
+          <div className="sidebar-avatar">{userInitial}</div>
+          <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+            <p className="sidebar-user-name">{user?.name || 'Fotograf'}</p>
+            <p className="sidebar-user-email">{user?.email}</p>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.4 }}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
       </div>
     </div>
   )

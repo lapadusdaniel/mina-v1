@@ -60,18 +60,70 @@
 
 /* User area — bottom of sidebar */
 .sidebar-user-area {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 20px;
+  position: relative;
+  padding: 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
   margin-top: auto;
 }
 
-.sidebar-user-area .dashboard-logout-link {
-  margin-left: auto;
-  flex-shrink: 0;
+.sidebar-user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: inherit;
+}
+
+.sidebar-user-trigger:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Dropdown popup */
+.sidebar-user-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 12px;
+  right: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.sidebar-user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 11px 16px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: #1a1a1f;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.sidebar-user-menu-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.sidebar-user-menu-item--danger {
+  color: #c0392b;
+}
+
+.sidebar-user-menu-item--danger:hover {
+  background: rgba(192, 57, 43, 0.06);
 }
 
 .sidebar-avatar-row {
