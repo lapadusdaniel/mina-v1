@@ -97,23 +97,12 @@ function useIsMobile(breakpoint = 768) {
 async function downloadOriginalImage(pozaKey, filename) {
   const blob = await mediaService.getPhotoBlob(pozaKey, 'original');
   const safeName = filename || pozaKey.split('/').pop() || 'image';
-  const file = new File([blob], safeName.includes('.') ? safeName : `${safeName}.jpg`, { type: blob.type || 'image/jpeg' });
-
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: safeName });
-      return;
-    } catch (e) {
-      if (e.name === 'AbortError') return;
-      console.warn('Share failed, falling back to download:', e);
-    }
-  }
 
   const blobUrl = URL.createObjectURL(blob);
   try {
     const link = document.createElement('a');
     link.href = blobUrl;
-    link.download = safeName;
+    link.download = safeName.includes('.') ? safeName : `${safeName}.jpg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
