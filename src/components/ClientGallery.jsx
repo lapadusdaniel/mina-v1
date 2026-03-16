@@ -1220,6 +1220,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           {/* Title */}
           <div className="cg-cover-center">
             <h1 className="cg-cover-title">{galerie.nume}</h1>
+            {(galerie.dataEveniment || galerie.data) && (() => {
+              const raw = galerie.dataEveniment || galerie.data;
+              const d = raw?.toDate ? raw.toDate() : new Date(raw);
+              if (isNaN(d.getTime())) return null;
+              const formatted = d.toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
+              return <p className="cg-cover-meta" style={{ color: '#fff', marginTop: '10px' }}>{formatted}</p>;
+            })()}
             <button onClick={handleEnterGallery} className="cg-cover-btn">
               Deschide galeria
               <ChevronDown size={16} strokeWidth={1.5} />
