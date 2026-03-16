@@ -375,6 +375,21 @@ export default function GalleryDetailView({
             <h2 className="dashboard-gallery-title">{galerie.nume}</h2>
             <p className="dashboard-gallery-subtitle">{subtitle}</p>
           </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={onUploadPoze}
+            className="dashboard-file-input-hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="btn-primary dashboard-add-poze-btn"
+          >
+            {uploading ? `${uploadProgress}%` : '+ Adaugă poze'}
+          </button>
         </div>
         <div className="dashboard-header-actions">
           <button
@@ -397,14 +412,6 @@ export default function GalleryDetailView({
           >
             Preview Client
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={onUploadPoze}
-            className="dashboard-file-input-hidden"
-          />
         </div>
       </div>
 
@@ -645,16 +652,6 @@ export default function GalleryDetailView({
         }}
         onClose={() => setSettingsOpen(false)}
       />
-
-      {!uploading && (
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className={`dashboard-add-poze-fab${selectionMode ? ' dashboard-add-poze-fab--shifted' : ''}`}
-        >
-          + Adaugă poze
-        </button>
-      )}
 
       {uploading && (
         <>
