@@ -1142,12 +1142,19 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           const totalBytes = galerii.reduce((sum, g) => sum + Math.max(0, Number(g?.storageBytes || 0)), 0)
           const usedGB = (totalBytes / (1024 ** 3)).toFixed(1)
           const limitGB = storageLimit ?? 15
-          const totalVizualizari = galeriiActive.reduce((sum, g) => sum + Math.max(0, Number(g?.vizualizari || 0)), 0)
           const totalPhotos = galeriiActive.reduce((sum, g) => sum + Math.max(0, Number(g?.poze || 0)), 0)
           const storagePercent = Math.min(100, (parseFloat(usedGB) / limitGB) * 100)
           const RING_R = 28
           const RING_C = parseFloat((2 * Math.PI * RING_R).toFixed(2))
           const ringOffset = parseFloat((RING_C * (1 - storagePercent / 100)).toFixed(2))
+          const now = new Date()
+          const isThisMonth = (g) => {
+            const d = g.createdAt?.toDate?.() || (g.data ? new Date(g.data) : null)
+            return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+          }
+          const galeriiLunaAceasta = galeriiActive.filter(isThisMonth)
+          const vizualizariLuna = galeriiLunaAceasta.reduce((sum, g) => sum + Math.max(0, Number(g?.vizualizari || 0)), 0)
+          const descarcariLuna = galeriiLunaAceasta.reduce((sum, g) => sum + Math.max(0, Number(g?.descarcari || 0)), 0)
           return (
             <div className="dash-overview-cards">
               <div className="dash-overview-card dash-overview-card--orange">
@@ -1174,11 +1181,19 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
                 <div className="dash-overview-card__value">{usedGB} <span className="dash-overview-card__unit">GB</span></div>
                 <div className="dash-overview-card__sub">din {limitGB} GB disponibili</div>
               </div>
-              <div className="dash-overview-card dash-overview-card--cyan">
-                <div className="dash-overview-card__circle" />
-                <div className="dash-overview-card__label">Vizualizări totale</div>
-                <div className="dash-overview-card__value">{totalVizualizari.toLocaleString('ro-RO')}</div>
-                <div className="dash-overview-card__sub">sesiuni unice</div>
+              <div className="dash-overview-cards__stack">
+                <div className="dash-overview-card dash-overview-card--cyan dash-overview-card--sm">
+                  <div className="dash-overview-card__circle" />
+                  <div className="dash-overview-card__label">Vizualizări luna aceasta</div>
+                  <div className="dash-overview-card__value">{vizualizariLuna.toLocaleString('ro-RO')}</div>
+                  <div className="dash-overview-card__sub">sesiuni unice</div>
+                </div>
+                <div className="dash-overview-card dash-overview-card--green dash-overview-card--sm">
+                  <div className="dash-overview-card__circle" />
+                  <div className="dash-overview-card__label">Descărcări luna aceasta</div>
+                  <div className="dash-overview-card__value">{descarcariLuna.toLocaleString('ro-RO')}</div>
+                  <div className="dash-overview-card__sub">fișiere descărcate</div>
+                </div>
               </div>
             </div>
           )

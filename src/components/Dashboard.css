@@ -2900,6 +2900,33 @@
   background: linear-gradient(135deg, #00BCD4, #26C6DA);
 }
 
+.dash-overview-card--green {
+  background: linear-gradient(135deg, #43A047, #66BB6A);
+}
+
+.dash-overview-cards__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-overview-cards__stack .dash-overview-card {
+  flex: 1;
+}
+
+.dash-overview-card--sm {
+  padding: 16px 16px 14px;
+}
+
+.dash-overview-card--sm .dash-overview-card__label {
+  margin-bottom: 6px;
+}
+
+.dash-overview-card--sm .dash-overview-card__value {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
 .dash-overview-card__circle {
   position: absolute;
   bottom: -24px;
@@ -2985,8 +3012,9 @@
     grid-template-columns: repeat(2, 1fr);
     padding: 16px 16px 0;
   }
-  .dash-overview-card--cyan {
+  .dash-overview-cards__stack {
     grid-column: 1 / -1;
+    flex-direction: row;
   }
 }
 
@@ -2994,8 +3022,9 @@
   .dash-overview-cards {
     grid-template-columns: 1fr;
   }
-  .dash-overview-card--cyan {
+  .dash-overview-cards__stack {
     grid-column: auto;
+    flex-direction: column;
   }
 }
 
