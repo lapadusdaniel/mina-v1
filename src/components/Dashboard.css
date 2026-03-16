@@ -663,10 +663,10 @@
 
 .dashboard-section-title {
   font-family: 'DM Sans', sans-serif;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 300;
   color: #1a1a1f;
-  letter-spacing: -0.015em;
+  letter-spacing: 0.02em;
   margin: 0;
 }
 
@@ -715,18 +715,21 @@
   align-items: center;
   gap: 0 24px;
   padding: 16px 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  margin-bottom: 8px;
   font-family: 'DM Sans', sans-serif;
-  transition: background 0.1s;
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .gallery-row:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .gallery-row:hover {
-  background: color-mix(in srgb, var(--theme-text) 1.2%, transparent);
-  border-radius: 8px;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .gallery-row-col {
@@ -850,6 +853,39 @@
   color: #a1a1a6;
   flex-shrink: 0;
 }
+
+/* ── Stat colour pills ── */
+[data-label="Vizualizări"] .gallery-stat {
+  background: rgba(0, 188, 212, 0.08);
+  color: #00838f;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+[data-label="Vizualizări"] .gallery-stat svg { color: #00838f; }
+
+[data-label="Descărcări"] .gallery-stat {
+  background: rgba(124, 77, 255, 0.08);
+  color: #5e35b1;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+[data-label="Descărcări"] .gallery-stat svg { color: #5e35b1; }
+
+.gallery-activity-item:first-child {
+  background: rgba(255, 107, 53, 0.08);
+  color: #e64a19;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+.gallery-activity-item:first-child .gallery-activity-icon { color: #e64a19; }
+
+.gallery-activity-item:last-child {
+  background: rgba(233, 30, 99, 0.08);
+  color: #c2185b;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+.gallery-activity-item:last-child .gallery-activity-icon { color: #c2185b; }
 
 .gallery-stat-label {
   font-size: 11.5px;
