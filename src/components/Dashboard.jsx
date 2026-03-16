@@ -1061,25 +1061,35 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 }}>MINA</span>
         </h1>
       </div>
-      {SIDEBAR_TABS.map(({ key, label, icon: Icon }) => (
-        <button
-          key={key}
-          type="button"
-          className={`dashboard-sidebar-btn ${activeTab === key ? 'active' : ''}`}
-          onClick={() => runUiTransition(() => {
-            closeActiveGallery()
-            if (key === 'setari') navigate('/settings')
-            else {
-              if (location.pathname === '/settings') navigate(`/dashboard?tab=${key}`)
-              else setSearchParams({ tab: key })
-            }
-          })}
-        >
-          <span className="dashboard-sidebar-btn-indicator" />
-          {Icon && <Icon size={18} className="dashboard-sidebar-btn-icon" />}
-          {label}
-        </button>
-      ))}
+      <nav className="sidebar-nav">
+        {SIDEBAR_TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            type="button"
+            className={`dashboard-sidebar-btn ${activeTab === key ? 'active' : ''}`}
+            onClick={() => runUiTransition(() => {
+              closeActiveGallery()
+              if (key === 'setari') navigate('/settings')
+              else {
+                if (location.pathname === '/settings') navigate(`/dashboard?tab=${key}`)
+                else setSearchParams({ tab: key })
+              }
+            })}
+          >
+            <span className="dashboard-sidebar-btn-indicator" />
+            {Icon && <Icon size={18} className="dashboard-sidebar-btn-icon" />}
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="sidebar-user-area">
+        <div className="sidebar-avatar">{userInitial}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p className="sidebar-user-name">{user?.name || 'Fotograf'}</p>
+          <p className="sidebar-user-email">{user?.email}</p>
+        </div>
+        <button onClick={handleLogout} className="dashboard-logout-link">Ieșire</button>
+      </div>
     </div>
   )
 
@@ -1123,19 +1133,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
     return (
       <div key={`view-${activeTab}`} className="dashboard-view-animate">
-        <header className="dashboard-topbar">
-          <div className="dashboard-topbar-right">
-            <div className="dashboard-avatar-wrap" title={user?.email}>
-              <div className="dashboard-avatar">{userInitial}</div>
-              <div className="dashboard-profile">
-                <span className="dashboard-profile-name">{user?.name || 'Fotograf'}</span>
-                <span className="dashboard-profile-email">{user?.email}</span>
-              </div>
-            </div>
-            <button onClick={handleLogout} className="dashboard-logout-link">Ieșire</button>
-          </div>
-        </header>
-
         {/* Stat cards — vizibile doar pe tab Galerii */}
         {activeTab === 'galerii' && (() => {
           const galeriiActive = galerii.filter(g => g.status !== 'trash' && g.status !== 'archived')
