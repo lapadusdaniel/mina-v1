@@ -300,8 +300,7 @@ export default function GalleryDetailView({
             className="dashboard-settings-btn"
             title="Setări galerie"
           >
-            <Settings size={18} />
-            <span>Setări</span>
+            <Settings size={16} />
           </button>
           <button
             onClick={() => {
@@ -388,13 +387,15 @@ export default function GalleryDetailView({
                   background: 'transparent',
                   color: '#86868b',
                   padding: 4,
+                  width: 20,
+                  height: 20,
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
                 }}
               >
-                <Pencil size={14} />
+                <Pencil size={12} />
               </button>
             </div>
           )}
@@ -454,13 +455,15 @@ export default function GalleryDetailView({
                   background: 'transparent',
                   color: '#86868b',
                   padding: 4,
+                  width: 20,
+                  height: 20,
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
                 }}
               >
-                <Pencil size={14} />
+                <Pencil size={12} />
               </button>
             </div>
           ))}
@@ -480,7 +483,7 @@ export default function GalleryDetailView({
             <span>Folder nou</span>
           </button>
 
-          {hasExplicitFolders && activeFolderId !== DEFAULT_FOLDER_ID && (
+          {hasExplicitFolders && (
             <button
               type="button"
               className="dashboard-folder-delete-btn"
