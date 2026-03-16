@@ -2871,6 +2871,77 @@
 }
 
 /* ══════════════════════════════
+   OVERVIEW STAT CARDS
+══════════════════════════════ */
+.dash-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 24px 32px 0;
+}
+
+.dash-overview-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 20px 20px 18px;
+  color: #ffffff;
+}
+
+.dash-overview-card--orange {
+  background: linear-gradient(135deg, #FF6B35, #FF8C5A);
+}
+
+.dash-overview-card--purple {
+  background: linear-gradient(135deg, #7C4DFF, #9E7BFF);
+}
+
+.dash-overview-card--cyan {
+  background: linear-gradient(135deg, #00BCD4, #26C6DA);
+}
+
+.dash-overview-card__circle {
+  position: absolute;
+  bottom: -24px;
+  right: -24px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.10);
+  pointer-events: none;
+}
+
+.dash-overview-card__label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-bottom: 10px;
+}
+
+.dash-overview-card__value {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.dash-overview-card__unit {
+  font-size: 20px;
+  opacity: 0.8;
+}
+
+.dash-overview-card__sub {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* ══════════════════════════════
    RESPONSIVE
 ══════════════════════════════ */
 @media (max-width: 1200px) {
@@ -2900,6 +2971,25 @@
   .gallery-row-col-stat { grid-row: 2; }
   .gallery-row-col-activitate { grid-row: 2; }
   .gallery-row-col-date { grid-row: 3; }
+}
+
+@media (max-width: 900px) {
+  .dash-overview-cards {
+    grid-template-columns: repeat(2, 1fr);
+    padding: 16px 16px 0;
+  }
+  .dash-overview-card--cyan {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-overview-cards {
+    grid-template-columns: 1fr;
+  }
+  .dash-overview-card--cyan {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 768px) {

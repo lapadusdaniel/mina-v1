@@ -5,6 +5,7 @@ import 'yet-another-react-lightbox/styles.css';
 import { Zoom, Thumbnails } from 'yet-another-react-lightbox/plugins';
 import 'yet-another-react-lightbox/plugins/thumbnails.css';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
+import { increment } from 'firebase/firestore';
 import Masonry from 'react-masonry-css';
 import { ChevronDown, ChevronUp, Share2, Download, Heart, Instagram, MessageCircle, Loader2 } from 'lucide-react';
 
@@ -631,6 +632,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           favorite: Array.isArray(dateGal?.favorite) ? dateGal.favorite : [],
         };
         setGalerie(normalizedGallery);
+
+        // Increment view counter once per session per gallery
+        const viewKey = `mina_viewed_${normalizedGallery.id}`;
+        if (!sessionStorage.getItem(viewKey)) {
+          sessionStorage.setItem(viewKey, '1');
+          galleriesService.updateGallery(normalizedGallery.id, { vizualizari: increment(1) }).catch(() => {});
+        }
 
         if (normalizedGallery.status === 'archived') {
           setPoze([]);

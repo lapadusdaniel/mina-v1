@@ -1136,6 +1136,37 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           </div>
         </header>
 
+        {/* Stat cards — vizibile doar pe tab Galerii */}
+        {activeTab === 'galerii' && (() => {
+          const galeriiActive = galerii.filter(g => g.status !== 'trash' && g.status !== 'archived')
+          const totalBytes = galerii.reduce((sum, g) => sum + Math.max(0, Number(g?.storageBytes || 0)), 0)
+          const usedGB = (totalBytes / (1024 ** 3)).toFixed(1)
+          const limitGB = storageLimit ?? 15
+          const totalVizualizari = galeriiActive.reduce((sum, g) => sum + Math.max(0, Number(g?.vizualizari || 0)), 0)
+          return (
+            <div className="dash-overview-cards">
+              <div className="dash-overview-card dash-overview-card--orange">
+                <div className="dash-overview-card__circle" />
+                <div className="dash-overview-card__label">Galerii active</div>
+                <div className="dash-overview-card__value">{galeriiActive.length}</div>
+                <div className="dash-overview-card__sub">galerii publicate</div>
+              </div>
+              <div className="dash-overview-card dash-overview-card--purple">
+                <div className="dash-overview-card__circle" />
+                <div className="dash-overview-card__label">Storage folosit</div>
+                <div className="dash-overview-card__value">{usedGB} <span className="dash-overview-card__unit">GB</span></div>
+                <div className="dash-overview-card__sub">din {limitGB} GB disponibili</div>
+              </div>
+              <div className="dash-overview-card dash-overview-card--cyan">
+                <div className="dash-overview-card__circle" />
+                <div className="dash-overview-card__label">Vizualizări totale</div>
+                <div className="dash-overview-card__value">{totalVizualizari.toLocaleString('ro-RO')}</div>
+                <div className="dash-overview-card__sub">sesiuni unice</div>
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Tab-uri Galerii / Coș */}
         {(activeTab === 'galerii' || activeTab === 'trash') && (
           <AdminGalleryTable
