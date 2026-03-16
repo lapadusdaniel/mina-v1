@@ -717,52 +717,6 @@ export default function AdminGalleryTable({
             </select>
           )}
         </div>
-        <div className="dashboard-controlbar-right">
-          <div
-            className="dashboard-storage-wrap"
-            style={{ position: 'relative' }}
-            onMouseEnter={() => setStorageDetailsOpen(true)}
-            onMouseLeave={() => setStorageDetailsOpen(false)}
-          >
-            <span className="dashboard-storage-text">{storageUsedGB} GB din {planLimitGB} GB</span>
-            <div className="dashboard-storage-bar">
-              <div className="dashboard-storage-fill" style={{ width: `${storagePercent}%` }} />
-            </div>
-            {storageDetailsOpen && (
-              <div
-                role="tooltip"
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 10px)',
-                  right: 0,
-                  minWidth: 180,
-                  padding: '12px 14px',
-                  borderRadius: 12,
-                  background: '#fff',
-                  boxShadow: '0 12px 30px rgba(0, 0, 0, 0.12)',
-                  border: '1px solid rgba(29, 29, 31, 0.08)',
-                  zIndex: 20,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 13, color: '#1d1d1f' }}>
-                  <span>Active</span>
-                  <strong>{storageBreakdown.activeGb} GB</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 8, fontSize: 13, color: '#1d1d1f' }}>
-                  <span>Arhivate</span>
-                  <strong>{storageBreakdown.archivedGb} GB</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 8, fontSize: 13, color: '#1d1d1f' }}>
-                  <span>Coș</span>
-                  <strong>{storageBreakdown.trashGb} GB</strong>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="dashboard-mini-stats">
-            {statsGalerii.length} Galerii • {totalPoze} Poze • Plan: {planName}
-          </div>
-        </div>
       </div>
 
       <div className="dashboard-content">

@@ -1143,16 +1143,33 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           const usedGB = (totalBytes / (1024 ** 3)).toFixed(1)
           const limitGB = storageLimit ?? 15
           const totalVizualizari = galeriiActive.reduce((sum, g) => sum + Math.max(0, Number(g?.vizualizari || 0)), 0)
+          const totalPhotos = galeriiActive.reduce((sum, g) => sum + Math.max(0, Number(g?.poze || 0)), 0)
+          const storagePercent = Math.min(100, (parseFloat(usedGB) / limitGB) * 100)
+          const RING_R = 28
+          const RING_C = parseFloat((2 * Math.PI * RING_R).toFixed(2))
+          const ringOffset = parseFloat((RING_C * (1 - storagePercent / 100)).toFixed(2))
           return (
             <div className="dash-overview-cards">
               <div className="dash-overview-card dash-overview-card--orange">
                 <div className="dash-overview-card__circle" />
                 <div className="dash-overview-card__label">Galerii active</div>
                 <div className="dash-overview-card__value">{galeriiActive.length}</div>
-                <div className="dash-overview-card__sub">galerii publicate</div>
+                <div className="dash-overview-card__sub">{totalPhotos} poze în total</div>
               </div>
               <div className="dash-overview-card dash-overview-card--purple">
-                <div className="dash-overview-card__circle" />
+                <svg className="dash-overview-card__ring" viewBox="0 0 72 72" width="72" height="72">
+                  <circle cx="36" cy="36" r={RING_R} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="4" />
+                  <circle
+                    cx="36" cy="36" r={RING_R}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeDasharray={RING_C}
+                    strokeDashoffset={ringOffset}
+                    transform="rotate(-90 36 36)"
+                  />
+                </svg>
                 <div className="dash-overview-card__label">Storage folosit</div>
                 <div className="dash-overview-card__value">{usedGB} <span className="dash-overview-card__unit">GB</span></div>
                 <div className="dash-overview-card__sub">din {limitGB} GB disponibili</div>

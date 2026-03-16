@@ -2911,6 +2911,13 @@
   pointer-events: none;
 }
 
+.dash-overview-card__ring {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  pointer-events: none;
+}
+
 .dash-overview-card__label {
   font-family: 'DM Sans', sans-serif;
   font-size: 10px;
