@@ -8,7 +8,7 @@
 .dashboard-layout {
   display: flex;
   min-height: 100vh;
-  background: var(--theme-bg-2);
+  background: #f4f5f8;
   font-family: var(--theme-font-body);
   -webkit-font-smoothing: antialiased;
 }
@@ -23,11 +23,12 @@
   position: sticky;
   top: 0;
   align-self: flex-start;
-  background: var(--theme-sidebar-bg);
+  background: #ffffff;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border-right: 1px solid var(--theme-border);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
   overflow: hidden;
 }
 
@@ -100,7 +101,7 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.32);
+  color: #a0a0a7;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -126,22 +127,23 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 13.5px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.45);
+  color: #6e6e73;
   cursor: pointer;
   text-align: left;
-  border-radius: 9px;
+  border-radius: 8px;
   transition: background 0.15s, color 0.15s;
   letter-spacing: 0.005em;
 }
 
 .dashboard-sidebar-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.04);
+  color: #1a1a1f;
 }
 
 .dashboard-sidebar-btn.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: #1d1d1f;
   color: #ffffff;
+  font-weight: 500;
 }
 
 .dashboard-sidebar-btn-indicator {
@@ -154,13 +156,13 @@
 }
 
 .dashboard-sidebar-btn.active .dashboard-sidebar-btn-indicator {
-  background: var(--theme-accent);
+  background: #ffffff;
 }
 
 /* Sidebar footer */
 .sidebar-footer {
   padding: 14px 22px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
 }
 
@@ -191,7 +193,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--theme-bg);
+  background: #f4f5f8;
 }
 
 .dashboard-main-content {
@@ -510,9 +512,10 @@
 
 .launch-check-card {
   background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
   padding: 18px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
 }
 
 .launch-check-card h3 {
@@ -1365,7 +1368,7 @@
 ══════════════════════════════ */
 .dashboard-root {
   min-height: 100vh;
-  background: #f5f5f7;
+  background: #f4f5f8;
 }
 
 .dashboard-gallery-header {
@@ -1945,9 +1948,10 @@
 
 .gallery-config-card {
   background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
   padding: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
 }
 
 .gallery-config-label {
@@ -2504,8 +2508,9 @@
 .brand-card-editor {
   background: var(--theme-bg-card);
   padding: 36px;
-  border-radius: 20px;
-  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
 }
 
 .brand-card-title {
