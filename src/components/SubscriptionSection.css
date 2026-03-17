@@ -12,17 +12,13 @@
   }
   
   .sub-display-title {
-    font-family: 'DM Serif Display', serif;
-    font-size: 2.2rem;
-    font-style: italic;
-    color: #1d1d1f;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.75rem;
+    font-style: normal;
+    font-weight: 300;
+    color: #1a1a1f;
     line-height: 1.1;
     margin: 0;
-  }
-  
-  .sub-display-title em {
-    color: #b8965a;
-    font-style: italic;
   }
   
   .sub-display-sub {
@@ -92,8 +88,8 @@
   }
 
   .sub-plan-badge-current {
-    background: #1d1d1f !important;
-    color: #fff !important;
+    background: #f0f0f0 !important;
+    color: #1a1a1f !important;
   }
 
   .is-current-plan {
@@ -102,7 +98,7 @@
   }
 
   .pro-featured.is-current-plan {
-    box-shadow: 0 10px 30px rgba(0,0,0,0.15), 0 0 0 2px #b8965a;
+    box-shadow: 0 0 0 2px rgba(29,29,31,0.2);
   }
 
   .sub-pricing-grid {
@@ -124,21 +120,22 @@
   
   .sub-plan-card {
     background: #ffffff;
-    border: 1px solid #e8e8ed;
-    border-radius: 20px;
-    padding: 30px 24px; /* Padding redus pentru a scădea înălțimea */
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    padding: 30px 24px;
     display: flex;
     flex-direction: column;
     position: relative;
     transition: all 0.3s ease;
   }
-  
+
   .pro-featured {
-    background: #1d1d1f;
-    color: #ffffff;
-    border-color: #b8965a;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-    transform: translateY(-5px);
+    background: #ffffff;
+    color: #1a1a1f;
+    border: 2px solid #1a1a1f;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transform: none;
   }
   
   .sub-plan-badge {
@@ -161,9 +158,9 @@
   }
   
   .sub-plan-price {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'DM Serif Display', Georgia, serif;
     font-size: 2.2rem;
-    font-weight: 500;
+    font-weight: 300;
     margin-bottom: 20px;
   }
   
@@ -199,7 +196,7 @@
   .sub-plan-btn {
     width: 100%;
     padding: 12px;
-    border-radius: 100px;
+    border-radius: 10px;
     font-family: 'DM Sans', sans-serif;
     font-size: 0.85rem;
     font-weight: 600;
@@ -207,16 +204,30 @@
     transition: all 0.2s ease;
     border: 1px solid transparent;
   }
-  
+
   .btn-outline {
-    background: transparent;
-    border: 1px solid #d2d2d7;
-    color: #1d1d1f;
+    background: #1a1a1f;
+    border: 1px solid #1a1a1f;
+    color: #ffffff;
   }
-  
+
+  .btn-outline:hover:not(:disabled) {
+    background: #2d2d35;
+  }
+
   .btn-gold-filled {
-    background: #b8965a;
-    color: #000;
+    background: #1a1a1f;
+    color: #ffffff;
+    border-color: #1a1a1f;
+  }
+
+  .btn-gold-filled:hover:not(:disabled) {
+    background: #2d2d35;
+  }
+
+  .sub-plan-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .sub-addon-card {
@@ -236,8 +247,8 @@
   }
 
   .pro-featured .sub-addon-card {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: #fafafc;
+    border-color: rgba(0,0,0,0.08);
   }
 
   .sub-addon-head {
@@ -301,8 +312,8 @@
   }
 
   .pro-featured .sub-addon-btn-outline {
-    color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.35);
+    color: #1d1d1f;
+    border-color: #d2d2d7;
   }
 
   .sub-billing-grid {

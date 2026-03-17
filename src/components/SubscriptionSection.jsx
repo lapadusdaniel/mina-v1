@@ -295,7 +295,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
       {showPlans && (
         <>
           <div className="sub-header">
-            <h2 className="sub-display-title">Alege planul potrivit <em>viziunii tale.</em></h2>
+            <h2 className="sub-display-title">Alege planul potrivit viziunii tale.</h2>
             <p className="sub-display-sub">Scalabilitate maximă pentru portofoliul tău profesional.</p>
 
             <div className="sub-billing-toggle">
