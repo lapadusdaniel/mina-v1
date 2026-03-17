@@ -370,9 +370,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                   </ul>
 
                   {isFreePlan ? (
-                    <p className="sub-free-label">
-                      {isCurrent ? 'Plan activ' : 'Disponibil după anulare'}
-                    </p>
+                    isCurrent && <p className="sub-free-label">Plan activ</p>
                   ) : (
                     <button
                       className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
@@ -381,12 +379,6 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                     >
                       {loadingPlan === checkoutId ? 'Se încarcă...' : isCurrent ? 'Planul tău' : plan.cta}
                     </button>
-                  )}
-
-                  {!isCurrent && isFreePlan && (
-                    <p className="sub-muted" style={{ marginTop: 8 }}>
-                      Anulezi întâi abonamentul curent la final de perioadă.
-                    </p>
                   )}
 
                   {plan.id === 'studio' && (
