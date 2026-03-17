@@ -295,7 +295,9 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
       {showPlans && (
         <>
           <div className="sub-header">
-            <h2 className="sub-display-title">Alege planul potrivit viziunii tale.</h2>
+            <h2 className="sub-display-title">
+              Alege planul potrivit <span className="sub-display-title-accent">viziunii tale</span>.
+            </h2>
             <p className="sub-display-sub">Scalabilitate maximă pentru portofoliul tău profesional.</p>
 
             <div className="sub-billing-toggle">
@@ -322,19 +324,13 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
               const isFreePlan = plan.id === 'free'
               const checkoutId = price.planId
               const isDisabled = isCurrent || Boolean(loadingPlan) || isFreePlan
-              const label = loadingPlan === checkoutId
-                ? 'Se încarcă...'
-                : isCurrent
-                  ? 'Planul tău'
-                  : isFreePlan
-                    ? 'Disponibil după anulare'
-                    : plan.cta
 
               return (
                 <div
                   key={plan.id}
                   className={[
                     'sub-plan-card',
+                    `sub-plan-card--${plan.id}`,
                     plan.highlight ? 'pro-featured' : '',
                     isCurrent ? 'is-current-plan' : '',
                   ].filter(Boolean).join(' ')}
