@@ -1,5 +1,5 @@
 .sub-wrapper {
-    padding: 0 10px;
+    padding: 0 10px 40px;
     width: 100%;
     max-width: 1200px;
     margin: 0;
@@ -55,9 +55,9 @@
   }
 
   .sub-billing-opt-active {
-    background: #ffffff;
-    color: #1d1d1f;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    background: #1a1a1f;
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   }
 
   .sub-billing-save {
@@ -115,7 +115,7 @@
   }
 
   .sub-pricing-grid-5 .sub-plan-card {
-    padding: 24px 18px;
+    padding: 32px 28px;
   }
   
   .sub-plan-card {
@@ -134,7 +134,7 @@
     background: #ffffff;
     color: #1a1a1f;
     border: 2px solid #1a1a1f;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
     transform: none;
   }
   
@@ -159,9 +159,10 @@
   
   .sub-plan-price {
     font-family: 'DM Serif Display', Georgia, serif;
-    font-size: 2.2rem;
+    font-size: 3rem;
     font-weight: 300;
     margin-bottom: 20px;
+    line-height: 1;
   }
   
   .sub-period {
@@ -193,6 +194,15 @@
     flex-shrink: 0;
   }
   
+  .sub-free-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    color: #a0a0a7;
+    text-align: center;
+    padding: 12px 0;
+    margin: 0;
+  }
+
   .sub-plan-btn {
     width: 100%;
     padding: 12px;

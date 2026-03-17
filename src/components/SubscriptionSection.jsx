@@ -369,13 +369,19 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                     ))}
                   </ul>
 
-                  <button
-                    className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
-                    onClick={() => checkoutId && handleCheckout(checkoutId)}
-                    disabled={isDisabled}
-                  >
-                    {label}
-                  </button>
+                  {isFreePlan ? (
+                    <p className="sub-free-label">
+                      {isCurrent ? 'Plan activ' : 'Disponibil după anulare'}
+                    </p>
+                  ) : (
+                    <button
+                      className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
+                      onClick={() => checkoutId && handleCheckout(checkoutId)}
+                      disabled={isDisabled}
+                    >
+                      {loadingPlan === checkoutId ? 'Se încarcă...' : isCurrent ? 'Planul tău' : plan.cta}
+                    </button>
+                  )}
 
                   {!isCurrent && isFreePlan && (
                     <p className="sub-muted" style={{ marginTop: 8 }}>
