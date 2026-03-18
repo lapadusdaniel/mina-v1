@@ -3083,20 +3083,12 @@
   color: #ffffff;
 }
 
-.dash-overview-card--orange {
-  background: linear-gradient(135deg, #FF6B35, #FF8C5A);
-}
-
-.dash-overview-card--purple {
-  background: linear-gradient(135deg, #7C4DFF, #9E7BFF);
-}
-
-.dash-overview-card--cyan {
-  background: linear-gradient(135deg, #00BCD4, #26C6DA);
-}
-
+.dash-overview-card--orange,
+.dash-overview-card--purple,
+.dash-overview-card--cyan,
 .dash-overview-card--green {
-  background: linear-gradient(135deg, #43A047, #66BB6A);
+  background: #f4f5f8;
+  color: #1a1a1f;
 }
 
 .dash-overview-cards__stack {
@@ -3123,14 +3115,7 @@
 }
 
 .dash-overview-card__circle {
-  position: absolute;
-  bottom: -24px;
-  right: -24px;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.10);
-  pointer-events: none;
+  display: none;
 }
 
 .dash-overview-card__ring {
@@ -3142,21 +3127,22 @@
 
 .dash-overview-card__label {
   font-family: 'DM Sans', sans-serif;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  opacity: 0.85;
-  margin-bottom: 10px;
+  color: #a0a0a7;
+  margin-bottom: 8px;
 }
 
 .dash-overview-card__value {
   font-family: 'DM Serif Display', Georgia, serif;
-  font-size: 36px;
-  font-weight: 400;
+  font-size: 32px;
+  font-weight: 300;
+  color: #1a1a1f;
   line-height: 1;
   letter-spacing: -0.02em;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .dash-overview-card__unit {
@@ -3166,8 +3152,8 @@
 
 .dash-overview-card__sub {
   font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
-  opacity: 0.75;
+  font-size: 12px;
+  color: #c0c0c7;
 }
 
 /* ══════════════════════════════

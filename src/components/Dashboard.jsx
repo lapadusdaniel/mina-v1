@@ -1245,9 +1245,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           const limitGB = storageLimit ?? 15
           const totalPhotos = galeriiActive.reduce((sum, g) => sum + Math.max(0, Number(g?.poze || 0)), 0)
           const storagePercent = Math.min(100, (parseFloat(usedGB) / limitGB) * 100)
-          const RING_R = 28
-          const RING_C = parseFloat((2 * Math.PI * RING_R).toFixed(2))
-          const ringOffset = parseFloat((RING_C * (1 - storagePercent / 100)).toFixed(2))
           const now = new Date()
           const isThisMonth = (g) => {
             const d = g.createdAt?.toDate?.() || (g.data ? new Date(g.data) : null)
@@ -1265,22 +1262,12 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
                 <div className="dash-overview-card__sub">{totalPhotos} poze în total</div>
               </div>
               <div className="dash-overview-card dash-overview-card--purple">
-                <svg className="dash-overview-card__ring" viewBox="0 0 72 72" width="72" height="72">
-                  <circle cx="36" cy="36" r={RING_R} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="4" />
-                  <circle
-                    cx="36" cy="36" r={RING_R}
-                    fill="none"
-                    stroke="rgba(255,255,255,0.85)"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeDasharray={RING_C}
-                    strokeDashoffset={ringOffset}
-                    transform="rotate(-90 36 36)"
-                  />
-                </svg>
                 <div className="dash-overview-card__label">Storage folosit</div>
                 <div className="dash-overview-card__value">{usedGB} <span className="dash-overview-card__unit">GB</span></div>
                 <div className="dash-overview-card__sub">din {limitGB} GB disponibili</div>
+                <div style={{ marginTop: '10px', background: '#e0e1e6', borderRadius: '99px', height: '4px', width: '100%' }}>
+                  <div style={{ background: '#1a1a1f', borderRadius: '99px', height: '4px', width: `${storagePercent}%` }} />
+                </div>
               </div>
               <div className="dash-overview-cards__stack">
                 <div className="dash-overview-card dash-overview-card--cyan dash-overview-card--sm">
