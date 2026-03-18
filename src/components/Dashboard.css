@@ -3072,14 +3072,14 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  padding: 24px 32px 0;
+  padding: 16px 24px 0;
 }
 
 .dash-overview-card {
   position: relative;
   overflow: hidden;
   border-radius: 14px;
-  padding: 20px 20px 18px;
+  padding: 16px 18px 14px;
   color: #ffffff;
 }
 
@@ -3102,7 +3102,7 @@
 }
 
 .dash-overview-card--sm {
-  padding: 16px 16px 14px;
+  padding: 12px 14px 10px;
 }
 
 .dash-overview-card--sm .dash-overview-card__label {
@@ -3132,12 +3132,12 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #a0a0a7;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .dash-overview-card__value {
   font-family: 'DM Serif Display', Georgia, serif;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 300;
   color: #1a1a1f;
   line-height: 1;
@@ -3146,7 +3146,7 @@
 }
 
 .dash-overview-card__unit {
-  font-size: 20px;
+  font-size: 13px;
   opacity: 0.8;
 }
 
@@ -3154,6 +3154,7 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 12px;
   color: #c0c0c7;
+  margin: 0;
 }
 
 /* ══════════════════════════════
