@@ -3070,7 +3070,7 @@
 ══════════════════════════════ */
 .dash-overview-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   padding: 16px 24px 0;
 }
@@ -3089,16 +3089,6 @@
 .dash-overview-card--green {
   background: #f4f5f8;
   color: #1a1a1f;
-}
-
-.dash-overview-cards__stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.dash-overview-cards__stack .dash-overview-card {
-  flex: 1;
 }
 
 .dash-overview-card--sm {

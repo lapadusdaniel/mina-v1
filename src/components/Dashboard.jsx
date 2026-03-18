@@ -1269,19 +1269,17 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
                   <div style={{ background: '#1a1a1f', borderRadius: '99px', height: '4px', width: `${storagePercent}%` }} />
                 </div>
               </div>
-              <div className="dash-overview-cards__stack">
-                <div className="dash-overview-card dash-overview-card--cyan dash-overview-card--sm">
-                  <div className="dash-overview-card__circle" />
-                  <div className="dash-overview-card__label">Vizualizări luna aceasta</div>
-                  <div className="dash-overview-card__value">{vizualizariLuna.toLocaleString('ro-RO')}</div>
-                  <div className="dash-overview-card__sub">sesiuni unice</div>
-                </div>
-                <div className="dash-overview-card dash-overview-card--green dash-overview-card--sm">
-                  <div className="dash-overview-card__circle" />
-                  <div className="dash-overview-card__label">Descărcări luna aceasta</div>
-                  <div className="dash-overview-card__value">{descarcariLuna.toLocaleString('ro-RO')}</div>
-                  <div className="dash-overview-card__sub">fișiere descărcate</div>
-                </div>
+              <div className="dash-overview-card dash-overview-card--cyan">
+                <div className="dash-overview-card__circle" />
+                <div className="dash-overview-card__label">Vizualizări luna aceasta</div>
+                <div className="dash-overview-card__value">{vizualizariLuna.toLocaleString('ro-RO')}</div>
+                <div className="dash-overview-card__sub">sesiuni unice</div>
+              </div>
+              <div className="dash-overview-card dash-overview-card--green">
+                <div className="dash-overview-card__circle" />
+                <div className="dash-overview-card__label">Descărcări luna aceasta</div>
+                <div className="dash-overview-card__value">{descarcariLuna.toLocaleString('ro-RO')}</div>
+                <div className="dash-overview-card__sub">fișiere descărcate</div>
               </div>
             </div>
           )
