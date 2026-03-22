@@ -3,6 +3,11 @@ main = "r2-worker.js"
 compatibility_date = "2026-02-24"
 workers_dev = true
 
+[vars]
+B2_ENDPOINT = "s3.us-east-005.backblazeb2.com"
+B2_BUCKET_NAME = "mina-photos"
+B2_KEY_ID = "0052e58cbb102760000000001"
+
 [[ratelimits]]
 name = "READ_RATE_LIMITER"
 namespace_id = "11001"
