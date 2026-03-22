@@ -85,6 +85,7 @@ async function b2Get(key, env) {
       httpEtag: response.ETag,
     }
   } catch (err) {
+    console.error('B2 error:', err?.message, err?.Code, err?.$metadata?.httpStatusCode, JSON.stringify(err?.$metadata))
     if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) {
       return null
     }
@@ -100,7 +101,12 @@ async function b2Put(key, body, contentType, env) {
     Body: body,
     ContentType: contentType,
   })
-  await client.send(command)
+  try {
+    await client.send(command)
+  } catch (err) {
+    console.error('B2 error:', err?.message, err?.Code, err?.$metadata?.httpStatusCode, JSON.stringify(err?.$metadata))
+    throw err
+  }
 }
 
 async function b2Delete(key, env) {
@@ -109,7 +115,12 @@ async function b2Delete(key, env) {
     Bucket: getB2BucketName(env),
     Key: key,
   })
-  await client.send(command)
+  try {
+    await client.send(command)
+  } catch (err) {
+    console.error('B2 error:', err?.message, err?.Code, err?.$metadata?.httpStatusCode, JSON.stringify(err?.$metadata))
+    throw err
+  }
 }
 
 async function b2List(prefix, env) {
@@ -787,6 +798,20 @@ export default {
     const prefix = prefixParam ? normalizePath(decodeURIComponent(prefixParam)) : null
 
     try {
+      if (url.pathname === '/b2-test') {
+        try {
+          const client = createB2S3Client(env)
+          const { ListObjectsV2Command } = await import('@aws-sdk/client-s3')
+          const result = await client.send(new ListObjectsV2Command({
+            Bucket: env.B2_BUCKET_NAME,
+            MaxKeys: 1,
+          }))
+          return json({ ok: true, bucket: env.B2_BUCKET_NAME, endpoint: env.B2_ENDPOINT, count: Number(result?.KeyCount || 0) })
+        } catch (err) {
+          return json({ ok: false, error: err?.message, code: err?.Code, http: err?.$metadata?.httpStatusCode, meta: err?.$metadata })
+        }
+      }
+
       // ── POST /presign ──
       const isPresignRoute = url.pathname === '/presign' || url.pathname === '/presign/'
       if (request.method === 'POST' && isPresignRoute) {
