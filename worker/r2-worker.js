@@ -123,7 +123,16 @@ async function b2List(prefix, env) {
       Prefix: prefix,
       ContinuationToken: continuationToken,
     })
-    const response = await client.send(command)
+    let response
+    try {
+      response = await client.send(command)
+    } catch (err) {
+      const message = err?.message || String(err)
+      const code = err?.Code || err?.code || 'unknown'
+      const status = err?.$metadata?.httpStatusCode || 500
+      console.error('B2 LIST ERROR', { prefix, continuationToken: continuationToken || null }, err)
+      return { objects: [], error: `${code}: ${message} (HTTP ${status})` }
+    }
     for (const obj of response.Contents || []) {
       objects.push({
         key: obj.Key,
@@ -136,12 +145,12 @@ async function b2List(prefix, env) {
     if (!continuationToken) break
   }
 
-  return objects
+  return { objects, error: '' }
 }
 
 async function b2ListAllKeys(prefix, env) {
-  const objects = await b2List(prefix, env)
-  return objects.map((o) => o.key)
+  const result = await b2List(prefix, env)
+  return result.objects.map((o) => o.key)
 }
 
 // ── PRESIGNED URLs (pentru upload direct din browser) ─────────────────────────
@@ -825,8 +834,9 @@ export default {
             const access = await assertPublicGalleryAccessOrOwner({ galleryId, shareToken, request, env })
             if (!access.ok) return text(access.message, access.status)
           }
-          const objects = await b2List(prefixInfo.prefix, env)
-          return json(objects, 200)
+          const result = await b2List(prefixInfo.prefix, env)
+          if (result.error) return json({ objects: [], error: result.error }, 200)
+          return json(result.objects, 200)
         }
 
         if (!key) return text('Missing key', 400)
