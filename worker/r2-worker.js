@@ -1,38 +1,4 @@
-if (typeof DOMParser === 'undefined') {
-  globalThis.DOMParser = class DOMParser {
-    parseFromString(str, type) {
-      return {
-        querySelector: (sel) => {
-          const tag = sel.replace(/[^a-zA-Z]/g, '')
-          const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')
-          const m = str.match(re)
-          return m ? { textContent: m[1] } : null
-        },
-        querySelectorAll: (sel) => {
-          const tag = sel.replace(/[^a-zA-Z]/g, '')
-          const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')
-          const results = []
-          let m
-          while ((m = re.exec(str)) !== null) {
-            results.push({ textContent: m[1], innerHTML: m[1] })
-          }
-          return results
-        },
-        getElementsByTagName: (tag) => {
-          const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')
-          const results = []
-          let m
-          while ((m = re.exec(str)) !== null) {
-            results.push({ textContent: m[1], innerHTML: m[1] })
-          }
-          return results
-        }
-      }
-    }
-  }
-}
-
-import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
@@ -158,44 +124,109 @@ async function b2Delete(key, env) {
 }
 
 async function b2List(prefix, env) {
-  const client = createB2S3Client(env)
+  const endpoint = String(env.B2_ENDPOINT || '').trim()
+  const bucket = String(env.B2_BUCKET_NAME || '').trim()
+  const keyId = String(env.B2_KEY_ID || '').trim()
+  const appKey = String(env.B2_APPLICATION_KEY || '').trim()
+
   const objects = []
   let continuationToken = undefined
 
   while (true) {
-    const command = new ListObjectsV2Command({
-      Bucket: getB2BucketName(env),
-      Prefix: prefix,
-      ContinuationToken: continuationToken,
+    const params = new URLSearchParams({ 'list-type': '2', prefix })
+    if (continuationToken) params.set('continuation-token', continuationToken)
+
+    const url = `https://${bucket}.${endpoint}/?${params.toString()}`
+    const datetime = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '').slice(0, 15) + 'Z'
+    const date = datetime.slice(0, 8)
+    const region = endpoint.split('.')[1] || 'us-east-005'
+
+    const headers = await signRequest({
+      method: 'GET',
+      url,
+      headers: {
+        host: `${bucket}.${endpoint}`,
+        'x-amz-date': datetime,
+        'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      },
+      payload: '',
+      region,
+      service: 's3',
+      keyId,
+      appKey,
+      date,
+      datetime,
     })
-    let response
-    try {
-      response = await client.send(command)
-    } catch (err) {
-      const message = err?.message || String(err)
-      const code = err?.Code || err?.code || 'unknown'
-      const status = err?.$metadata?.httpStatusCode || 500
-      console.error('B2 LIST ERROR', { prefix, continuationToken: continuationToken || null }, err)
-      return { objects: [], error: `${code}: ${message} (HTTP ${status})` }
+
+    const res = await fetch(url, { method: 'GET', headers })
+    const text = await res.text()
+
+    if (!res.ok) {
+      return { objects, error: `B2 list failed: ${res.status} ${text.slice(0, 200)}` }
     }
-    for (const obj of response.Contents || []) {
-      objects.push({
-        key: obj.Key,
-        size: obj.Size,
-        lastModified: obj.LastModified,
-      })
-    }
-    if (!response.IsTruncated) break
-    continuationToken = response.NextContinuationToken
-    if (!continuationToken) break
+
+    const keys = [...text.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1])
+    const sizes = [...text.matchAll(/<Size>([^<]+)<\/Size>/g)].map(m => Number(m[1]))
+    const dates = [...text.matchAll(/<LastModified>([^<]+)<\/LastModified>/g)].map(m => m[1])
+
+    keys.forEach((key, i) => objects.push({ key, size: sizes[i] || 0, lastModified: dates[i] || null }))
+
+    const isTruncated = /<IsTruncated>true<\/IsTruncated>/i.test(text)
+    if (!isTruncated) break
+
+    const nextToken = text.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)
+    if (!nextToken) break
+    continuationToken = nextToken[1]
   }
 
-  return { objects, error: '' }
+  return { objects }
 }
 
 async function b2ListAllKeys(prefix, env) {
   const result = await b2List(prefix, env)
-  return result.objects.map((o) => o.key)
+  return (result.objects || []).map(o => o.key)
+}
+
+async function signRequest({ method, url, headers, payload, region, service, keyId, appKey, date, datetime }) {
+  const parsedUrl = new URL(url)
+  const canonicalUri = parsedUrl.pathname
+  const canonicalQuery = parsedUrl.search.slice(1).split('&').sort().join('&')
+  const headerKeys = Object.keys(headers).sort()
+  const canonicalHeaders = headerKeys.map(k => `${k.toLowerCase()}:${headers[k].trim()}`).join('\n') + '\n'
+  const signedHeaders = headerKeys.map(k => k.toLowerCase()).join(';')
+  const payloadHash = headers['x-amz-content-sha256'] || await sha256Hex(payload)
+
+  const canonicalRequest = [method, canonicalUri, canonicalQuery, canonicalHeaders, signedHeaders, payloadHash].join('\n')
+  const credentialScope = `${date}/${region}/${service}/aws4_request`
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, await sha256Hex(canonicalRequest)].join('\n')
+
+  const signingKey = await hmacSha256(
+    await hmacSha256(
+      await hmacSha256(
+        await hmacSha256(new TextEncoder().encode('AWS4' + appKey), date),
+        region
+      ),
+      service
+    ),
+    'aws4_request'
+  )
+
+  const signature = await hmacSha256Hex(signingKey, stringToSign)
+  const authorization = `AWS4-HMAC-SHA256 Credential=${keyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
+
+  return { ...headers, Authorization: authorization }
+}
+
+async function hmacSha256(key, message) {
+  const k = key instanceof Uint8Array ? key : new TextEncoder().encode(key)
+  const m = message instanceof Uint8Array ? message : new TextEncoder().encode(message)
+  const cryptoKey = await crypto.subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, m))
+}
+
+async function hmacSha256Hex(key, message) {
+  const sig = await hmacSha256(key, message)
+  return [...sig].map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 // ── PRESIGNED URLs (pentru upload direct din browser) ─────────────────────────
@@ -834,15 +865,10 @@ export default {
     try {
       if (url.pathname === '/b2-test') {
         try {
-          const client = createB2S3Client(env)
-          const { ListObjectsV2Command } = await import('@aws-sdk/client-s3')
-          const result = await client.send(new ListObjectsV2Command({
-            Bucket: env.B2_BUCKET_NAME,
-            MaxKeys: 1,
-          }))
-          return json({ ok: true, bucket: env.B2_BUCKET_NAME, endpoint: env.B2_ENDPOINT, count: Number(result?.KeyCount || 0) })
+          const result = await b2List('', env)
+          return json({ ok: !result.error, objects: result.objects?.length, error: result.error })
         } catch (err) {
-          return json({ ok: false, error: err?.message, code: err?.Code, http: err?.$metadata?.httpStatusCode, meta: err?.$metadata })
+          return json({ ok: false, error: err?.message })
         }
       }
 
