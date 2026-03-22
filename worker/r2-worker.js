@@ -1,3 +1,37 @@
+if (typeof DOMParser === 'undefined') {
+  globalThis.DOMParser = class DOMParser {
+    parseFromString(str, type) {
+      return {
+        querySelector: (sel) => {
+          const tag = sel.replace(/[^a-zA-Z]/g, '')
+          const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')
+          const m = str.match(re)
+          return m ? { textContent: m[1] } : null
+        },
+        querySelectorAll: (sel) => {
+          const tag = sel.replace(/[^a-zA-Z]/g, '')
+          const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')
+          const results = []
+          let m
+          while ((m = re.exec(str)) !== null) {
+            results.push({ textContent: m[1], innerHTML: m[1] })
+          }
+          return results
+        },
+        getElementsByTagName: (tag) => {
+          const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')
+          const results = []
+          let m
+          while ((m = re.exec(str)) !== null) {
+            results.push({ textContent: m[1], innerHTML: m[1] })
+          }
+          return results
+        }
+      }
+    }
+  }
+}
+
 import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
