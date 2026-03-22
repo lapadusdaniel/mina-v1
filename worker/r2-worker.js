@@ -1,20 +1,16 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
- * Cloudflare Worker — proxy securizat pentru R2.
+ * Cloudflare Worker — proxy securizat pentru B2.
  *
  * Variabile de mediu necesare în Worker:
  *   - FIREBASE_API_KEY
  *   - FIREBASE_PROJECT_ID
- *   - R2_BUCKET (binding)
- *
- * Reguli:
- *   - GET/LIST public doar pe căi controlate (galerii + branding).
- *   - PUT/DELETE necesită Firebase ID token valid.
- *   - PUT/DELETE pe galerii validează ownership în Firestore (galerii/{id}.userId == uid).
- *   - PUT pe galerii validează quota de stocare (plan Free/Starter/Pro/Studio) înainte de upload.
- *   - PUT/DELETE pe branding validează `branding/{uid}/...`.
+ *   - B2_ENDPOINT        (ex: s3.us-east-005.backblazeb2.com)
+ *   - B2_BUCKET_NAME     (ex: mina-photos)
+ *   - B2_KEY_ID
+ *   - B2_APPLICATION_KEY
  */
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -51,6 +47,138 @@ const DEFAULT_STORAGE_LIMITS_GB = {
 }
 const STUDIO_ADDON_BONUS_GB = 500
 
+// ── B2 S3 CLIENT ──────────────────────────────────────────────────────────────
+
+function createB2S3Client(env) {
+  const endpoint = String(env?.B2_ENDPOINT || '').trim()
+  const accessKeyId = String(env?.B2_KEY_ID || '').trim()
+  const secretAccessKey = String(env?.B2_APPLICATION_KEY || '').trim()
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
+    throw new Error('B2 credentials are not configured')
+  }
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${endpoint}`,
+    credentials: { accessKeyId, secretAccessKey },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+  })
+}
+
+function getB2BucketName(env) {
+  const name = String(env?.B2_BUCKET_NAME || '').trim()
+  if (!name) throw new Error('B2_BUCKET_NAME is not configured')
+  return name
+}
+
+async function b2Get(key, env) {
+  const client = createB2S3Client(env)
+  const command = new GetObjectCommand({
+    Bucket: getB2BucketName(env),
+    Key: key,
+  })
+  try {
+    const response = await client.send(command)
+    return {
+      body: response.Body,
+      httpMetadata: { contentType: response.ContentType },
+      httpEtag: response.ETag,
+    }
+  } catch (err) {
+    if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) {
+      return null
+    }
+    throw err
+  }
+}
+
+async function b2Put(key, body, contentType, env) {
+  const client = createB2S3Client(env)
+  const command = new PutObjectCommand({
+    Bucket: getB2BucketName(env),
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  })
+  await client.send(command)
+}
+
+async function b2Delete(key, env) {
+  const client = createB2S3Client(env)
+  const command = new DeleteObjectCommand({
+    Bucket: getB2BucketName(env),
+    Key: key,
+  })
+  await client.send(command)
+}
+
+async function b2List(prefix, env) {
+  const client = createB2S3Client(env)
+  const objects = []
+  let continuationToken = undefined
+
+  while (true) {
+    const command = new ListObjectsV2Command({
+      Bucket: getB2BucketName(env),
+      Prefix: prefix,
+      ContinuationToken: continuationToken,
+    })
+    const response = await client.send(command)
+    for (const obj of response.Contents || []) {
+      objects.push({
+        key: obj.Key,
+        size: obj.Size,
+        lastModified: obj.LastModified,
+      })
+    }
+    if (!response.IsTruncated) break
+    continuationToken = response.NextContinuationToken
+    if (!continuationToken) break
+  }
+
+  return objects
+}
+
+async function b2ListAllKeys(prefix, env) {
+  const objects = await b2List(prefix, env)
+  return objects.map((o) => o.key)
+}
+
+// ── PRESIGNED URLs (pentru upload direct din browser) ─────────────────────────
+
+function normalizePresignFilesInput(files, galleryId) {
+  if (!Array.isArray(files) || files.length === 0) return null
+  const normalized = []
+  for (const file of files) {
+    const key = normalizePath(file?.key || '')
+    const contentType = String(file?.contentType || '').trim().toLowerCase()
+    const pathInfo = parsePathInfo(key)
+    if (!key || !contentType || !ALLOWED_TYPES.has(contentType)) return null
+    if (!pathInfo || pathInfo.kind !== 'gallery-file' || pathInfo.galleryId !== galleryId) return null
+    normalized.push({ key, contentType })
+  }
+  return normalized
+}
+
+async function createPresignedPutUrls({ files, env }) {
+  const client = createB2S3Client(env)
+  const bucketName = getB2BucketName(env)
+  const urls = await Promise.all(
+    files.map(async ({ key, contentType }) => {
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        ContentType: contentType,
+      })
+      const url = await getSignedUrl(client, command, { expiresIn: 3600 })
+      return { key, url }
+    })
+  )
+  return urls
+}
+
+// ── HELPERS (identice cu originalul) ─────────────────────────────────────────
+
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
@@ -62,21 +190,14 @@ function corsHeaders() {
 function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...corsHeaders(),
-      'Content-Type': 'application/json',
-      ...extraHeaders,
-    },
+    headers: { ...corsHeaders(), 'Content-Type': 'application/json', ...extraHeaders },
   })
 }
 
 function text(body, status = 200, extraHeaders = {}) {
   return new Response(body, {
     status,
-    headers: {
-      ...corsHeaders(),
-      ...extraHeaders,
-    },
+    headers: { ...corsHeaders(), ...extraHeaders },
   })
 }
 
@@ -90,120 +211,33 @@ function normalizePath(rawPath) {
 function parsePathInfo(path) {
   const key = normalizePath(path)
   if (!key) return null
-
   let match = key.match(/^galerii\/([^/]+)\/(originals|medium|thumbnails)\/(.+)$/)
   if (match) {
-    return {
-      kind: 'gallery-file',
-      key,
-      galleryId: match[1],
-      variant: match[2],
-      filename: match[3],
-    }
+    return { kind: 'gallery-file', key, galleryId: match[1], variant: match[2], filename: match[3] }
   }
-
   match = key.match(/^branding\/([^/]+)\/(.+)$/)
   if (match) {
-    return {
-      kind: 'branding-file',
-      key,
-      ownerUid: match[1],
-      filename: match[2],
-    }
+    return { kind: 'branding-file', key, ownerUid: match[1], filename: match[2] }
   }
-
   return null
 }
 
 function parsePrefixInfo(rawPrefix) {
   const prefix = normalizePath(rawPrefix)
   if (!prefix) return null
-
   let match = prefix.match(/^galerii\/([^/]+)\/(originals|medium|thumbnails)\/$/)
   if (match) {
-    return {
-      kind: 'gallery-read-prefix',
-      prefix,
-      galleryId: match[1],
-      variant: match[2],
-    }
+    return { kind: 'gallery-read-prefix', prefix, galleryId: match[1], variant: match[2] }
   }
-
   match = prefix.match(/^galerii\/([^/]+)\/$/)
   if (match) {
-    return {
-      kind: 'gallery-manage-prefix',
-      prefix,
-      galleryId: match[1],
-    }
+    return { kind: 'gallery-manage-prefix', prefix, galleryId: match[1] }
   }
-
   match = prefix.match(/^branding\/([^/]+)\/$/)
   if (match) {
-    return {
-      kind: 'branding-prefix',
-      prefix,
-      ownerUid: match[1],
-    }
+    return { kind: 'branding-prefix', prefix, ownerUid: match[1] }
   }
-
   return null
-}
-
-function createR2S3Client(env) {
-  const accountId = String(env?.R2_ACCOUNT_ID || '').trim()
-  const accessKeyId = String(env?.R2_ACCESS_KEY_ID || '').trim()
-  const secretAccessKey = String(env?.R2_SECRET_ACCESS_KEY || '').trim()
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error('R2 S3 credentials are not configured')
-  }
-
-  return new S3Client({
-    region: 'auto',
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  })
-}
-
-function normalizePresignFilesInput(files, galleryId) {
-  if (!Array.isArray(files) || files.length === 0) return null
-
-  const normalized = []
-  for (const file of files) {
-    const key = normalizePath(file?.key || '')
-    const contentType = String(file?.contentType || '').trim().toLowerCase()
-    const pathInfo = parsePathInfo(key)
-    if (!key || !contentType || !ALLOWED_TYPES.has(contentType)) return null
-    if (!pathInfo || pathInfo.kind !== 'gallery-file' || pathInfo.galleryId !== galleryId) return null
-    normalized.push({ key, contentType })
-  }
-
-  return normalized
-}
-
-async function createPresignedPutUrls({ files, env }) {
-  const bucketName = String(env?.R2_BUCKET_NAME || '').trim()
-  if (!bucketName) {
-    throw new Error('R2 bucket name is not configured')
-  }
-
-  const client = createR2S3Client(env)
-  const urls = await Promise.all(
-    files.map(async ({ key, contentType }) => {
-      const command = new PutObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-        ContentType: contentType,
-      })
-      const url = await getSignedUrl(client, command, { expiresIn: 3600 })
-      return { key, url }
-    })
-  )
-
-  return urls
 }
 
 function requireBearerToken(request) {
@@ -215,19 +249,15 @@ function requireBearerToken(request) {
 function getClientIp(request) {
   const direct = request.headers.get('CF-Connecting-IP')
   if (direct && String(direct).trim()) return String(direct).trim()
-
   const forwarded = request.headers.get('x-forwarded-for') || ''
   if (forwarded) {
     const first = String(forwarded).split(',')[0]?.trim()
     if (first) return first
   }
-
   return 'unknown'
 }
 
-function isReadMethod(method) {
-  return method === 'GET'
-}
+function isReadMethod(method) { return method === 'GET' }
 
 function resolveRateLimitBinding(env, scope) {
   if (!env || typeof env !== 'object') return null
@@ -244,16 +274,11 @@ function localRateLimit(request, scope) {
   const bucketKey = `${scope}:${getClientIp(request)}`
   const now = Date.now()
   const current = rateLimitBuckets.get(bucketKey)
-
   if (!current || now - current.windowStart > RATE_LIMIT_WINDOW_MS) {
     rateLimitBuckets.set(bucketKey, { windowStart: now, count: 1 })
     return { allowed: true }
   }
-
-  if (current.count >= limit) {
-    return { allowed: false }
-  }
-
+  if (current.count >= limit) return { allowed: false }
   current.count += 1
   rateLimitBuckets.set(bucketKey, current)
   return { allowed: true }
@@ -261,19 +286,14 @@ function localRateLimit(request, scope) {
 
 function parseLimiterSuccess(result) {
   if (typeof result === 'boolean') return result
-  if (result && typeof result === 'object' && typeof result.success === 'boolean') {
-    return result.success
-  }
+  if (result && typeof result === 'object' && typeof result.success === 'boolean') return result.success
   return null
 }
 
 function rateLimitKeyForRequest(request, scope) {
   const ip = getClientIp(request)
   const method = String(request.method || '').toUpperCase()
-  if (scope === 'write') {
-    // Keep write limiting strict per IP + method so unique file paths cannot bypass limits.
-    return `${scope}:${method}:${ip}`
-  }
+  if (scope === 'write') return `${scope}:${method}:${ip}`
   const url = new URL(request.url)
   const route = normalizePath(url.pathname.slice(1)) || '/'
   return `${scope}:${method}:${route}:${ip}`
@@ -284,19 +304,13 @@ async function checkRateLimit(request, env) {
   const scope = isReadMethod(method) ? 'read' : 'write'
   const binding = resolveRateLimitBinding(env, scope)
   const key = rateLimitKeyForRequest(request, scope)
-
   if (binding) {
     try {
       const result = await binding.limit({ key })
       const success = parseLimiterSuccess(result)
-      if (typeof success === 'boolean') {
-        return { allowed: success, source: 'binding' }
-      }
-    } catch (_) {
-      // Fallback local if binding is unavailable or errors.
-    }
+      if (typeof success === 'boolean') return { allowed: success, source: 'binding' }
+    } catch (_) {}
   }
-
   const local = localRateLimit(request, scope)
   return { ...local, source: 'local' }
 }
@@ -324,39 +338,23 @@ function storageLimitBytesForPlan(plan, env, addonActive = false) {
     env?.[envKey] ?? (legacyEnvKey ? env?.[legacyEnvKey] : undefined),
     DEFAULT_STORAGE_LIMITS_GB[normalizedPlan]
   )
-
   let effectiveLimitGb = limitGb
   if (normalizedPlan === 'Studio' && addonActive) {
     const addonBonusGb = parseNumber(env?.STUDIO_ADDON_BONUS_GB, STUDIO_ADDON_BONUS_GB)
     effectiveLimitGb += addonBonusGb
   }
-
   return Math.floor(effectiveLimitGb * 1024 * 1024 * 1024)
 }
 
 function parseCommaSeparatedSet(rawValue) {
-  const values = String(rawValue || '')
-    .split(',')
-    .map((v) => String(v || '').trim())
-    .filter(Boolean)
+  const values = String(rawValue || '').split(',').map((v) => String(v || '').trim()).filter(Boolean)
   return new Set(values)
 }
 
 function getConfiguredPriceIds(env) {
-  const starter = new Set([
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER),
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER_IDS),
-  ])
-  const pro = new Set([
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO),
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_IDS),
-  ])
-  const studio = new Set([
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO),
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO_IDS),
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED),
-    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED_IDS),
-  ])
+  const starter = new Set([...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER_IDS)])
+  const pro = new Set([...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_IDS)])
+  const studio = new Set([...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO_IDS), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED_IDS)])
   return { starter, pro, studio }
 }
 
@@ -366,10 +364,7 @@ function pickMaxPlan(currentPlan, candidatePlan) {
   return PLAN_PRIORITY[candidate] > PLAN_PRIORITY[current] ? candidate : current
 }
 
-function firestoreStringField(data, fieldName) {
-  return data?.fields?.[fieldName]?.stringValue || ''
-}
-
+function firestoreStringField(data, fieldName) { return data?.fields?.[fieldName]?.stringValue || '' }
 function firestoreBoolField(data, fieldName, fallback = false) {
   const value = data?.fields?.[fieldName]?.booleanValue
   return typeof value === 'boolean' ? value : fallback
@@ -380,29 +375,15 @@ function firestoreValueToPlain(value) {
   if ('nullValue' in value) return null
   if ('stringValue' in value) return String(value.stringValue || '')
   if ('booleanValue' in value) return Boolean(value.booleanValue)
-  if ('integerValue' in value) {
-    const parsed = Number(value.integerValue)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-  if ('doubleValue' in value) {
-    const parsed = Number(value.doubleValue)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
+  if ('integerValue' in value) { const parsed = Number(value.integerValue); return Number.isFinite(parsed) ? parsed : 0 }
+  if ('doubleValue' in value) { const parsed = Number(value.doubleValue); return Number.isFinite(parsed) ? parsed : 0 }
   if ('timestampValue' in value) return String(value.timestampValue || '')
-  if ('arrayValue' in value) {
-    const values = value.arrayValue?.values || []
-    return values.map((item) => firestoreValueToPlain(item))
-  }
-  if ('listValue' in value) {
-    const values = value.listValue?.values || []
-    return values.map((item) => firestoreValueToPlain(item))
-  }
+  if ('arrayValue' in value) { return (value.arrayValue?.values || []).map((item) => firestoreValueToPlain(item)) }
+  if ('listValue' in value) { return (value.listValue?.values || []).map((item) => firestoreValueToPlain(item)) }
   if ('mapValue' in value) {
     const fields = value.mapValue?.fields || {}
     const plain = {}
-    for (const [key, fieldValue] of Object.entries(fields)) {
-      plain[key] = firestoreValueToPlain(fieldValue)
-    }
+    for (const [key, fieldValue] of Object.entries(fields)) { plain[key] = firestoreValueToPlain(fieldValue) }
     return plain
   }
   return null
@@ -412,15 +393,12 @@ function firestoreDocToPlain(doc) {
   if (!doc || typeof doc !== 'object') return null
   const fields = doc.fields || {}
   const plain = {}
-  for (const [key, value] of Object.entries(fields)) {
-    plain[key] = firestoreValueToPlain(value)
-  }
+  for (const [key, value] of Object.entries(fields)) { plain[key] = firestoreValueToPlain(value) }
   return plain
 }
 
 function parseSubscriptionPriceId(docData) {
   if (!docData || typeof docData !== 'object') return ''
-
   const items = docData?.items?.data ?? docData?.items
   if (Array.isArray(items)) {
     for (const item of items) {
@@ -428,7 +406,6 @@ function parseSubscriptionPriceId(docData) {
       if (nested) return String(nested)
     }
   }
-
   if (docData?.price?.id) return String(docData.price.id)
   if (typeof docData?.price === 'string') return String(docData.price)
   return ''
@@ -447,70 +424,35 @@ function parseSubscriptionPriceObject(docData) {
 }
 
 function inferPlanFromSubscription(docData, env) {
-  const explicitPlan = normalizePlan(
-    docData?.plan
-    || docData?.role
-    || docData?.metadata?.plan
-    || docData?.metadata?.tier
-  )
+  const explicitPlan = normalizePlan(docData?.plan || docData?.role || docData?.metadata?.plan || docData?.metadata?.tier)
   if (explicitPlan) return explicitPlan
-
   const priceId = parseSubscriptionPriceId(docData)
   if (!priceId) return 'Free'
-
   const configured = getConfiguredPriceIds(env)
   if (configured.studio.has(priceId)) return 'Studio'
   if (configured.pro.has(priceId)) return 'Pro'
   if (configured.starter.has(priceId)) return 'Starter'
-
   const priceObj = parseSubscriptionPriceObject(docData)
-  const fromLabels = normalizePlan(
-    priceObj?.lookup_key
-    || priceObj?.lookupKey
-    || priceObj?.nickname
-    || priceObj?.product?.name
-    || docData?.product?.name
-  )
+  const fromLabels = normalizePlan(priceObj?.lookup_key || priceObj?.lookupKey || priceObj?.nickname || priceObj?.product?.name || docData?.product?.name)
   if (fromLabels) return fromLabels
-
-  const unitAmount = Number(
-    priceObj?.unit_amount
-    ?? priceObj?.unitAmount
-    ?? priceObj?.unit_amount_decimal
-    ?? docData?.unit_amount
-    ?? docData?.unitAmount
-    ?? docData?.unit_amount_decimal
-  )
+  const unitAmount = Number(priceObj?.unit_amount ?? priceObj?.unitAmount ?? priceObj?.unit_amount_decimal ?? docData?.unit_amount ?? docData?.unitAmount ?? docData?.unit_amount_decimal)
   if (Number.isFinite(unitAmount)) {
     if (unitAmount >= 12900) return 'Studio'
     if (unitAmount >= 7900) return 'Pro'
     if (unitAmount >= 3900) return 'Starter'
   }
-
-  // Unknown active subscription: default to Pro to avoid false hard-blocking paid users.
   return 'Pro'
 }
 
-function invalidateQuotaCache(uid) {
-  if (!uid) return
-  quotaCache.delete(uid)
-}
-
+function invalidateQuotaCache(uid) { if (!uid) return; quotaCache.delete(uid) }
 function readCachedQuota(uid) {
   if (!uid) return null
   const cached = quotaCache.get(uid)
   if (!cached) return null
-  if (Date.now() - cached.ts > QUOTA_CACHE_TTL_MS) {
-    quotaCache.delete(uid)
-    return null
-  }
+  if (Date.now() - cached.ts > QUOTA_CACHE_TTL_MS) { quotaCache.delete(uid); return null }
   return cached.value
 }
-
-function writeCachedQuota(uid, value) {
-  if (!uid || !value) return
-  quotaCache.set(uid, { ts: Date.now(), value })
-}
+function writeCachedQuota(uid, value) { if (!uid || !value) return; quotaCache.set(uid, { ts: Date.now(), value }) }
 
 async function sha256Hex(value) {
   const raw = new TextEncoder().encode(String(value || ''))
@@ -519,13 +461,10 @@ async function sha256Hex(value) {
 }
 
 function timingSafeEqual(a, b) {
-  const left = String(a || '')
-  const right = String(b || '')
+  const left = String(a || ''); const right = String(b || '')
   if (!left || !right || left.length !== right.length) return false
   let diff = 0
-  for (let i = 0; i < left.length; i++) {
-    diff |= left.charCodeAt(i) ^ right.charCodeAt(i)
-  }
+  for (let i = 0; i < left.length; i++) { diff |= left.charCodeAt(i) ^ right.charCodeAt(i) }
   return diff === 0
 }
 
@@ -536,10 +475,7 @@ function parseIsoDate(value) {
   return d
 }
 
-function normalizeShareToken(token) {
-  return String(token || '').trim()
-}
-
+function normalizeShareToken(token) { return String(token || '').trim() }
 function normalizeShareTtlHours(rawTtl) {
   const parsed = Number(rawTtl)
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_SHARE_TTL_HOURS
@@ -567,21 +503,12 @@ async function verifyFirebaseToken(idToken, apiKey) {
 function firestoreDocBaseUrl(projectId) {
   return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`
 }
-
-function firestoreApiKeySuffix(apiKey) {
-  return apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''
-}
-
-function firestoreAuthHeaders(idToken) {
-  return idToken ? { Authorization: `Bearer ${idToken}` } : {}
-}
+function firestoreApiKeySuffix(apiKey) { return apiKey ? `?key=${encodeURIComponent(apiKey)}` : '' }
+function firestoreAuthHeaders(idToken) { return idToken ? { Authorization: `Bearer ${idToken}` } : {} }
 
 async function fetchFirestoreDocByPath({ projectId, docPath, idToken, apiKey }) {
   if (!projectId || !docPath) return null
-  const safePath = String(docPath)
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/')
+  const safePath = String(docPath).split('/').map((segment) => encodeURIComponent(segment)).join('/')
   const url = `${firestoreDocBaseUrl(projectId)}/${safePath}${firestoreApiKeySuffix(apiKey)}`
   const res = await fetch(url, { method: 'GET', headers: firestoreAuthHeaders(idToken) })
   if (res.status === 404) return null
@@ -591,44 +518,29 @@ async function fetchFirestoreDocByPath({ projectId, docPath, idToken, apiKey }) 
 
 async function fetchGalleryDoc({ galleryId, projectId, idToken, apiKey }) {
   if (!galleryId || !projectId) return null
-  return fetchFirestoreDocByPath({
-    projectId,
-    docPath: `galerii/${galleryId}`,
-    idToken,
-    apiKey,
-  })
+  return fetchFirestoreDocByPath({ projectId, docPath: `galerii/${galleryId}`, idToken, apiKey })
 }
 
 async function listFirestoreCollectionDocs({ projectId, collectionPath, idToken, apiKey, pageSize = 100 }) {
   if (!projectId || !collectionPath) return []
   let pageToken = ''
   const docs = []
-
   while (true) {
     const query = new URLSearchParams()
     query.set('pageSize', String(pageSize))
     if (pageToken) query.set('pageToken', pageToken)
     if (apiKey) query.set('key', apiKey)
-
-    const safePath = String(collectionPath)
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/')
+    const safePath = String(collectionPath).split('/').map((segment) => encodeURIComponent(segment)).join('/')
     const url = `${firestoreDocBaseUrl(projectId)}/${safePath}?${query.toString()}`
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: firestoreAuthHeaders(idToken),
-    })
+    const res = await fetch(url, { method: 'GET', headers: firestoreAuthHeaders(idToken) })
     if (res.status === 404) return docs
     if (!res.ok) throw new Error(`Firestore list failed (${res.status})`)
-
     const payload = await res.json().catch(() => ({}))
     const currentDocs = Array.isArray(payload?.documents) ? payload.documents : []
     docs.push(...currentDocs)
     pageToken = payload?.nextPageToken || ''
     if (!pageToken) break
   }
-
   return docs
 }
 
@@ -642,23 +554,10 @@ async function resolveUserPlan({ uid, idToken, env }) {
   const projectId = env?.FIREBASE_PROJECT_ID
   const apiKey = env?.FIREBASE_API_KEY
   if (!uid || !idToken || !projectId) return 'Free'
-
-  const overrideDoc = await fetchFirestoreDocByPath({
-    projectId,
-    docPath: `adminOverrides/${uid}`,
-    idToken,
-    apiKey,
-  }).catch(() => null)
+  const overrideDoc = await fetchFirestoreDocByPath({ projectId, docPath: `adminOverrides/${uid}`, idToken, apiKey }).catch(() => null)
   const overridePlan = normalizePlan(firestoreDocToPlain(overrideDoc)?.plan)
   if (overridePlan) return overridePlan
-
-  const subscriptionDocs = await listFirestoreCollectionDocs({
-    projectId,
-    collectionPath: `customers/${uid}/subscriptions`,
-    idToken,
-    apiKey,
-  }).catch(() => [])
-
+  const subscriptionDocs = await listFirestoreCollectionDocs({ projectId, collectionPath: `customers/${uid}/subscriptions`, idToken, apiKey }).catch(() => [])
   let bestPlan = 'Free'
   for (const doc of subscriptionDocs) {
     const sub = firestoreDocToPlain(doc)
@@ -667,93 +566,44 @@ async function resolveUserPlan({ uid, idToken, env }) {
     bestPlan = pickMaxPlan(bestPlan, inferPlanFromSubscription(sub, env))
   }
   if (bestPlan !== 'Free') return bestPlan
-
-  const userDoc = await fetchFirestoreDocByPath({
-    projectId,
-    docPath: `users/${uid}`,
-    idToken,
-    apiKey,
-  }).catch(() => null)
+  const userDoc = await fetchFirestoreDocByPath({ projectId, docPath: `users/${uid}`, idToken, apiKey }).catch(() => null)
   const userPlan = normalizePlan(firestoreDocToPlain(userDoc)?.plan)
   if (userPlan) return userPlan
   return 'Free'
 }
 
 async function readUserStorageState({ uid, idToken, env }) {
-  if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID) {
-    return { usedBytes: 0, addonActive: false }
-  }
-  const userDoc = await fetchFirestoreDocByPath({
-    projectId: env.FIREBASE_PROJECT_ID,
-    docPath: `users/${uid}`,
-    idToken,
-    apiKey: env.FIREBASE_API_KEY,
-  }).catch(() => null)
-
+  if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID) return { usedBytes: 0, addonActive: false }
+  const userDoc = await fetchFirestoreDocByPath({ projectId: env.FIREBASE_PROJECT_ID, docPath: `users/${uid}`, idToken, apiKey: env.FIREBASE_API_KEY }).catch(() => null)
   const userData = firestoreDocToPlain(userDoc) || {}
-  const fields = [
-    userData.storageUsedBytes,
-    userData.storageBytesUsed,
-  ]
-
+  const fields = [userData.storageUsedBytes, userData.storageBytesUsed]
   let usedBytes = 0
   for (const value of fields) {
     const parsed = toNonNegativeInteger(value, -1)
-    if (parsed >= 0) {
-      usedBytes = parsed
-      break
-    }
+    if (parsed >= 0) { usedBytes = parsed; break }
   }
-
-  return {
-    usedBytes,
-    addonActive: Boolean(userData.addonActive),
-  }
+  return { usedBytes, addonActive: Boolean(userData.addonActive) }
 }
 
 async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadBytes, env }) {
-  if (!authContext?.uid || pathInfo?.kind !== 'gallery-file') {
-    return { ok: true }
-  }
-
+  if (!authContext?.uid || pathInfo?.kind !== 'gallery-file') return { ok: true }
   const uid = authContext.uid
   const cached = readCachedQuota(uid)
   if (cached) {
-    if (cached.usedBytes + uploadBytes > cached.limitBytes) {
-      return {
-        ok: false,
-        status: 403,
-        message: 'Quota Exceeded',
-      }
-    }
-    writeCachedQuota(uid, {
-      ...cached,
-      usedBytes: cached.usedBytes + uploadBytes,
-    })
+    if (cached.usedBytes + uploadBytes > cached.limitBytes) return { ok: false, status: 403, message: 'Quota Exceeded' }
+    writeCachedQuota(uid, { ...cached, usedBytes: cached.usedBytes + uploadBytes })
     return { ok: true }
   }
-
   const plan = await resolveUserPlan({ uid, idToken: authContext.idToken, env })
   const storageState = await readUserStorageState({ uid, idToken: authContext.idToken, env })
   const usedBytes = storageState.usedBytes
   const addonActive = storageState.addonActive
   const limitBytes = storageLimitBytesForPlan(plan, env, addonActive)
-
   if (usedBytes + uploadBytes > limitBytes) {
     writeCachedQuota(uid, { usedBytes, limitBytes, plan, addonActive })
-    return {
-      ok: false,
-      status: 403,
-      message: 'Quota Exceeded',
-    }
+    return { ok: false, status: 403, message: 'Quota Exceeded' }
   }
-
-  writeCachedQuota(uid, {
-    usedBytes: usedBytes + uploadBytes,
-    limitBytes,
-    plan,
-    addonActive,
-  })
+  writeCachedQuota(uid, { usedBytes: usedBytes + uploadBytes, limitBytes, plan, addonActive })
   return { ok: true }
 }
 
@@ -766,36 +616,16 @@ async function getGalleryOwnerUid({ galleryId, idToken, projectId }) {
 async function getGalleryPublicAccessConfig({ galleryId, env }) {
   if (!galleryId) return null
   if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_API_KEY) {
-    return {
-      shareRequired: false,
-      tokenHash: '',
-      expiresAt: null,
-    }
+    return { shareRequired: false, tokenHash: '', expiresAt: null }
   }
-
   const now = Date.now()
   const cached = galleryAccessCache.get(galleryId)
-  if (cached && now - cached.ts < GALLERY_ACCESS_CACHE_TTL_MS) {
-    return cached.value
-  }
-
-  const docData = await fetchGalleryDoc({
-    galleryId,
-    projectId: env.FIREBASE_PROJECT_ID,
-    apiKey: env.FIREBASE_API_KEY,
-  }).catch(() => null)
-
+  if (cached && now - cached.ts < GALLERY_ACCESS_CACHE_TTL_MS) return cached.value
+  const docData = await fetchGalleryDoc({ galleryId, projectId: env.FIREBASE_PROJECT_ID, apiKey: env.FIREBASE_API_KEY }).catch(() => null)
   const tokenHash = firestoreStringField(docData, 'publicShareTokenHash')
   const shareRequiredField = firestoreBoolField(docData, 'publicShareRequired', false)
-  const expiresAtRaw = firestoreStringField(docData, 'publicShareExpiresAt')
-  const expiresAt = parseIsoDate(expiresAtRaw)
-
-  const value = {
-    shareRequired: shareRequiredField || !!tokenHash,
-    tokenHash,
-    expiresAt,
-  }
-
+  const expiresAt = parseIsoDate(firestoreStringField(docData, 'publicShareExpiresAt'))
+  const value = { shareRequired: shareRequiredField || !!tokenHash, tokenHash, expiresAt }
   galleryAccessCache.set(galleryId, { ts: now, value })
   return value
 }
@@ -804,37 +634,18 @@ async function assertPublicGalleryAccess(galleryId, shareToken, env) {
   if (!galleryId) return { ok: false, status: 403, message: 'Forbidden' }
   const config = await getGalleryPublicAccessConfig({ galleryId, env })
   if (!config) return { ok: false, status: 404, message: 'Gallery not found' }
-
-  if (!config.shareRequired) {
-    return { ok: true }
-  }
-
-  if (config.expiresAt && config.expiresAt.getTime() < Date.now()) {
-    return { ok: false, status: 403, message: 'Share link expired' }
-  }
-
+  if (!config.shareRequired) return { ok: true }
+  if (config.expiresAt && config.expiresAt.getTime() < Date.now()) return { ok: false, status: 403, message: 'Share link expired' }
   const incomingToken = normalizeShareToken(shareToken)
-  if (!incomingToken) {
-    return { ok: false, status: 403, message: 'Share token required' }
-  }
-
+  if (!incomingToken) return { ok: false, status: 403, message: 'Share token required' }
   const incomingHash = await sha256Hex(incomingToken)
-  if (!timingSafeEqual(incomingHash, config.tokenHash)) {
-    return { ok: false, status: 403, message: 'Invalid share token' }
-  }
-
+  if (!timingSafeEqual(incomingHash, config.tokenHash)) return { ok: false, status: 403, message: 'Invalid share token' }
   return { ok: true }
 }
 
 async function updateGalleryShareTokenConfig({ galleryId, idToken, projectId, tokenHash, expiresAtIso }) {
-  const query = [
-    'updateMask.fieldPaths=publicShareRequired',
-    'updateMask.fieldPaths=publicShareTokenHash',
-    'updateMask.fieldPaths=publicShareExpiresAt',
-    'updateMask.fieldPaths=publicShareUpdatedAt',
-  ].join('&')
+  const query = ['updateMask.fieldPaths=publicShareRequired', 'updateMask.fieldPaths=publicShareTokenHash', 'updateMask.fieldPaths=publicShareExpiresAt', 'updateMask.fieldPaths=publicShareUpdatedAt'].join('&')
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/galerii/${encodeURIComponent(galleryId)}?${query}`
-
   const body = {
     fields: {
       publicShareRequired: { booleanValue: true },
@@ -843,37 +654,20 @@ async function updateGalleryShareTokenConfig({ galleryId, idToken, projectId, to
       publicShareUpdatedAt: { stringValue: new Date().toISOString() },
     },
   }
-
-  const res = await fetch(url, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
+  const res = await fetch(url, { method: 'PATCH', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     const textBody = await res.text().catch(() => '')
     throw new Error(`Share token update failed (${res.status}): ${textBody}`)
   }
-
   galleryAccessCache.delete(galleryId)
 }
 
 async function requireAuthContext(request, env) {
   const idToken = requireBearerToken(request)
-  if (!idToken) {
-    return { error: text('Unauthorized', 401) }
-  }
-  if (!env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT_ID) {
-    return { error: text('Server misconfiguration', 500) }
-  }
-
+  if (!idToken) return { error: text('Unauthorized', 401) }
+  if (!env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT_ID) return { error: text('Server misconfiguration', 500) }
   const uid = await verifyFirebaseToken(idToken, env.FIREBASE_API_KEY)
-  if (!uid) {
-    return { error: text('Invalid or expired token', 401) }
-  }
-
+  if (!uid) return { error: text('Invalid or expired token', 401) }
   return { uid, idToken }
 }
 
@@ -889,76 +683,40 @@ async function getOptionalAuthContext(request, env) {
 async function assertPublicGalleryAccessOrOwner({ galleryId, shareToken, request, env }) {
   const publicAccess = await assertPublicGalleryAccess(galleryId, shareToken, env)
   if (publicAccess.ok) return publicAccess
-
   const authContext = await getOptionalAuthContext(request, env)
   if (!authContext?.uid) return publicAccess
-
-  const ownerUid = await getGalleryOwnerUid({
-    galleryId,
-    idToken: authContext.idToken,
-    projectId: env.FIREBASE_PROJECT_ID,
-  })
-
-  if (ownerUid && ownerUid === authContext.uid) {
-    return { ok: true }
-  }
-
+  const ownerUid = await getGalleryOwnerUid({ galleryId, idToken: authContext.idToken, projectId: env.FIREBASE_PROJECT_ID })
+  if (ownerUid && ownerUid === authContext.uid) return { ok: true }
   return publicAccess
 }
 
 async function assertWritablePathAccess(pathInfo, authContext, env) {
   if (!pathInfo) return { ok: false, status: 400, message: 'Invalid path' }
-
   if (pathInfo.kind === 'branding-file') {
-    if (pathInfo.ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden branding path' }
-    }
+    if (pathInfo.ownerUid !== authContext.uid) return { ok: false, status: 403, message: 'Forbidden branding path' }
     return { ok: true }
   }
-
   if (pathInfo.kind === 'gallery-file') {
-    const ownerUid = await getGalleryOwnerUid({
-      galleryId: pathInfo.galleryId,
-      idToken: authContext.idToken,
-      projectId: env.FIREBASE_PROJECT_ID,
-    })
-    if (!ownerUid) {
-      return { ok: false, status: 404, message: 'Gallery not found' }
-    }
-    if (ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden gallery path' }
-    }
+    const ownerUid = await getGalleryOwnerUid({ galleryId: pathInfo.galleryId, idToken: authContext.idToken, projectId: env.FIREBASE_PROJECT_ID })
+    if (!ownerUid) return { ok: false, status: 404, message: 'Gallery not found' }
+    if (ownerUid !== authContext.uid) return { ok: false, status: 403, message: 'Forbidden gallery path' }
     return { ok: true }
   }
-
   return { ok: false, status: 403, message: 'Forbidden path' }
 }
 
 async function assertWritablePrefixAccess(prefixInfo, authContext, env) {
   if (!prefixInfo) return { ok: false, status: 400, message: 'Invalid prefix' }
-
   if (prefixInfo.kind === 'branding-prefix') {
-    if (prefixInfo.ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden branding prefix' }
-    }
+    if (prefixInfo.ownerUid !== authContext.uid) return { ok: false, status: 403, message: 'Forbidden branding prefix' }
     return { ok: true }
   }
-
   if (prefixInfo.kind === 'gallery-manage-prefix') {
-    const ownerUid = await getGalleryOwnerUid({
-      galleryId: prefixInfo.galleryId,
-      idToken: authContext.idToken,
-      projectId: env.FIREBASE_PROJECT_ID,
-    })
-    if (!ownerUid) {
-      return { ok: false, status: 404, message: 'Gallery not found' }
-    }
-    if (ownerUid !== authContext.uid) {
-      return { ok: false, status: 403, message: 'Forbidden gallery prefix' }
-    }
+    const ownerUid = await getGalleryOwnerUid({ galleryId: prefixInfo.galleryId, idToken: authContext.idToken, projectId: env.FIREBASE_PROJECT_ID })
+    if (!ownerUid) return { ok: false, status: 404, message: 'Gallery not found' }
+    if (ownerUid !== authContext.uid) return { ok: false, status: 403, message: 'Forbidden gallery prefix' }
     return { ok: true }
   }
-
   return { ok: false, status: 403, message: 'Forbidden prefix' }
 }
 
@@ -988,30 +746,7 @@ function publicAssetCacheControl(shareToken = '') {
   return shareToken ? 'private, max-age=86400' : 'public, max-age=31536000, immutable'
 }
 
-async function listAllKeys(bucket, prefix) {
-  const keys = []
-  let cursor = undefined
-
-  while (true) {
-    const listed = await bucket.list({ prefix, cursor })
-    for (const obj of listed.objects || []) keys.push(obj.key)
-
-    if (!listed.truncated) break
-    cursor = listed.cursor
-    if (!cursor) break
-  }
-
-  return keys
-}
-
-async function listObjects(bucket, prefix) {
-  const listed = await bucket.list({ prefix })
-  return (listed.objects || []).map((obj) => ({
-    key: obj.key,
-    size: obj.size,
-    lastModified: obj.uploaded,
-  }))
-}
+// ── EXPORT ────────────────────────────────────────────────────────────────────
 
 export const __workerTestables = {
   normalizePath,
@@ -1043,108 +778,67 @@ export default {
     const prefix = prefixParam ? normalizePath(decodeURIComponent(prefixParam)) : null
 
     try {
+      // ── POST /presign ──
       const isPresignRoute = url.pathname === '/presign' || url.pathname === '/presign/'
       if (request.method === 'POST' && isPresignRoute) {
         const authContext = await requireAuthContext(request, env)
         if (authContext.error) return authContext.error
-
         const body = await request.json().catch(() => null)
         const galleryIdRaw = normalizePath(body?.galleryId || '')
         const galleryId = galleryIdRaw.includes('/') ? '' : galleryIdRaw
         if (!galleryId) return text('Missing or invalid galleryId', 400)
-
         const files = normalizePresignFilesInput(body?.files, galleryId)
         if (!files) return text('Missing or invalid files payload', 400)
-
-        const ownerUid = await getGalleryOwnerUid({
-          galleryId,
-          idToken: authContext.idToken,
-          projectId: env.FIREBASE_PROJECT_ID,
-        })
-
+        const ownerUid = await getGalleryOwnerUid({ galleryId, idToken: authContext.idToken, projectId: env.FIREBASE_PROJECT_ID })
         if (!ownerUid) return text('Gallery not found', 404)
         if (ownerUid !== authContext.uid) return text('Forbidden', 403)
-
         const urls = await createPresignedPutUrls({ files, env })
         return json({ urls }, 200)
       }
 
+      // ── POST /share-token ──
       const isShareTokenRoute = url.pathname === '/share-token' || url.pathname === '/share-token/'
       if (request.method === 'POST' && isShareTokenRoute) {
         const authContext = await requireAuthContext(request, env)
         if (authContext.error) return authContext.error
-
         const galleryIdRaw = normalizePath(url.searchParams.get('galleryId') || '')
         const galleryId = galleryIdRaw.includes('/') ? '' : galleryIdRaw
         if (!galleryId) return text('Missing or invalid galleryId', 400)
-
         const ttlHours = normalizeShareTtlHours(url.searchParams.get('ttlHours'))
-        const ownerUid = await getGalleryOwnerUid({
-          galleryId,
-          idToken: authContext.idToken,
-          projectId: env.FIREBASE_PROJECT_ID,
-        })
-
+        const ownerUid = await getGalleryOwnerUid({ galleryId, idToken: authContext.idToken, projectId: env.FIREBASE_PROJECT_ID })
         if (!ownerUid) return text('Gallery not found', 404)
         if (ownerUid !== authContext.uid) return text('Forbidden', 403)
-
         const token = randomHexToken()
         const tokenHash = await sha256Hex(token)
         const expiresAt = new Date(Date.now() + ttlHours * 3600000).toISOString()
-
-        await updateGalleryShareTokenConfig({
-          galleryId,
-          idToken: authContext.idToken,
-          projectId: env.FIREBASE_PROJECT_ID,
-          tokenHash,
-          expiresAtIso: expiresAt,
-        })
-
+        await updateGalleryShareTokenConfig({ galleryId, idToken: authContext.idToken, projectId: env.FIREBASE_PROJECT_ID, tokenHash, expiresAtIso: expiresAt })
         return json({ token, expiresAt, ttlHours }, 200)
       }
 
+      // ── GET ──
       if (request.method === 'GET') {
         if (prefix) {
           const prefixInfo = parsePrefixInfo(prefix)
-          if (!canPublicListPrefix(prefixInfo)) {
-            return text('Forbidden', 403)
-          }
-
+          if (!canPublicListPrefix(prefixInfo)) return text('Forbidden', 403)
           const galleryId = galleryIdFromPublicPrefix(prefixInfo)
           if (galleryId) {
-            const access = await assertPublicGalleryAccessOrOwner({
-              galleryId,
-              shareToken,
-              request,
-              env,
-            })
+            const access = await assertPublicGalleryAccessOrOwner({ galleryId, shareToken, request, env })
             if (!access.ok) return text(access.message, access.status)
           }
-
-          const objects = await listObjects(env.R2_BUCKET, prefixInfo.prefix)
+          const objects = await b2List(prefixInfo.prefix, env)
           return json(objects, 200)
         }
 
         if (!key) return text('Missing key', 400)
         const pathInfo = parsePathInfo(key)
-        if (!canPublicReadKey(pathInfo)) {
-          return text('Forbidden', 403)
-        }
-
+        if (!canPublicReadKey(pathInfo)) return text('Forbidden', 403)
         const galleryId = galleryIdFromPublicPath(pathInfo)
         if (galleryId) {
-          const access = await assertPublicGalleryAccessOrOwner({
-            galleryId,
-            shareToken,
-            request,
-            env,
-          })
+          const access = await assertPublicGalleryAccessOrOwner({ galleryId, shareToken, request, env })
           if (!access.ok) return text(access.message, access.status)
         }
-
-        const object = await env.R2_BUCKET.get(pathInfo.key)
+        const object = await b2Get(pathInfo.key, env)
         if (!object) return text('Not Found', 404)
-
         const cacheControl = publicAssetCacheControl(shareToken)
         return new Response(object.body, {
           status: 200,
@@ -1152,77 +846,52 @@ export default {
             ...corsHeaders(),
             'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
             'Cache-Control': cacheControl,
-            ...(object.httpEtag
-              ? { ETag: object.httpEtag }
-              : {}),
+            ...(object.httpEtag ? { ETag: object.httpEtag } : {}),
           },
         })
       }
 
+      // ── PUT ──
       if (request.method === 'PUT') {
         if (!key) return text('Missing key', 400)
-
         const authContext = await requireAuthContext(request, env)
         if (authContext.error) return authContext.error
-
         const pathInfo = parsePathInfo(key)
         const access = await assertWritablePathAccess(pathInfo, authContext, env)
         if (!access.ok) return text(access.message, access.status)
-
         const contentType = (request.headers.get('Content-Type') || 'application/octet-stream').toLowerCase()
-        if (!ALLOWED_TYPES.has(contentType)) {
-          return text('Tip de fișier nepermis', 415)
-        }
-
+        if (!ALLOWED_TYPES.has(contentType)) return text('Tip de fișier nepermis', 415)
         const bodyBuffer = await request.arrayBuffer()
         const uploadBytes = Number(bodyBuffer.byteLength || 0)
-        if (!uploadBytes) {
-          return text('Body upload lipsă', 400)
-        }
-        if (uploadBytes > MAX_UPLOAD_BYTES) {
-          return text('Fișier prea mare (max 25 MB)', 413)
-        }
-
-        const quota = await assertStorageQuotaBeforeUpload({
-          authContext,
-          pathInfo,
-          uploadBytes,
-          env,
-        })
+        if (!uploadBytes) return text('Body upload lipsă', 400)
+        if (uploadBytes > MAX_UPLOAD_BYTES) return text('Fișier prea mare (max 25 MB)', 413)
+        const quota = await assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadBytes, env })
         if (!quota.ok) return text(quota.message, quota.status)
-
-        await env.R2_BUCKET.put(pathInfo.key, bodyBuffer, {
-          httpMetadata: { contentType },
-        })
+        await b2Put(pathInfo.key, bodyBuffer, contentType, env)
         return text('OK', 200)
       }
 
+      // ── DELETE ──
       if (request.method === 'DELETE') {
         const authContext = await requireAuthContext(request, env)
         if (authContext.error) return authContext.error
-
         if (prefix) {
           const prefixInfo = parsePrefixInfo(prefix)
           const access = await assertWritablePrefixAccess(prefixInfo, authContext, env)
           if (!access.ok) return text(access.message, access.status)
-
-          const keys = await listAllKeys(env.R2_BUCKET, prefixInfo.prefix)
+          const keys = await b2ListAllKeys(prefixInfo.prefix, env)
           for (let i = 0; i < keys.length; i += 50) {
             const batch = keys.slice(i, i + 50)
-            await Promise.all(batch.map((k) => env.R2_BUCKET.delete(k)))
+            await Promise.all(batch.map((k) => b2Delete(k, env)))
           }
-
           invalidateQuotaCache(authContext.uid)
           return json({ deleted: keys.length }, 200)
         }
-
         if (!key) return text('Missing key', 400)
-
         const pathInfo = parsePathInfo(key)
         const access = await assertWritablePathAccess(pathInfo, authContext, env)
         if (!access.ok) return text(access.message, access.status)
-
-        await env.R2_BUCKET.delete(pathInfo.key)
+        await b2Delete(pathInfo.key, env)
         invalidateQuotaCache(authContext.uid)
         return text('Deleted', 200)
       }
