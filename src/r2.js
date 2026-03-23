@@ -35,7 +35,10 @@ function authHeadersFromToken(idToken = '') {
 function objectUrl(path, accessToken = '') {
   const token = accessToken || readShareTokenFromLocation()
   const query = token ? `?st=${encodeURIComponent(token)}` : ''
-  return `${baseWorkerUrl()}${encodeURIComponent(path)}${query}`
+  // Encode each path segment individually — slashes remain as path separators,
+  // only characters within segments (spaces, special chars) get percent-encoded.
+  const encodedPath = String(path || '').split('/').map(encodeURIComponent).join('/')
+  return `${baseWorkerUrl()}${encodedPath}${query}`
 }
 
 function listUrl(prefix, accessToken = '') {
@@ -277,12 +280,14 @@ export const deletePoza = async (fileName, idToken) => {
     throw new Error(`Delete failed: ${response.status}`)
   }
 
-  await deleteOne(fileName, { allow404: true })
-
-  const thumbPath = resolvePath(fileName, 'thumb')
-  if (thumbPath && thumbPath !== fileName) await deleteOne(thumbPath, { allow404: true })
   const mediumPath = resolvePath(fileName, 'medium')
-  if (mediumPath && mediumPath !== fileName) await deleteOne(mediumPath, { allow404: true })
+  const thumbPath = resolvePath(fileName, 'thumb')
+  const variantPaths = [fileName, mediumPath, thumbPath].filter(Boolean)
+  const uniqueVariantPaths = [...new Set(variantPaths)]
+
+  for (const path of uniqueVariantPaths) {
+    await deleteOne(path, { allow404: true })
+  }
 }
 
 async function deleteByPrefix(prefix, idToken) {
