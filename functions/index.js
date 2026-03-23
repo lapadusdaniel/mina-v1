@@ -220,6 +220,37 @@ function getR2BucketName() {
   return bucketName
 }
 
+async function deleteWorkerPrefix(prefix, authHeader) {
+  const normalizedPrefix = String(prefix || '').trim()
+  if (!normalizedPrefix) {
+    throw new HttpsError('invalid-argument', 'Prefix invalid.')
+  }
+
+  const response = await fetch(`${getR2WorkerBaseUrl()}?prefix=${encodeURIComponent(normalizedPrefix)}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: authHeader,
+    },
+  })
+
+  const responseText = await response.text().catch(() => '')
+  let payload = {}
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText)
+    } catch (_) {
+      payload = {}
+    }
+  }
+
+  if (!response.ok) {
+    const message = String(payload?.error || payload?.message || '').trim() || responseText.trim() || `Worker bulk delete failed (${response.status}).`
+    throw new Error(message)
+  }
+
+  return Number(payload?.deleted || 0)
+}
+
 async function deleteR2Prefix(prefix) {
   const client = getR2S3Client()
   const bucketName = getR2BucketName()
@@ -1493,8 +1524,10 @@ exports.deleteGalleryAssets = onRequest(
 
     let uid = ''
     let galleryId = ''
+    let authHeader = ''
 
     try {
+      authHeader = readBearerAuthHeader(req)
       uid = await verifyRequestAuth(req)
     } catch (authError) {
       const code = authError instanceof HttpsError ? authError.code : 'unauthenticated'
@@ -1527,7 +1560,7 @@ exports.deleteGalleryAssets = onRequest(
       }
 
       const prefix = `galerii/${galleryId}/`
-      const deletedObjects = await deleteR2Prefix(prefix)
+      const deletedObjects = await deleteWorkerPrefix(prefix, authHeader)
 
       const gallerySlug = String(galleryData.slug || '').trim().toLowerCase()
       const removedBytes = Math.max(0, Number(galleryData.storageBytes || 0))
