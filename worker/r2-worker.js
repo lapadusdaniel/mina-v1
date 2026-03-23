@@ -865,7 +865,7 @@ async function assertWritablePathAccess(pathInfo, authContext, env) {
   }
   if (pathInfo.kind === 'gallery-file') {
     const ownerUid = await getGalleryOwnerUid({ galleryId: pathInfo.galleryId, idToken: authContext.idToken, projectId: env.FIREBASE_PROJECT_ID })
-    if (!ownerUid) return { ok: false, status: 404, message: 'Gallery not found' }
+    if (!ownerUid) return { ok: false, status: 403, message: 'Gallery not found or access denied' }
     if (ownerUid !== authContext.uid) return { ok: false, status: 403, message: 'Forbidden gallery path' }
     return { ok: true }
   }

@@ -10,3 +10,9 @@
 - `b28ce7d` — fix: remove non-JS trailing content from r2-worker.js
 - `c226532` — fix: remove R2 binding from wrangler.toml — migrated to B2
 - Status: deploy reușit ✅ — LIST operație în investigație (returnează array gol cu eroare în loc de 500)
+
+### 2026-03-23 — Debug delete foto din dashboard
+
+- Ajustat `assertWritablePathAccess` în `worker/r2-worker.js` ca să returneze `403` cu mesajul `Gallery not found or access denied` când galeria lipsește din Firestore
+- Eliminată tolerarea silențioasă a `404` în `src/r2.js` pentru `deletePoza` — toate variantele (`original`, `medium`, `thumb`) trebuie să șteargă cu succes sau să arunce eroare
+- Păstrat flow-ul din dashboard: storage delete mai întâi, update Firestore după succesul delete-ului

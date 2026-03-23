@@ -286,7 +286,7 @@ export const deletePoza = async (fileName, idToken) => {
   const uniqueVariantPaths = [...new Set(variantPaths)]
 
   for (const path of uniqueVariantPaths) {
-    await deleteOne(path, { allow404: true })
+    await deleteOne(path)
   }
 }
 
