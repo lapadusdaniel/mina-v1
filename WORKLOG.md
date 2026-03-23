@@ -22,3 +22,10 @@
 - Verificat read-only flow-ul actual: `Dashboard.jsx` și `src/r2.js` erau deja pe Worker pentru bulk delete, dar `functions/deleteGalleryAssets` încă ștergea direct prin helper-ul intern
 - Mutat `deleteGalleryAssets` din `functions/index.js` să șteargă fișierele din B2 prin endpoint-ul Worker `DELETE ?prefix=galerii/{galleryId}/`, apoi să șteargă documentul galeriei și să decrementeze storage-ul în Firestore
 - Păstrat comportamentul de ownership check în Function, astfel încât Worker-ul primește același Bearer token validat deja în request
+
+### 2026-03-23 — deleteGalleryAssets direct pe Backblaze B2
+
+- `functions/index.js` nu mai folosește endpoint-ul Worker pentru bulk delete de galerie
+- Adăugate secrete Firebase Functions dedicate pentru B2: `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET_NAME`
+- `deleteGalleryAssets` șterge acum direct din bucket-ul `mina-photos` prin AWS S3 SDK configurat pe endpoint-ul `s3.us-east-005.backblazeb2.com`
+- Deploy-ul pentru această modificare se face doar cu `firebase deploy --only functions`, conform cerinței taskului

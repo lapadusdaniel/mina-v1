@@ -22,14 +22,13 @@ const SMARTBILL_TOKEN = defineSecret('SMARTBILL_TOKEN')
 const SMARTBILL_CIF = defineSecret('SMARTBILL_CIF')
 const SMARTBILL_SERIES_NAME = defineSecret('SMARTBILL_SERIES_NAME')
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
-const R2_ACCOUNT_ID = defineSecret('R2_ACCOUNT_ID')
-const R2_ACCESS_KEY_ID = defineSecret('R2_ACCESS_KEY_ID')
-const R2_SECRET_ACCESS_KEY = defineSecret('R2_SECRET_ACCESS_KEY')
-const R2_BUCKET_NAME = defineSecret('R2_BUCKET_NAME')
+const B2_ENDPOINT = defineSecret('B2_ENDPOINT')
+const B2_KEY_ID = defineSecret('B2_KEY_ID')
+const B2_APPLICATION_KEY = defineSecret('B2_APPLICATION_KEY')
+const B2_BUCKET_NAME = defineSecret('B2_BUCKET_NAME')
 
 const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
-const DEFAULT_R2_WORKER_URL = 'https://mina-v1-r2-worker.lapadusdaniel.workers.dev'
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
   esential_monthly: 'price_1TAwpq1pBe1FB1ICMrpWiGvp',
@@ -170,14 +169,6 @@ function parseJsonRequestBody(req) {
   }
 }
 
-function getR2WorkerBaseUrl() {
-  const raw = String(process.env.R2_WORKER_URL || process.env.VITE_R2_WORKER_URL || DEFAULT_R2_WORKER_URL).trim()
-  if (!raw) {
-    throw new HttpsError('internal', 'R2 worker URL nu este configurat.')
-  }
-  return raw.endsWith('/') ? raw : `${raw}/`
-}
-
 async function verifyRequestAuth(req) {
   const authHeader = readBearerAuthHeader(req)
   const token = authHeader.slice('Bearer '.length).trim()
@@ -193,17 +184,18 @@ async function verifyRequestAuth(req) {
   }
 }
 
-function getR2S3Client() {
-  const accountId = String(R2_ACCOUNT_ID.value() || '').trim()
-  const accessKeyId = String(R2_ACCESS_KEY_ID.value() || '').trim()
-  const secretAccessKey = String(R2_SECRET_ACCESS_KEY.value() || '').trim()
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new HttpsError('internal', 'Lipsesc credențialele R2.')
+function getB2S3Client() {
+  const endpoint = String(B2_ENDPOINT.value() || '').trim()
+  const accessKeyId = String(B2_KEY_ID.value() || '').trim()
+  const secretAccessKey = String(B2_APPLICATION_KEY.value() || '').trim()
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
+    throw new HttpsError('internal', 'Lipsesc credențialele B2.')
   }
 
+  const region = endpoint.split('.')[1] || 'us-east-005'
   return new S3Client({
-    region: 'auto',
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    region,
+    endpoint: `https://${endpoint}`,
     forcePathStyle: true,
     credentials: {
       accessKeyId,
@@ -212,48 +204,17 @@ function getR2S3Client() {
   })
 }
 
-function getR2BucketName() {
-  const bucketName = String(R2_BUCKET_NAME.value() || '').trim()
+function getB2BucketName() {
+  const bucketName = String(B2_BUCKET_NAME.value() || '').trim()
   if (!bucketName) {
-    throw new HttpsError('internal', 'Lipsește R2_BUCKET_NAME.')
+    throw new HttpsError('internal', 'Lipsește B2_BUCKET_NAME.')
   }
   return bucketName
 }
 
-async function deleteWorkerPrefix(prefix, authHeader) {
-  const normalizedPrefix = String(prefix || '').trim()
-  if (!normalizedPrefix) {
-    throw new HttpsError('invalid-argument', 'Prefix invalid.')
-  }
-
-  const response = await fetch(`${getR2WorkerBaseUrl()}?prefix=${encodeURIComponent(normalizedPrefix)}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: authHeader,
-    },
-  })
-
-  const responseText = await response.text().catch(() => '')
-  let payload = {}
-  if (responseText) {
-    try {
-      payload = JSON.parse(responseText)
-    } catch (_) {
-      payload = {}
-    }
-  }
-
-  if (!response.ok) {
-    const message = String(payload?.error || payload?.message || '').trim() || responseText.trim() || `Worker bulk delete failed (${response.status}).`
-    throw new Error(message)
-  }
-
-  return Number(payload?.deleted || 0)
-}
-
-async function deleteR2Prefix(prefix) {
-  const client = getR2S3Client()
-  const bucketName = getR2BucketName()
+async function deleteB2Prefix(prefix) {
+  const client = getB2S3Client()
+  const bucketName = getB2BucketName()
   let deletedTotal = 0
 
   while (true) {
@@ -278,7 +239,7 @@ async function deleteR2Prefix(prefix) {
     }))
 
     if (Array.isArray(deleteResponse?.Errors) && deleteResponse.Errors.length) {
-      throw new Error(`R2 bulk delete failed for ${deleteResponse.Errors.length} objects.`)
+      throw new Error(`B2 bulk delete failed for ${deleteResponse.Errors.length} objects.`)
     }
 
     deletedTotal += objects.length
@@ -1514,7 +1475,7 @@ exports.deleteGalleryAssets = onRequest(
     region: 'us-central1',
     maxInstances: 20,
     cors: true,
-    secrets: [R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME],
+    secrets: [B2_ENDPOINT, B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME],
   },
   async (req, res) => {
     if (req.method !== 'POST') {
@@ -1524,10 +1485,8 @@ exports.deleteGalleryAssets = onRequest(
 
     let uid = ''
     let galleryId = ''
-    let authHeader = ''
 
     try {
-      authHeader = readBearerAuthHeader(req)
       uid = await verifyRequestAuth(req)
     } catch (authError) {
       const code = authError instanceof HttpsError ? authError.code : 'unauthenticated'
@@ -1560,7 +1519,7 @@ exports.deleteGalleryAssets = onRequest(
       }
 
       const prefix = `galerii/${galleryId}/`
-      const deletedObjects = await deleteWorkerPrefix(prefix, authHeader)
+      const deletedObjects = await deleteB2Prefix(prefix)
 
       const gallerySlug = String(galleryData.slug || '').trim().toLowerCase()
       const removedBytes = Math.max(0, Number(galleryData.storageBytes || 0))
