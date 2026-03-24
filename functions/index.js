@@ -1,7 +1,6 @@
 const functionsV1 = require('firebase-functions/v1')
 const admin = require('firebase-admin')
 const Stripe = require('stripe')
-const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3')
 const logger = require('firebase-functions/logger')
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { defineSecret } = require('firebase-functions/params')
@@ -22,7 +21,6 @@ const SMARTBILL_TOKEN = defineSecret('SMARTBILL_TOKEN')
 const SMARTBILL_CIF = defineSecret('SMARTBILL_CIF')
 const SMARTBILL_SERIES_NAME = defineSecret('SMARTBILL_SERIES_NAME')
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
-const B2_ENDPOINT = defineSecret('B2_ENDPOINT')
 const B2_KEY_ID = defineSecret('B2_KEY_ID')
 const B2_APPLICATION_KEY = defineSecret('B2_APPLICATION_KEY')
 const B2_BUCKET_NAME = defineSecret('B2_BUCKET_NAME')
@@ -184,65 +182,123 @@ async function verifyRequestAuth(req) {
   }
 }
 
-function getB2S3Client() {
-  const endpoint = String(B2_ENDPOINT.value() || '').trim()
-  const accessKeyId = String(B2_KEY_ID.value() || '').trim()
-  const secretAccessKey = String(B2_APPLICATION_KEY.value() || '').trim()
-  if (!endpoint || !accessKeyId || !secretAccessKey) {
+function getB2Config() {
+  const bucketName = String(B2_BUCKET_NAME.value() || '').trim()
+  const keyId = String(B2_KEY_ID.value() || '').trim()
+  const appKey = String(B2_APPLICATION_KEY.value() || '').trim()
+  if (!bucketName || !keyId || !appKey) {
     throw new HttpsError('internal', 'Lipsesc credențialele B2.')
   }
 
-  const region = endpoint.split('.')[1] || 'us-east-005'
-  return new S3Client({
-    region,
-    endpoint: `https://${endpoint}`,
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  })
-}
-
-function getB2BucketName() {
-  const bucketName = String(B2_BUCKET_NAME.value() || '').trim()
-  if (!bucketName) {
-    throw new HttpsError('internal', 'Lipsește B2_BUCKET_NAME.')
+  return {
+    bucketName,
+    keyId,
+    appKey,
   }
-  return bucketName
 }
 
 async function deleteB2Prefix(prefix) {
-  const client = getB2S3Client()
-  const bucketName = getB2BucketName()
-  let deletedTotal = 0
+  const config = getB2Config()
+  const basicAuth = Buffer.from(`${config.keyId}:${config.appKey}`).toString('base64')
+
+  const authRes = await fetch('https://api.backblazeb2.com/b2api/v4/b2_authorize_account', {
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+    },
+  })
+  const authText = await authRes.text()
+  const authData = authText ? JSON.parse(authText) : {}
+  if (!authRes.ok) {
+    throw new Error(`B2 auth failed: ${authRes.status} ${authText.slice(0, 200)}`)
+  }
+
+  const authorizationToken = String(authData?.authorizationToken || '').trim()
+  const accountId = String(authData?.accountId || '').trim()
+  const apiUrl = String(authData?.apiInfo?.storageApi?.apiUrl || authData?.apiUrl || '').trim()
+  if (!authorizationToken || !accountId || !apiUrl) {
+    throw new Error('B2 auth response incomplete.')
+  }
+
+  const bucketsRes = await fetch(`${apiUrl}/b2api/v4/b2_list_buckets`, {
+    method: 'POST',
+    headers: {
+      Authorization: authorizationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      accountId,
+      bucketName: config.bucketName,
+    }),
+  })
+  const bucketsText = await bucketsRes.text()
+  const bucketsData = bucketsText ? JSON.parse(bucketsText) : {}
+  if (!bucketsRes.ok) {
+    throw new Error(`B2 list buckets failed: ${bucketsRes.status} ${bucketsText.slice(0, 200)}`)
+  }
+
+  const bucketId = String(bucketsData?.buckets?.[0]?.bucketId || '').trim()
+  if (!bucketId) {
+    throw new Error('B2 bucket not found')
+  }
+
+  const filesToDelete = []
+  let startFileName = prefix
 
   while (true) {
-    const listResponse = await client.send(new ListObjectsV2Command({
-      Bucket: bucketName,
-      Prefix: prefix,
-      MaxKeys: 1000,
-    }))
-
-    const objects = (listResponse.Contents || [])
-      .map((item) => ({ Key: String(item?.Key || '').trim() }))
-      .filter((item) => item.Key)
-
-    if (!objects.length) break
-
-    const deleteResponse = await client.send(new DeleteObjectsCommand({
-      Bucket: bucketName,
-      Delete: {
-        Objects: objects,
-        Quiet: true,
-      },
-    }))
-
-    if (Array.isArray(deleteResponse?.Errors) && deleteResponse.Errors.length) {
-      throw new Error(`B2 bulk delete failed for ${deleteResponse.Errors.length} objects.`)
+    const listPayload = {
+      bucketId,
+      prefix,
+      maxFileCount: 1000,
+    }
+    if (startFileName) {
+      listPayload.startFileName = startFileName
     }
 
-    deletedTotal += objects.length
+    const listRes = await fetch(`${apiUrl}/b2api/v4/b2_list_file_names`, {
+      method: 'POST',
+      headers: {
+        Authorization: authorizationToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(listPayload),
+    })
+    const listText = await listRes.text()
+    const listData = listText ? JSON.parse(listText) : {}
+    if (!listRes.ok) {
+      throw new Error(`B2 list failed: ${listRes.status} ${listText.slice(0, 200)}`)
+    }
+
+    for (const file of listData?.files || []) {
+      const fileId = String(file?.fileId || '').trim()
+      const fileName = String(file?.fileName || '').trim()
+      if (fileId && fileName && fileName.startsWith(prefix)) {
+        filesToDelete.push({ fileId, fileName })
+      }
+    }
+
+    const nextFileName = String(listData?.nextFileName || '').trim()
+    if (!nextFileName) break
+    startFileName = nextFileName
+  }
+
+  let deletedTotal = 0
+  for (let index = 0; index < filesToDelete.length; index += 50) {
+    const batch = filesToDelete.slice(index, index + 50)
+    await Promise.all(batch.map(async ({ fileId, fileName }) => {
+      const deleteRes = await fetch(`${apiUrl}/b2api/v4/b2_delete_file_version`, {
+        method: 'POST',
+        headers: {
+          Authorization: authorizationToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fileId, fileName }),
+      })
+      const deleteText = await deleteRes.text()
+      if (!deleteRes.ok) {
+        throw new Error(`B2 delete failed: ${deleteRes.status} ${deleteText.slice(0, 200)}`)
+      }
+    }))
+    deletedTotal += batch.length
   }
 
   return deletedTotal
@@ -1475,7 +1531,7 @@ exports.deleteGalleryAssets = onRequest(
     region: 'us-central1',
     maxInstances: 20,
     cors: true,
-    secrets: [B2_ENDPOINT, B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME],
+    secrets: [B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME],
   },
   async (req, res) => {
     if (req.method !== 'POST') {
