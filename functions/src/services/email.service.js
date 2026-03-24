@@ -338,6 +338,79 @@ function buildContactNotificationEmailHtml({ nume = '', email = '', mesaj = '' }
   `
 }
 
+function buildSelectionSavedEmailHtml({
+  galleryName = '',
+  clientName = '',
+  favoritesCount = 0,
+  dashboardUrl = '',
+} = {}) {
+  const safeGalleryName = escapeHtml(galleryName || 'Galerie Mina')
+  const safeClientName = escapeHtml(clientName || 'Client')
+  const safeFavoritesCount = escapeHtml(String(Math.max(0, Number(favoritesCount) || 0)))
+  const safeDashboardUrl = escapeHtml(dashboardUrl)
+
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
+      <h2 style="margin:0 0 12px">Selecție nouă de favorite</h2>
+      <p style="margin:0 0 12px">Clientul <strong>${safeClientName}</strong> a actualizat selecția pentru galeria <strong>${safeGalleryName}</strong>.</p>
+      <p style="margin:0 0 16px">Total favorite selectate acum: <strong>${safeFavoritesCount}</strong>.</p>
+      <p style="margin:0 0 18px">
+        Deschide dashboard-ul Mina pentru a vedea selecția completă și pentru a continua comunicarea cu clientul.
+      </p>
+      <p style="margin:0 0 18px">
+        <a href="${safeDashboardUrl}" style="display:inline-block;padding:10px 16px;background:#111111;color:#ffffff;text-decoration:none;border-radius:8px">
+          Deschide dashboard-ul
+        </a>
+      </p>
+      <p style="margin:0;color:#666">Echipa Mina</p>
+    </div>
+  `
+}
+
+function buildGalleryLinkEmailHtml({
+  galleryName = '',
+  galleryUrl = '',
+  clientName = '',
+  photographerName = '',
+  brandingName = '',
+  galleryPassword = '',
+} = {}) {
+  const safeGalleryName = escapeHtml(galleryName || 'Galerie Mina')
+  const safeGalleryUrl = escapeHtml(galleryUrl)
+  const safeClientName = escapeHtml(clientName || 'Salut')
+  const safePhotographerName = escapeHtml(photographerName || 'Fotograful tău')
+  const safeBrandingName = escapeHtml(brandingName || photographerName || 'Mina')
+  const safeGalleryPassword = escapeHtml(galleryPassword || '')
+  const passwordBlock = safeGalleryPassword
+    ? `
+      <div style="margin:18px 0;padding:14px 16px;background:#f5f5f7;border-radius:10px;border:1px solid #e5e5ea;">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#8e8e93;margin-bottom:6px;">Parola galeriei</div>
+        <div style="font-size:18px;font-weight:600;color:#1d1d1f;">${safeGalleryPassword}</div>
+      </div>
+    `
+    : ''
+
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
+      <p style="margin:0 0 12px">Salut, ${safeClientName}</p>
+      <p style="margin:0 0 12px"><strong>${safePhotographerName}</strong> ți-a trimis galeria <strong>${safeGalleryName}</strong> prin Mina.</p>
+      <p style="margin:0 0 18px">Poți deschide galeria de aici:</p>
+      <p style="margin:0 0 18px">
+        <a href="${safeGalleryUrl}" style="display:inline-block;padding:10px 16px;background:#111111;color:#ffffff;text-decoration:none;border-radius:8px">
+          Deschide galeria
+        </a>
+      </p>
+      <p style="margin:0 0 18px;font-size:14px;color:#3a3a3c;">
+        Dacă butonul nu funcționează, folosește acest link direct:<br />
+        <a href="${safeGalleryUrl}" style="color:#1d1d1f;word-break:break-all;">${safeGalleryUrl}</a>
+      </p>
+      ${passwordBlock}
+      <p style="margin:0 0 10px;color:#666;">Cu drag,</p>
+      <p style="margin:0;font-weight:600;color:#1d1d1f;">${safeBrandingName}</p>
+    </div>
+  `
+}
+
 function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } = {}) {
   const key = sanitize(apiKey)
   if (!key) {
@@ -489,6 +562,69 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
     }
   }
 
+  async function sendSelectionSavedNotificationEmail({
+    toEmail,
+    galleryName,
+    clientName,
+    favoritesCount,
+  } = {}) {
+    const to = normalizeEmail(toEmail)
+    if (!to) {
+      return { skipped: true, reason: 'missing_to_email' }
+    }
+
+    await resend.emails.send({
+      from: fromEmail,
+      to: [to],
+      subject: `[Mina] ${sanitize(clientName || 'Client')} a selectat ${Math.max(0, Number(favoritesCount) || 0)} favorite din galeria ${sanitize(galleryName || 'Galerie')}`.slice(0, 190),
+      html: buildSelectionSavedEmailHtml({
+        galleryName,
+        clientName,
+        favoritesCount,
+        dashboardUrl,
+      }),
+    })
+
+    return {
+      skipped: false,
+      email: to,
+    }
+  }
+
+  async function sendGalleryLinkEmail({
+    toEmail,
+    clientName,
+    galleryName,
+    galleryUrl,
+    galleryPassword,
+    photographerName,
+    brandingName,
+  } = {}) {
+    const to = normalizeEmail(toEmail)
+    if (!to) {
+      return { skipped: true, reason: 'missing_to_email' }
+    }
+
+    await resend.emails.send({
+      from: fromEmail,
+      to: [to],
+      subject: `${sanitize(photographerName || brandingName || 'Fotograful tău')} ți-a trimis galeria ${sanitize(galleryName || 'Mina')}`.slice(0, 190),
+      html: buildGalleryLinkEmailHtml({
+        galleryName,
+        galleryUrl,
+        clientName,
+        photographerName,
+        brandingName,
+        galleryPassword,
+      }),
+    })
+
+    return {
+      skipped: false,
+      email: to,
+    }
+  }
+
 
   return {
     sendWelcomeEmail,
@@ -497,6 +633,8 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
     sendPaymentFailedEmail,
     sendDisputeEmail,
     sendContactNotificationEmail,
+    sendSelectionSavedNotificationEmail,
+    sendGalleryLinkEmail,
   }
 }
 

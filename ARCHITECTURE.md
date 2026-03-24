@@ -25,6 +25,8 @@
 - `deleteGalleryAssets` — șterge toate fișierele unei galerii din B2 + Firestore
 - `sendContactNotification` — email notificare contact
 - `sendWelcomeEmail` — email bun venit la înregistrare
+- `onSelectionSaved` — email automat către fotograf când clientul salvează favorite
+- `sendGalleryLink` — trimite link-ul galeriei către client prin email
 - Stripe webhooks: checkout.session.completed, subscription.deleted, payment_failed, dispute.created
 
 ## Variabile de mediu Worker (Cloudflare)
@@ -49,11 +51,11 @@
 - Galerie client publică (masonry, lightbox, favorite, download)
 - Abonamente Stripe live cu facturi SmartBill
 - Email bun venit (Resend)
+- Email notificări favorite + trimitere link galerie prin Resend
 - Pagini legale (Termeni, Confidențialitate, Refund)
 - Admin panel
 
 ## Ce lipsește ❌
 - Responsive mobil
 - Landing page actualizat
-- Email tranzacțional (link galerie către client)
 - Logică retenție galerii (grace period, cold storage, ștergere ziua 91)

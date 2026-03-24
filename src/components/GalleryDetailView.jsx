@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Masonry from 'react-masonry-css'
+import { httpsCallable } from 'firebase/functions'
 import { FolderPlus, Pencil, Settings, Trash2 } from 'lucide-react'
 import AdminSelections from './AdminSelections'
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import { functions as firebaseFunctions } from '../firebase'
 import { getGalleryPublicPath } from '../utils/publicLinks'
 
 const { media: mediaService } = getAppServices()
+const sendGalleryLinkCallable = httpsCallable(firebaseFunctions, 'sendGalleryLink')
 const DEFAULT_FOLDER_ID = 'default'
 const DEFAULT_FOLDER_NAME = 'Galeria mea'
 const uploadProgressOverlayCss = `
@@ -223,6 +226,11 @@ export default function GalleryDetailView({
   const [renamingFolderId, setRenamingFolderId] = useState(null)
   const [selectedKeys, setSelectedKeys] = useState(new Set())
   const [batchDeleting, setBatchDeleting] = useState(false)
+  const [sendLinkOpen, setSendLinkOpen] = useState(false)
+  const [sendLinkEmail, setSendLinkEmail] = useState('')
+  const [sendLinkName, setSendLinkName] = useState('')
+  const [sendLinkPassword, setSendLinkPassword] = useState('')
+  const [sendingLink, setSendingLink] = useState(false)
   const skipBlurSaveRef = useRef(false)
 
   const selectionMode = selectedKeys.size > 0
@@ -283,6 +291,8 @@ export default function GalleryDetailView({
 
   const totalPhotosCount = Array.isArray(allPozeGalerie) ? allPozeGalerie.length : pozeGalerie.length
   const hasExplicitFolders = galleryFolders.length > 0
+  const isPasswordProtected = galerie?.settings?.privacy?.passwordProtected === true
+    && String(galerie?.settings?.privacy?.passwordHash || '').trim().length > 0
   const defaultPhotosCount = hasExplicitFolders
     ? allPozeGalerie.filter((photo) => getEffectiveFolderId(photo?.folderId) === DEFAULT_FOLDER_ID).length
     : totalPhotosCount
@@ -342,6 +352,60 @@ export default function GalleryDetailView({
     setRenamingFolderId(null)
   }
 
+  const closeSendLinkModal = () => {
+    if (sendingLink) return
+    setSendLinkOpen(false)
+    setSendLinkEmail('')
+    setSendLinkName('')
+    setSendLinkPassword('')
+  }
+
+  const openSendLinkModal = () => {
+    setSendLinkOpen(true)
+    setSendLinkEmail('')
+    setSendLinkName('')
+    setSendLinkPassword('')
+  }
+
+  const handleSendGalleryLink = async () => {
+    const clientEmail = String(sendLinkEmail || '').trim()
+    const clientName = String(sendLinkName || '').trim()
+    const galleryPassword = String(sendLinkPassword || '').trim()
+
+    if (!clientEmail) {
+      alert('Introdu adresa de email a clientului.')
+      return
+    }
+    if (!clientName) {
+      alert('Introdu numele clientului.')
+      return
+    }
+    if (isPasswordProtected && !galleryPassword) {
+      alert('Introdu parola galeriei pentru email.')
+      return
+    }
+
+    setSendingLink(true)
+    try {
+      await sendGalleryLinkCallable({
+        galleryId: galerie?.id,
+        clientEmail,
+        clientName,
+        galleryPassword: isPasswordProtected ? galleryPassword : '',
+      })
+      setSendLinkOpen(false)
+      setSendLinkEmail('')
+      setSendLinkName('')
+      setSendLinkPassword('')
+      alert('Link-ul galeriei a fost trimis pe email.')
+    } catch (error) {
+      console.error('Error sending gallery link:', error)
+      alert(error?.message || 'Nu am putut trimite emailul.')
+    } finally {
+      setSendingLink(false)
+    }
+  }
+
   const saveFolderRename = async (folder) => {
     const nextName = String(editingFolderName || '').trim()
     if (!folder?.id) return
@@ -392,6 +456,13 @@ export default function GalleryDetailView({
           </button>
         </div>
         <div className="dashboard-header-actions">
+          <button
+            type="button"
+            onClick={openSendLinkModal}
+            className="dashboard-preview-btn"
+          >
+            Trimite galeria
+          </button>
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -652,6 +723,69 @@ export default function GalleryDetailView({
         }}
         onClose={() => setSettingsOpen(false)}
       />
+
+      {sendLinkOpen && (
+        <div className="gallery-config-overlay" onClick={closeSendLinkModal}>
+          <div className="gallery-config-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="gallery-config-header">
+              <h3>Trimite galeria</h3>
+              <button type="button" className="gallery-config-close" onClick={closeSendLinkModal}>
+                ×
+              </button>
+            </div>
+
+            <div className="gallery-config-body">
+              <section className="gallery-config-card">
+                <label className="gallery-config-label">Nume client</label>
+                <input
+                  type="text"
+                  value={sendLinkName}
+                  onChange={(event) => setSendLinkName(event.target.value)}
+                  className="gallery-config-input"
+                  placeholder="Ex: Ana Popescu"
+                  disabled={sendingLink}
+                />
+
+                <label className="gallery-config-label">Email client</label>
+                <input
+                  type="email"
+                  value={sendLinkEmail}
+                  onChange={(event) => setSendLinkEmail(event.target.value)}
+                  className="gallery-config-input"
+                  placeholder="client@email.com"
+                  disabled={sendingLink}
+                />
+
+                {isPasswordProtected && (
+                  <>
+                    <label className="gallery-config-label">Parola galeriei</label>
+                    <input
+                      type="text"
+                      value={sendLinkPassword}
+                      onChange={(event) => setSendLinkPassword(event.target.value)}
+                      className="gallery-config-input"
+                      placeholder="Introdu parola pe care vrei să o primească clientul"
+                      disabled={sendingLink}
+                    />
+                    <p className="gallery-config-sub-label">
+                      Galeria este protejată cu parolă, deci emailul va include și această parolă.
+                    </p>
+                  </>
+                )}
+              </section>
+            </div>
+
+            <div className="gallery-config-actions">
+              <button type="button" className="btn-secondary" onClick={closeSendLinkModal} disabled={sendingLink}>
+                Anulează
+              </button>
+              <button type="button" className="btn-primary" onClick={handleSendGalleryLink} disabled={sendingLink}>
+                {sendingLink ? 'Se trimite...' : 'Trimite email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {uploading && (
         <>

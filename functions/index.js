@@ -450,6 +450,73 @@ function sanitizeInvoiceId(value) {
   return clean.slice(0, 120)
 }
 
+function sanitizeDisplayName(value, maxLen = 120) {
+  return String(value || '').trim().slice(0, maxLen)
+}
+
+function keysFromSelection(data = {}) {
+  return Array.isArray(data?.keys)
+    ? data.keys.map((key) => String(key || '').trim()).filter(Boolean)
+    : []
+}
+
+function getSelectionCount(data = {}) {
+  const count = Number(data?.count)
+  if (Number.isFinite(count) && count >= 0) return count
+  return keysFromSelection(data).length
+}
+
+function didSelectionChange(beforeData = {}, afterData = {}) {
+  const beforeKeys = [...keysFromSelection(beforeData)].sort()
+  const afterKeys = [...keysFromSelection(afterData)].sort()
+  if (beforeKeys.length !== afterKeys.length) return true
+  for (let i = 0; i < beforeKeys.length; i += 1) {
+    if (beforeKeys[i] !== afterKeys[i]) return true
+  }
+  return false
+}
+
+function getAppOrigin() {
+  try {
+    return new URL(MINA_DASHBOARD_URL).origin
+  } catch (_) {
+    return 'https://cloudbymina.com'
+  }
+}
+
+function buildGalleryPublicUrl(galleryId, galleryData = {}) {
+  const origin = getAppOrigin()
+  const slug = String(galleryData?.slug || '').trim()
+  if (slug) return `${origin}/g/${encodeURIComponent(slug)}`
+
+  const safeGalleryId = String(galleryId || '').trim()
+  if (!safeGalleryId) return origin
+  return `${origin}/gallery/${encodeURIComponent(safeGalleryId)}`
+}
+
+async function getPhotographerProfile(uid) {
+  const normalizedUid = String(uid || '').trim()
+  if (!normalizedUid) return {}
+
+  const [userSnap, profileSnap, cardProfileSnap] = await Promise.all([
+    db.collection('users').doc(normalizedUid).get().catch(() => null),
+    db.collection('profiles').doc(normalizedUid).get().catch(() => null),
+    db.collection('users').doc(normalizedUid).collection('profile').doc('main').get().catch(() => null),
+  ])
+
+  const userData = userSnap?.exists ? (userSnap.data() || {}) : {}
+  const profileData = profileSnap?.exists ? (profileSnap.data() || {}) : {}
+  const cardProfileData = cardProfileSnap?.exists ? (cardProfileSnap.data() || {}) : {}
+
+  return {
+    email: normalizeEmail(userData.email || profileData.emailContact || cardProfileData.email || ''),
+    photographerName:
+      sanitizeDisplayName(userData.name || profileData.brandName || cardProfileData.numeBrand || cardProfileData.name || '') || 'Fotograf',
+    brandingName:
+      sanitizeDisplayName(profileData.brandName || cardProfileData.numeBrand || userData.brandName || userData.name || '') || 'Mina',
+  }
+}
+
 function resolveUidFromSessionPayload(session = {}) {
   return (
     session.client_reference_id ||
@@ -1305,6 +1372,68 @@ exports.sendContactNotification = onCall(
   }
 )
 
+exports.onSelectionSaved = functionsV1
+  .region('us-central1')
+  .runWith({ secrets: ['RESEND_API_KEY'], maxInstances: 20 })
+  .firestore.document('gallerySelections/{galleryId}/clients/{clientId}')
+  .onWrite(async (change, context) => {
+    const galleryId = String(context.params?.galleryId || '').trim()
+    const clientId = String(context.params?.clientId || '').trim()
+    const beforeData = change.before.exists ? (change.before.data() || {}) : {}
+    const afterData = change.after.exists ? (change.after.data() || {}) : {}
+
+    if (!galleryId || !clientId) return null
+    if (!change.after.exists) return null
+    if (!didSelectionChange(beforeData, afterData)) return null
+
+    const favoritesCount = getSelectionCount(afterData)
+    if (favoritesCount <= 0) return null
+
+    try {
+      const gallerySnap = await db.collection('galerii').doc(galleryId).get()
+      if (!gallerySnap.exists) {
+        logger.warn('onSelectionSaved skipped: gallery missing', { galleryId, clientId })
+        return null
+      }
+
+      const galleryData = gallerySnap.data() || {}
+      const ownerUid = String(galleryData.userId || '').trim()
+      if (!ownerUid) {
+        logger.warn('onSelectionSaved skipped: gallery owner missing', { galleryId, clientId })
+        return null
+      }
+
+      const photographer = await getPhotographerProfile(ownerUid)
+      if (!photographer.email) {
+        logger.warn('onSelectionSaved skipped: photographer email missing', { galleryId, clientId, ownerUid })
+        return null
+      }
+
+      const result = await getEmailService().sendSelectionSavedNotificationEmail({
+        toEmail: photographer.email,
+        galleryName: sanitizeDisplayName(galleryData.nume || 'Galerie Mina', 160),
+        clientName: sanitizeDisplayName(afterData.clientName || clientId, 120),
+        favoritesCount,
+      })
+
+      logger.info('onSelectionSaved email sent', {
+        galleryId,
+        clientId,
+        ownerUid,
+        favoritesCount,
+        ...result,
+      })
+    } catch (error) {
+      logger.error('onSelectionSaved failed', {
+        galleryId,
+        clientId,
+        message: error?.message || String(error),
+      })
+    }
+
+    return null
+  })
+
 exports.sendWelcomeEmail = functionsV1
   .region('europe-west1')
   .runWith({ secrets: ['RESEND_API_KEY'] })
@@ -1349,6 +1478,78 @@ exports.sendWelcomeEmail = functionsV1
       return null
     }
   })
+
+exports.sendGalleryLink = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 20,
+    secrets: [RESEND_API_KEY],
+  },
+  async (request) => {
+    const uid = String(request.auth?.uid || '').trim()
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat.')
+    }
+
+    const galleryId = String(request.data?.galleryId || '').trim()
+    const clientEmail = normalizeEmail(request.data?.clientEmail)
+    const clientName = sanitizeDisplayName(request.data?.clientName, 120)
+    const galleryPassword = String(request.data?.galleryPassword || '').trim().slice(0, 120)
+
+    if (!galleryId || galleryId.includes('/')) {
+      throw new HttpsError('invalid-argument', 'galleryId invalid.')
+    }
+    if (!clientEmail || !isValidEmail(clientEmail)) {
+      throw new HttpsError('invalid-argument', 'Adresa de email a clientului este invalidă.')
+    }
+    if (!clientName) {
+      throw new HttpsError('invalid-argument', 'Numele clientului este obligatoriu.')
+    }
+
+    const gallerySnap = await db.collection('galerii').doc(galleryId).get()
+    if (!gallerySnap.exists) {
+      throw new HttpsError('not-found', 'Galeria nu există.')
+    }
+
+    const galleryData = gallerySnap.data() || {}
+    const ownerUid = String(galleryData.userId || '').trim()
+    if (!ownerUid || ownerUid !== uid) {
+      throw new HttpsError('permission-denied', 'Nu ai permisiunea să trimiți această galerie.')
+    }
+
+    const isPasswordProtected = galleryData?.settings?.privacy?.passwordProtected === true
+      && String(galleryData?.settings?.privacy?.passwordHash || '').trim().length > 0
+    if (isPasswordProtected && !galleryPassword) {
+      throw new HttpsError('invalid-argument', 'Introdu parola galeriei pentru email.')
+    }
+
+    const photographer = await getPhotographerProfile(uid)
+    const galleryUrl = buildGalleryPublicUrl(galleryId, galleryData)
+
+    const result = await getEmailService().sendGalleryLinkEmail({
+      toEmail: clientEmail,
+      clientName,
+      galleryName: sanitizeDisplayName(galleryData.nume || 'Galerie Mina', 160),
+      galleryUrl,
+      galleryPassword: isPasswordProtected ? galleryPassword : '',
+      photographerName: photographer.photographerName,
+      brandingName: photographer.brandingName,
+    })
+
+    logger.info('sendGalleryLink sent', {
+      uid,
+      galleryId,
+      clientEmail,
+      ...result,
+    })
+
+    return {
+      ok: true,
+      sent: !result?.skipped,
+      galleryUrl,
+    }
+  }
+)
 
 exports.createCheckoutSession = onCall(
   {

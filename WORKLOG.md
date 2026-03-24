@@ -91,3 +91,11 @@
 
 - Creat `ARCHITECTURE.md` în rădăcina proiectului ca referință de arhitectură pentru începutul sesiunilor viitoare
 - Documentate rutele principale, storage-ul B2, Worker-ul, Functions, secretele și planurile Stripe live
+
+### 2026-03-25 — Email notificări selecții + trimitere link galerie
+
+- Adăugat trigger Firestore `onSelectionSaved` pentru `gallerySelections/{galleryId}/clients/{clientId}` care trimite email către fotograf prin Resend când clientul salvează favorite
+- Adăugată funcția callable `sendGalleryLink` care validează ownership-ul galeriei și trimite clientului link-ul galeriei pe email
+- Extins `functions/src/services/email.service.js` cu template-uri HTML în română pentru notificarea selecțiilor și trimiterea link-ului galeriei
+- Adăugat în `GalleryDetailView.jsx` butonul `Trimite galeria` și modalul cu nume, email și parolă pentru galeriile protejate
+- Actualizat `ARCHITECTURE.md` pentru noile funcții și pentru statusul emailurilor tranzacționale
