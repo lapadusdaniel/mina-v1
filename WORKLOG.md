@@ -86,3 +86,8 @@
   apel `deleteGalleryAssets` `200 {"ok":true,"galleryId":"...","deleted":1}`,
   verificare B2 după apel: `0` fișiere rămase sub prefix
 - Rezultat: ștergerea galeriei din B2 funcționează acum corect; eroarea `bad_auth_token` a fost eliminată
+
+### 2026-03-25 — Documentație arhitectură
+
+- Creat `ARCHITECTURE.md` în rădăcina proiectului ca referință de arhitectură pentru începutul sesiunilor viitoare
+- Documentate rutele principale, storage-ul B2, Worker-ul, Functions, secretele și planurile Stripe live
