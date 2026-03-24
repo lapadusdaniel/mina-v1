@@ -125,3 +125,12 @@
 - Mărit icon-urile la `24px` și ajustat label-urile pe stilul dashboard (`DM Sans`, `12px`, `#6e6e73`)
 - Înlocuit separatorul simplu cu un divider centrat, discret, pentru textul `sau trimite prin email`
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Redesign modal „Trimite galeria” pe tabs
+
+- Reorganizat `src/components/GalleryDetailView.jsx` pe 2 tab-uri: `Link & Social` și `Email`
+- În tab-ul `Link & Social`: URL readonly al galeriei cu buton `Copiază`, plus butoanele `WhatsApp` și `Messenger`
+- În tab-ul `Email`: câmpurile `Nume client`, `Email client` și buton full-width `Trimite email`
+- Păstrată logica existentă pentru copy link, WhatsApp, Messenger și trimitere email; la galeriile protejate, parola se completează în tab-ul `Email` și este reutilizată pentru email / WhatsApp
+- Eliminat stilul inline anterior pentru share buttons și înlocuit cu clase dedicate în modal
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

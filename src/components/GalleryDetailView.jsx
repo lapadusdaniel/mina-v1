@@ -93,21 +93,93 @@ const uploadProgressOverlayCss = `
   }
 `
 const shareOptionsModalCss = `
-  .gallery-share-actions {
+  .gallery-share-tabs {
     display: flex;
-    gap: 12px;
+    gap: 24px;
     margin-bottom: 24px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
-  .gallery-share-action {
+  .gallery-share-tab {
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    padding: 0 0 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1;
+    color: #a0a0a7;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .gallery-share-tab.is-active {
+    color: #1a1a1f;
+    border-bottom-color: #1a1a1f;
+  }
+
+  .gallery-share-link-panel,
+  .gallery-share-email-panel {
+    display: grid;
+    gap: 16px;
+  }
+
+  .gallery-share-url-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f4f5f8;
+    border-radius: 10px;
+    padding: 8px;
+  }
+
+  .gallery-share-url-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: #1a1a1f;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 4px 8px;
+  }
+
+  .gallery-share-url-input:focus {
+    outline: none;
+  }
+
+  .gallery-share-copy-btn {
+    border: none;
+    border-radius: 999px;
+    background: #1a1a1f;
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 8px 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .gallery-share-copy-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .gallery-share-social-grid {
+    display: flex;
+    gap: 12px;
+  }
+
+  .gallery-share-social-btn {
     flex: 1 1 0;
     min-width: 0;
     border: none;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #f4f5f8;
-    padding: 16px;
+    padding: 14px;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 10px;
@@ -115,38 +187,42 @@ const shareOptionsModalCss = `
     transition: background 0.15s ease;
   }
 
-  .gallery-share-action:hover {
+  .gallery-share-social-btn:hover {
     background: #e8e8ed;
   }
 
-  .gallery-share-action:disabled {
+  .gallery-share-social-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
 
-  .gallery-share-action__icon {
+  .gallery-share-social-btn__icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
     color: #1a1a1f;
     flex-shrink: 0;
   }
 
-  .gallery-share-action__label {
+  .gallery-share-social-btn__icon--messenger {
     font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
-    line-height: 1.2;
-    color: #6e6e73;
-    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .gallery-share-social-btn__label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    line-height: 1;
+    color: #1a1a1f;
   }
 
   .gallery-share-divider {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin: 0 0 16px;
+    margin: 4px 0 0;
   }
 
   .gallery-share-divider::before,
@@ -165,9 +241,33 @@ const shareOptionsModalCss = `
     white-space: nowrap;
   }
 
+  .gallery-share-email-submit {
+    width: 100%;
+    border: none;
+    border-radius: 10px;
+    background: #1a1a1f;
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 14px 16px;
+    cursor: pointer;
+  }
+
+  .gallery-share-email-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   @media (max-width: 720px) {
-    .gallery-share-actions {
+    .gallery-share-social-grid,
+    .gallery-share-url-row {
       flex-direction: column;
+      align-items: stretch;
+    }
+
+    .gallery-share-copy-btn {
+      width: 100%;
     }
   }
 `
@@ -310,6 +410,7 @@ export default function GalleryDetailView({
   const [sendLinkName, setSendLinkName] = useState('')
   const [sendLinkPassword, setSendLinkPassword] = useState('')
   const [sendingLink, setSendingLink] = useState(false)
+  const [sendLinkTab, setSendLinkTab] = useState('link')
   const [copyLinkSuccess, setCopyLinkSuccess] = useState(false)
   const skipBlurSaveRef = useRef(false)
   const copyLinkTimeoutRef = useRef(null)
@@ -443,6 +544,7 @@ export default function GalleryDetailView({
   const closeSendLinkModal = () => {
     if (sendingLink) return
     setSendLinkOpen(false)
+    setSendLinkTab('link')
     setSendLinkEmail('')
     setSendLinkName('')
     setSendLinkPassword('')
@@ -455,6 +557,7 @@ export default function GalleryDetailView({
 
   const openSendLinkModal = () => {
     setSendLinkOpen(true)
+    setSendLinkTab('link')
     setSendLinkEmail('')
     setSendLinkName('')
     setSendLinkPassword('')
@@ -472,7 +575,8 @@ export default function GalleryDetailView({
   const ensureProtectedSharePassword = () => {
     const password = String(sendLinkPassword || '').trim()
     if (isPasswordProtected && !password) {
-      alert('Introdu parola galeriei în formularul de mai jos înainte să distribui linkul.')
+      setSendLinkTab('email')
+      alert('Introdu parola galeriei în tabul Email înainte să distribui linkul prin WhatsApp.')
       return ''
     }
     return password
@@ -891,85 +995,126 @@ export default function GalleryDetailView({
 
             <div className="gallery-config-body">
               <section className="gallery-config-card">
-                <div className="gallery-share-actions">
+                <div className="gallery-share-tabs" role="tablist" aria-label="Opțiuni trimitere galerie">
                   <button
                     type="button"
-                    onClick={handleCopyGalleryLink}
-                    className="gallery-share-action"
-                    disabled={sendingLink}
+                    className={`gallery-share-tab ${sendLinkTab === 'link' ? 'is-active' : ''}`}
+                    onClick={() => setSendLinkTab('link')}
+                    role="tab"
+                    aria-selected={sendLinkTab === 'link'}
                   >
-                    <span className="gallery-share-action__icon">
-                      <LinkIcon size={24} />
-                    </span>
-                    <span className="gallery-share-action__label">{copyLinkSuccess ? 'Copiat!' : 'Copy link'}</span>
+                    Link & Social
                   </button>
-
                   <button
                     type="button"
-                    onClick={handleShareWhatsApp}
-                    className="gallery-share-action"
-                    disabled={sendingLink}
+                    className={`gallery-share-tab ${sendLinkTab === 'email' ? 'is-active' : ''}`}
+                    onClick={() => setSendLinkTab('email')}
+                    role="tab"
+                    aria-selected={sendLinkTab === 'email'}
                   >
-                    <span className="gallery-share-action__icon">
-                      <MessageCircle size={24} />
-                    </span>
-                    <span className="gallery-share-action__label">WhatsApp</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleShareMessenger}
-                    className="gallery-share-action"
-                    disabled={sendingLink}
-                  >
-                    <span className="gallery-share-action__icon" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1 }}>
-                      f
-                    </span>
-                    <span className="gallery-share-action__label">Messenger</span>
+                    Email
                   </button>
                 </div>
 
-                <div className="gallery-share-divider">
-                  <span className="gallery-share-divider__text">
-                    sau trimite prin email
-                  </span>
-                </div>
+                {sendLinkTab === 'link' ? (
+                  <div className="gallery-share-link-panel">
+                    <div className="gallery-share-url-row">
+                      <input
+                        type="text"
+                        readOnly
+                        value={galleryShareUrl}
+                        className="gallery-share-url-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopyGalleryLink}
+                        className="gallery-share-copy-btn"
+                        disabled={sendingLink}
+                      >
+                        {copyLinkSuccess ? 'Copiat!' : 'Copiază'}
+                      </button>
+                    </div>
 
-                <label className="gallery-config-label">Nume client</label>
-                <input
-                  type="text"
-                  value={sendLinkName}
-                  onChange={(event) => setSendLinkName(event.target.value)}
-                  className="gallery-config-input"
-                  placeholder="Ex: Ana Popescu"
-                  disabled={sendingLink}
-                />
+                    <div className="gallery-share-social-grid">
+                      <button
+                        type="button"
+                        onClick={handleShareWhatsApp}
+                        className="gallery-share-social-btn"
+                        disabled={sendingLink}
+                      >
+                        <span className="gallery-share-social-btn__icon">
+                          <MessageCircle size={20} />
+                        </span>
+                        <span className="gallery-share-social-btn__label">WhatsApp</span>
+                      </button>
 
-                <label className="gallery-config-label">Email client</label>
-                <input
-                  type="email"
-                  value={sendLinkEmail}
-                  onChange={(event) => setSendLinkEmail(event.target.value)}
-                  className="gallery-config-input"
-                  placeholder="client@email.com"
-                  disabled={sendingLink}
-                />
+                      <button
+                        type="button"
+                        onClick={handleShareMessenger}
+                        className="gallery-share-social-btn"
+                        disabled={sendingLink}
+                      >
+                        <span className="gallery-share-social-btn__icon gallery-share-social-btn__icon--messenger">
+                          f
+                        </span>
+                        <span className="gallery-share-social-btn__label">Messenger</span>
+                      </button>
+                    </div>
 
-                {isPasswordProtected && (
-                  <>
-                    <label className="gallery-config-label">Parola galeriei</label>
+                    <div className="gallery-share-divider">
+                      <span className="gallery-share-divider__text">
+                        sau trimite prin email
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="gallery-share-email-panel">
+                    <label className="gallery-config-label">Nume client</label>
                     <input
                       type="text"
-                      value={sendLinkPassword}
-                      onChange={(event) => setSendLinkPassword(event.target.value)}
+                      value={sendLinkName}
+                      onChange={(event) => setSendLinkName(event.target.value)}
                       className="gallery-config-input"
-                      placeholder="Introdu parola pe care vrei să o primească clientul"
+                      placeholder="Ex: Ana Popescu"
                       disabled={sendingLink}
                     />
-                    <p className="gallery-config-sub-label">
-                      Galeria este protejată cu parolă, deci emailul va include și această parolă.
-                    </p>
-                  </>
+
+                    <label className="gallery-config-label">Email client</label>
+                    <input
+                      type="email"
+                      value={sendLinkEmail}
+                      onChange={(event) => setSendLinkEmail(event.target.value)}
+                      className="gallery-config-input"
+                      placeholder="client@email.com"
+                      disabled={sendingLink}
+                    />
+
+                    {isPasswordProtected && (
+                      <>
+                        <label className="gallery-config-label">Parola galeriei</label>
+                        <input
+                          type="text"
+                          value={sendLinkPassword}
+                          onChange={(event) => setSendLinkPassword(event.target.value)}
+                          className="gallery-config-input"
+                          placeholder="Introdu parola pe care vrei să o primească clientul"
+                          disabled={sendingLink}
+                        />
+                        <p className="gallery-config-sub-label">
+                          Galeria este protejată cu parolă, deci emailul și mesajul WhatsApp vor include și această parolă.
+                        </p>
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      className="gallery-share-email-submit"
+                      onClick={handleSendGalleryLink}
+                      disabled={sendingLink}
+                    >
+                      {sendingLink ? 'Se trimite...' : 'Trimite email'}
+                    </button>
+                  </div>
                 )}
               </section>
             </div>
@@ -977,9 +1122,6 @@ export default function GalleryDetailView({
             <div className="gallery-config-actions">
               <button type="button" className="btn-secondary" onClick={closeSendLinkModal} disabled={sendingLink}>
                 Anulează
-              </button>
-              <button type="button" className="btn-primary" onClick={handleSendGalleryLink} disabled={sendingLink}>
-                {sendingLink ? 'Se trimite...' : 'Trimite email'}
               </button>
             </div>
           </div>
