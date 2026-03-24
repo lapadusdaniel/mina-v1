@@ -117,3 +117,11 @@
 - `Messenger` folosește fallback-ul `facebook.com/sharer/sharer.php` pentru distribuirea rapidă a linkului
 - Păstrat formularul existent de email sub un separator `sau trimite prin email`
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Restilizare butoane share în modalul galeriei
+
+- Refăcut layout-ul pentru cele 3 butoane de share din `src/components/GalleryDetailView.jsx` într-un row egal, cu icon sus și label jos
+- Aplicat stil flat: fundal `#f4f5f8`, fără border, radius `12px`, padding `16px`, hover `#e8e8ed`
+- Mărit icon-urile la `24px` și ajustat label-urile pe stilul dashboard (`DM Sans`, `12px`, `#6e6e73`)
+- Înlocuit separatorul simplu cu un divider centrat, discret, pentru textul `sau trimite prin email`
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

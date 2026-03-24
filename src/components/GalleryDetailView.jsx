@@ -92,6 +92,85 @@ const uploadProgressOverlayCss = `
     }
   }
 `
+const shareOptionsModalCss = `
+  .gallery-share-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .gallery-share-action {
+    flex: 1 1 0;
+    min-width: 0;
+    border: none;
+    border-radius: 12px;
+    background: #f4f5f8;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .gallery-share-action:hover {
+    background: #e8e8ed;
+  }
+
+  .gallery-share-action:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .gallery-share-action__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: #1a1a1f;
+    flex-shrink: 0;
+  }
+
+  .gallery-share-action__label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #6e6e73;
+    text-align: center;
+  }
+
+  .gallery-share-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 16px;
+  }
+
+  .gallery-share-divider::before,
+  .gallery-share-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  .gallery-share-divider__text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    line-height: 1;
+    color: #a0a0a7;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 720px) {
+    .gallery-share-actions {
+      flex-direction: column;
+    }
+  }
+`
 
 function GalleryPhotoTile({ photo, onDeletePoza, isSelected, onToggleSelect, selectionMode }) {
   const [thumbUrl, setThumbUrl] = useState(photo?.url || null)
@@ -802,6 +881,7 @@ export default function GalleryDetailView({
       {sendLinkOpen && (
         <div className="gallery-config-overlay" onClick={closeSendLinkModal}>
           <div className="gallery-config-modal" onClick={(event) => event.stopPropagation()}>
+            <style>{shareOptionsModalCss}</style>
             <div className="gallery-config-header">
               <h3>Trimite galeria</h3>
               <button type="button" className="gallery-config-close" onClick={closeSendLinkModal}>
@@ -811,81 +891,48 @@ export default function GalleryDetailView({
 
             <div className="gallery-config-body">
               <section className="gallery-config-card">
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                    gap: 10,
-                  }}
-                >
+                <div className="gallery-share-actions">
                   <button
                     type="button"
                     onClick={handleCopyGalleryLink}
-                    className="dashboard-preview-btn"
+                    className="gallery-share-action"
                     disabled={sendingLink}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                    }}
                   >
-                    <LinkIcon size={15} />
-                    <span>{copyLinkSuccess ? 'Copiat!' : 'Copy link'}</span>
+                    <span className="gallery-share-action__icon">
+                      <LinkIcon size={24} />
+                    </span>
+                    <span className="gallery-share-action__label">{copyLinkSuccess ? 'Copiat!' : 'Copy link'}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleShareWhatsApp}
-                    className="dashboard-preview-btn"
+                    className="gallery-share-action"
                     disabled={sendingLink}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                    }}
                   >
-                    <MessageCircle size={15} />
-                    <span>WhatsApp</span>
+                    <span className="gallery-share-action__icon">
+                      <MessageCircle size={24} />
+                    </span>
+                    <span className="gallery-share-action__label">WhatsApp</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleShareMessenger}
-                    className="dashboard-preview-btn"
+                    className="gallery-share-action"
                     disabled={sendingLink}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                    }}
                   >
-                    <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}>f</span>
-                    <span>Messenger</span>
+                    <span className="gallery-share-action__icon" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1 }}>
+                      f
+                    </span>
+                    <span className="gallery-share-action__label">Messenger</span>
                   </button>
                 </div>
 
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    margin: '18px 0 16px',
-                  }}
-                >
-                  <div style={{ flex: 1, height: 1, background: 'rgba(0, 0, 0, 0.08)' }} />
-                  <span className="gallery-config-sub-label" style={{ margin: 0 }}>
+                <div className="gallery-share-divider">
+                  <span className="gallery-share-divider__text">
                     sau trimite prin email
                   </span>
-                  <div style={{ flex: 1, height: 1, background: 'rgba(0, 0, 0, 0.08)' }} />
                 </div>
 
                 <label className="gallery-config-label">Nume client</label>
