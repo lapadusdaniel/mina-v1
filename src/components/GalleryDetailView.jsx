@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Masonry from 'react-masonry-css'
 import { httpsCallable } from 'firebase/functions'
-import { FolderPlus, Pencil, Settings, Trash2 } from 'lucide-react'
+import { FolderPlus, Link as LinkIcon, MessageCircle, Pencil, Settings, Trash2 } from 'lucide-react'
 import AdminSelections from './AdminSelections'
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { functions as firebaseFunctions } from '../firebase'
-import { getGalleryPublicPath } from '../utils/publicLinks'
+import { getGalleryPublicPath, getGalleryPublicUrl } from '../utils/publicLinks'
 
 const { media: mediaService } = getAppServices()
 const sendGalleryLinkCallable = httpsCallable(firebaseFunctions, 'sendGalleryLink')
@@ -231,7 +231,9 @@ export default function GalleryDetailView({
   const [sendLinkName, setSendLinkName] = useState('')
   const [sendLinkPassword, setSendLinkPassword] = useState('')
   const [sendingLink, setSendingLink] = useState(false)
+  const [copyLinkSuccess, setCopyLinkSuccess] = useState(false)
   const skipBlurSaveRef = useRef(false)
+  const copyLinkTimeoutRef = useRef(null)
 
   const selectionMode = selectedKeys.size > 0
 
@@ -293,6 +295,7 @@ export default function GalleryDetailView({
   const hasExplicitFolders = galleryFolders.length > 0
   const isPasswordProtected = galerie?.settings?.privacy?.passwordProtected === true
     && String(galerie?.settings?.privacy?.passwordHash || '').trim().length > 0
+  const galleryShareUrl = useMemo(() => getGalleryPublicUrl(galerie), [galerie])
   const defaultPhotosCount = hasExplicitFolders
     ? allPozeGalerie.filter((photo) => getEffectiveFolderId(photo?.folderId) === DEFAULT_FOLDER_ID).length
     : totalPhotosCount
@@ -341,6 +344,12 @@ export default function GalleryDetailView({
     }
   }, [editingFolderId, galleryFolders, showDefaultTab])
 
+  useEffect(() => () => {
+    if (copyLinkTimeoutRef.current) {
+      window.clearTimeout(copyLinkTimeoutRef.current)
+    }
+  }, [])
+
   const startFolderRename = (folder) => {
     setEditingFolderId(folder.id)
     setEditingFolderName(folder.name || '')
@@ -358,6 +367,11 @@ export default function GalleryDetailView({
     setSendLinkEmail('')
     setSendLinkName('')
     setSendLinkPassword('')
+    setCopyLinkSuccess(false)
+    if (copyLinkTimeoutRef.current) {
+      window.clearTimeout(copyLinkTimeoutRef.current)
+      copyLinkTimeoutRef.current = null
+    }
   }
 
   const openSendLinkModal = () => {
@@ -365,6 +379,67 @@ export default function GalleryDetailView({
     setSendLinkEmail('')
     setSendLinkName('')
     setSendLinkPassword('')
+    setCopyLinkSuccess(false)
+  }
+
+  const ensureGalleryShareUrl = () => {
+    if (!galleryShareUrl) {
+      alert('Linkul galeriei nu este disponibil încă.')
+      return ''
+    }
+    return galleryShareUrl
+  }
+
+  const ensureProtectedSharePassword = () => {
+    const password = String(sendLinkPassword || '').trim()
+    if (isPasswordProtected && !password) {
+      alert('Introdu parola galeriei în formularul de mai jos înainte să distribui linkul.')
+      return ''
+    }
+    return password
+  }
+
+  const handleCopyGalleryLink = async () => {
+    const shareUrl = ensureGalleryShareUrl()
+    if (!shareUrl) return
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+      } else {
+        throw new Error('Clipboard API unavailable')
+      }
+      setCopyLinkSuccess(true)
+      if (copyLinkTimeoutRef.current) {
+        window.clearTimeout(copyLinkTimeoutRef.current)
+      }
+      copyLinkTimeoutRef.current = window.setTimeout(() => {
+        setCopyLinkSuccess(false)
+        copyLinkTimeoutRef.current = null
+      }, 2000)
+    } catch (_) {
+      window.prompt('Copiază linkul galeriei:', shareUrl)
+    }
+  }
+
+  const handleShareWhatsApp = () => {
+    const shareUrl = ensureGalleryShareUrl()
+    if (!shareUrl) return
+
+    const password = ensureProtectedSharePassword()
+    if (isPasswordProtected && !password) return
+
+    const message = isPasswordProtected
+      ? `Bună! Găsești galeria ta foto aici: ${shareUrl}\nParola galeriei: ${password}`
+      : `Bună! Găsești galeria ta foto aici: ${shareUrl}`
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleShareMessenger = () => {
+    const shareUrl = ensureGalleryShareUrl()
+    if (!shareUrl) return
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`, '_blank', 'noopener,noreferrer')
   }
 
   const handleSendGalleryLink = async () => {
@@ -736,6 +811,83 @@ export default function GalleryDetailView({
 
             <div className="gallery-config-body">
               <section className="gallery-config-card">
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                    gap: 10,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={handleCopyGalleryLink}
+                    className="dashboard-preview-btn"
+                    disabled={sendingLink}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <LinkIcon size={15} />
+                    <span>{copyLinkSuccess ? 'Copiat!' : 'Copy link'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleShareWhatsApp}
+                    className="dashboard-preview-btn"
+                    disabled={sendingLink}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <MessageCircle size={15} />
+                    <span>WhatsApp</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleShareMessenger}
+                    className="dashboard-preview-btn"
+                    disabled={sendingLink}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}>f</span>
+                    <span>Messenger</span>
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    margin: '18px 0 16px',
+                  }}
+                >
+                  <div style={{ flex: 1, height: 1, background: 'rgba(0, 0, 0, 0.08)' }} />
+                  <span className="gallery-config-sub-label" style={{ margin: 0 }}>
+                    sau trimite prin email
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(0, 0, 0, 0.08)' }} />
+                </div>
+
                 <label className="gallery-config-label">Nume client</label>
                 <input
                   type="text"

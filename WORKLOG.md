@@ -99,3 +99,21 @@
 - Extins `functions/src/services/email.service.js` cu template-uri HTML în română pentru notificarea selecțiilor și trimiterea link-ului galeriei
 - Adăugat în `GalleryDetailView.jsx` butonul `Trimite galeria` și modalul cu nume, email și parolă pentru galeriile protejate
 - Actualizat `ARCHITECTURE.md` pentru noile funcții și pentru statusul emailurilor tranzacționale
+
+### 2026-03-25 — Merge și redeploy hosting din repo-ul principal
+
+- Verificat rularea din `/Users/daniellapadus/Desktop/mina-v1`, existența fișierului `.env` și prezența `VITE_FIREBASE_API_KEY`
+- Eliberat branch-ul `main` din worktree-ul auxiliar și făcut stash pentru modificările locale nelegate din repo-ul principal
+- Mersat `codex/feature/email-notifications-b2` în `main` prin fast-forward
+- Rulat `npm run build` cu succes în repo-ul principal
+- Rulat `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting` cu succes
+- Hosting live după redeploy: `https://mina-v1-aea51.web.app`
+
+### 2026-03-25 — Share options în modalul „Trimite galeria”
+
+- Extins `src/components/GalleryDetailView.jsx` cu 3 acțiuni rapide în modal: `Copy link`, `WhatsApp`, `Messenger`
+- `Copy link` copiază URL-ul public al galeriei în clipboard și afișează confirmarea `Copiat!` timp de 2 secunde
+- `WhatsApp` deschide mesaj precompletat în română cu linkul galeriei; pentru galeriile protejate include și parola introdusă în formular
+- `Messenger` folosește fallback-ul `facebook.com/sharer/sharer.php` pentru distribuirea rapidă a linkului
+- Păstrat formularul existent de email sub un separator `sau trimite prin email`
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
