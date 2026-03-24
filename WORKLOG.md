@@ -29,3 +29,9 @@
 - Adăugate secrete Firebase Functions dedicate pentru B2: `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET_NAME`
 - `deleteGalleryAssets` șterge acum direct din bucket-ul `mina-photos` prin AWS S3 SDK configurat pe endpoint-ul `s3.us-east-005.backblazeb2.com`
 - Deploy-ul pentru această modificare se face doar cu `firebase deploy --only functions`, conform cerinței taskului
+
+### 2026-03-24 — Force redeploy deleteGalleryAssets cu secrete B2
+
+- Verificat că fixul de cod pentru `deleteGalleryAssets` este în commitul `fafa248`, unde `functions/index.js` folosește `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET_NAME`
+- Rulate din nou `npx firebase-tools deploy --only functions --project mina-v1-aea51 --force` și `npx firebase-tools functions:log --only deleteGalleryAssets --project mina-v1-aea51`
+- Rezultat: deploy-ul Functions a trecut, dar `deleteGalleryAssets` a fost marcat `Skipped (No changes detected)`; output-ul `functions:log` afișează în continuare doar un audit log vechi din `2026-03-23` cu referințe `R2_*`, nu un log nou de runtime
