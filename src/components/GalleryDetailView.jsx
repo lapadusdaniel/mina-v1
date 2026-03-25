@@ -434,6 +434,7 @@ export default function GalleryDetailView({
   const [renamingFolderId, setRenamingFolderId] = useState(null)
   const [draggedFolderId, setDraggedFolderId] = useState(null)
   const [dragOverFolderId, setDragOverFolderId] = useState(null)
+  const [dragOverPosition, setDragOverPosition] = useState(null)
   const [selectedKeys, setSelectedKeys] = useState(new Set())
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [sendLinkOpen, setSendLinkOpen] = useState(false)
@@ -582,13 +583,26 @@ export default function GalleryDetailView({
     }
     setDraggedFolderId(folderId)
     setDragOverFolderId(null)
+    setDragOverPosition(null)
   }
 
   const handleFolderDragOver = (event, folderId) => {
     if (!draggedFolderId || !folderId || draggedFolderId === folderId) return
     event.preventDefault()
-    if (dragOverFolderId !== folderId) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const nextPosition = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+    if (dragOverFolderId !== folderId || dragOverPosition !== nextPosition) {
       setDragOverFolderId(folderId)
+      setDragOverPosition(nextPosition)
+    }
+  }
+
+  const handleFolderDragLeave = (event, folderId) => {
+    const nextTarget = event.relatedTarget
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return
+    if (dragOverFolderId === folderId) {
+      setDragOverFolderId(null)
+      setDragOverPosition(null)
     }
   }
 
@@ -596,14 +610,17 @@ export default function GalleryDetailView({
     event.preventDefault()
     if (!draggedFolderId || !folderId || draggedFolderId === folderId) {
       setDragOverFolderId(null)
+      setDragOverPosition(null)
       return
     }
 
     const activeDraggedFolderId = draggedFolderId
+    const activeDragOverPosition = dragOverPosition || 'before'
     setDragOverFolderId(null)
+    setDragOverPosition(null)
     setDraggedFolderId(null)
     try {
-      await onReorderFolders?.(activeDraggedFolderId, folderId)
+      await onReorderFolders?.(activeDraggedFolderId, folderId, activeDragOverPosition)
     } catch (_) {
     }
   }
@@ -611,6 +628,7 @@ export default function GalleryDetailView({
   const handleFolderDragEnd = () => {
     setDraggedFolderId(null)
     setDragOverFolderId(null)
+    setDragOverPosition(null)
   }
 
   const closeSendLinkModal = () => {
@@ -890,19 +908,49 @@ export default function GalleryDetailView({
               draggable={editingFolderId !== folder.id}
               onDragStart={(event) => handleFolderDragStart(event, folder.id)}
               onDragOver={(event) => handleFolderDragOver(event, folder.id)}
+              onDragLeave={(event) => handleFolderDragLeave(event, folder.id)}
               onDrop={(event) => handleFolderDrop(event, folder.id)}
               onDragEnd={handleFolderDragEnd}
               style={{
                 display: 'inline-flex',
+                position: 'relative',
                 alignItems: 'center',
                 gap: 6,
                 opacity: draggedFolderId === folder.id ? 0.55 : 1,
                 borderRadius: 12,
-                boxShadow: dragOverFolderId === folder.id ? '0 0 0 2px rgba(29, 29, 31, 0.18)' : 'none',
-                background: dragOverFolderId === folder.id ? 'rgba(29, 29, 31, 0.05)' : 'transparent',
-                transition: 'background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease',
+                transition: 'opacity 0.15s ease',
               }}
             >
+              {dragOverFolderId === folder.id && dragOverPosition === 'before' && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: -4,
+                    height: 2,
+                    borderRadius: 999,
+                    background: '#1a1a1f',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              {dragOverFolderId === folder.id && dragOverPosition === 'after' && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    bottom: -4,
+                    height: 2,
+                    borderRadius: 999,
+                    background: '#1a1a1f',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
               {editingFolderId === folder.id ? (
                 <input
                   type="text"

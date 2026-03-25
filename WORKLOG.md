@@ -157,3 +157,11 @@
 - Implementat HTML5 drag & drop în `src/components/GalleryDetailView.jsx` pentru folderele explicite, cu feedback vizual: folderul drag-uit devine semi-transparent, iar ținta de drop este evidențiată
 - Confirmat că `src/components/ClientGallery.jsx` respecta deja ordinea din Firestore, deci nu a fost necesară modificarea fișierului protejat
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Fix insert before/after la drag & drop pentru foldere
+
+- Investigat bug-ul din `src/components/GalleryDetailView.jsx` și confirmat că drop-ul repoziționa folderul doar la indexul țintei, fără diferențiere între insert înainte sau după
+- Actualizat `handleFolderDragOver()` să calculeze poziția cursorului față de jumătatea elementului și să derive `before` / `after` folosind `getBoundingClientRect()` și `event.clientY`
+- Înlocuit highlight-ul de fundal cu un indicator vizual de inserare: linie de `2px` în `#1a1a1f`, afișată deasupra sau dedesubtul folderului țintă și curățată la `dragleave`, `drop` și `dragend`
+- Extins `handleReorderFolders()` din `src/components/Dashboard.jsx` cu parametrul `insertPosition`, astfel încât ordinea să fie persistată corect în Firestore când folderul este mutat înainte sau după țintă
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

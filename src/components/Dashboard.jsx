@@ -820,16 +820,19 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
   }
 
-  const handleReorderFolders = async (draggedFolderId, targetFolderId) => {
+  const handleReorderFolders = async (draggedFolderId, targetFolderId, insertPosition = 'before') => {
     if (!galerieActiva?.id || !draggedFolderId || !targetFolderId || draggedFolderId === targetFolderId) return
 
     const sourceIndex = galleryFolders.findIndex((folder) => folder.id === draggedFolderId)
-    const targetIndex = galleryFolders.findIndex((folder) => folder.id === targetFolderId)
-    if (sourceIndex === -1 || targetIndex === -1) return
+    if (sourceIndex === -1) return
 
     const nextFolders = [...galleryFolders]
     const [movedFolder] = nextFolders.splice(sourceIndex, 1)
-    nextFolders.splice(targetIndex, 0, movedFolder)
+    const targetIndex = nextFolders.findIndex((folder) => folder.id === targetFolderId)
+    if (targetIndex === -1) return
+
+    const insertionIndex = insertPosition === 'after' ? targetIndex + 1 : targetIndex
+    nextFolders.splice(insertionIndex, 0, movedFolder)
 
     setGalleryFolders(nextFolders)
     try {
