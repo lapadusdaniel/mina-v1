@@ -338,6 +338,7 @@ function FavoriteListPicker({
   activeListId = DEFAULT_SELECTION_LIST_ID,
   newListName = '',
   creatingNewList = false,
+  inputRef = null,
   onListClick,
   onCreateNewListClick,
   onNewListNameChange,
@@ -375,17 +376,18 @@ function FavoriteListPicker({
       {creatingNewList ? (
         <div className="cg-fav-picker-new">
           <input
+            ref={inputRef}
             autoFocus
             type="text"
             value={newListName}
             placeholder="Nume listă"
             className="cg-fav-picker-input"
             onChange={(event) => onNewListNameChange?.(event.target.value)}
-            onBlur={(event) => onNewListBlur?.(event.target.value)}
+            onBlur={() => onNewListBlur?.()}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                onNewListConfirm?.(event.currentTarget.value);
+                onNewListConfirm?.();
               }
               if (event.key === 'Escape') {
                 event.preventDefault();
@@ -556,6 +558,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
   const contentRef = useRef(null);
   const reviewSectionRef = useRef(null);
+  const newFavoriteListInputRef = useRef(null);
+  const newFavoriteListHandledRef = useRef(false);
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
   const effectiveActiveClientFolderId = useMemo(() => {
@@ -689,26 +693,34 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     return resolvedLists;
   }, [applySelectionListsLocally, buildClientSelectionMeta, galerie?.id, numeSelectie, selectionTitle]);
 
-  const closeFavoriteMenus = useCallback(() => {
-    setFavoriteMenuState(null);
+  const resetNewFavoriteListFlow = useCallback(() => {
+    newFavoriteListHandledRef.current = false;
     setCreatingFavoriteList(false);
     setNewFavoriteListName('');
-    setFavoriteListMenuId(null);
   }, []);
+
+  const getCurrentNewFavoriteListName = useCallback(() => (
+    String(newFavoriteListInputRef.current?.value ?? newFavoriteListName ?? '').trim()
+  ), [newFavoriteListName]);
+
+  const closeFavoriteMenus = useCallback(() => {
+    setFavoriteMenuState(null);
+    resetNewFavoriteListFlow();
+    setFavoriteListMenuId(null);
+  }, [resetNewFavoriteListFlow]);
 
   const openFavoriteMenu = useCallback((pozaKey, source = 'grid') => {
     if (!allowPhotoSelection || !pozaKey) return;
     setFavoriteListMenuId(null);
     setEditingFavoriteListId(null);
     setEditingFavoriteListName('');
-    setCreatingFavoriteList(false);
-    setNewFavoriteListName('');
+    resetNewFavoriteListFlow();
     setFavoriteMenuState((prev) => (
       prev?.photoKey === pozaKey && prev?.source === source
         ? null
         : { photoKey: pozaKey, source }
     ));
-  }, [allowPhotoSelection]);
+  }, [allowPhotoSelection, resetNewFavoriteListFlow]);
 
   const closeLightbox = useCallback(() => {
     setSelectedImage(null);
@@ -1285,8 +1297,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   };
 
   const handleCreateFavoriteList = async (photoKey = favoriteMenuState?.photoKey || null, explicitName = '') => {
-    const rawName = String(explicitName || newFavoriteListName || '').trim();
-    if (!rawName) return;
+    const rawName = String(explicitName || getCurrentNewFavoriteListName() || '').trim();
+    if (!rawName) {
+      resetNewFavoriteListFlow();
+      return;
+    }
     const cleanName = sanitizeSelectionListName(rawName);
 
     const nextListId = buildSelectionListId(cleanName);
@@ -1313,8 +1328,38 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       setActiveSelectionListId(nextListId);
     } catch (error) {
       console.error(error);
+    } finally {
+      newFavoriteListHandledRef.current = false;
     }
   };
+
+  const handleStartFavoriteListCreation = useCallback(() => {
+    newFavoriteListHandledRef.current = false;
+    setCreatingFavoriteList(true);
+    setNewFavoriteListName('');
+  }, []);
+
+  const handleCancelFavoriteListCreation = useCallback(() => {
+    newFavoriteListHandledRef.current = true;
+    resetNewFavoriteListFlow();
+    requestAnimationFrame(() => {
+      newFavoriteListHandledRef.current = false;
+    });
+  }, [resetNewFavoriteListFlow]);
+
+  const handleConfirmFavoriteListCreation = useCallback((photoKey) => {
+    if (newFavoriteListHandledRef.current) return;
+    newFavoriteListHandledRef.current = true;
+    void handleCreateFavoriteList(photoKey);
+  }, [handleCreateFavoriteList]);
+
+  const handleBlurFavoriteListCreation = useCallback((photoKey) => {
+    if (newFavoriteListHandledRef.current) {
+      newFavoriteListHandledRef.current = false;
+      return;
+    }
+    void handleCreateFavoriteList(photoKey);
+  }, [handleCreateFavoriteList]);
 
   const handleStartRenameFavoriteList = (listId) => {
     const list = normalizedSelectionLists.find((item) => item.id === listId);
@@ -1817,30 +1862,18 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                       activeListId: activeSelectionList?.id || DEFAULT_SELECTION_LIST_ID,
                       newListName: newFavoriteListName,
                       creatingNewList: creatingFavoriteList,
+                      inputRef: newFavoriteListInputRef,
                       onListClick: (listId) => executeFavoriteToggle(poza.key, numeSelectie, {
                         clientEmail: emailInputValue,
                         clientPhone: phoneInputValue,
                         clientAdditionalInfo: additionalInfoInputValue,
                         clientComment: commentInputValue,
                       }, listId),
-                      onCreateNewListClick: () => {
-                        setCreatingFavoriteList(true);
-                        setNewFavoriteListName('');
-                      },
+                      onCreateNewListClick: handleStartFavoriteListCreation,
                       onNewListNameChange: setNewFavoriteListName,
-                      onNewListConfirm: (value) => handleCreateFavoriteList(poza.key, value),
-                      onNewListBlur: (value) => {
-                        if (String(value || '').trim()) {
-                          handleCreateFavoriteList(poza.key, value);
-                        } else {
-                          setCreatingFavoriteList(false);
-                          setNewFavoriteListName('');
-                        }
-                      },
-                      onNewListCancel: () => {
-                        setCreatingFavoriteList(false);
-                        setNewFavoriteListName('');
-                      },
+                      onNewListConfirm: () => handleConfirmFavoriteListCreation(poza.key),
+                      onNewListBlur: () => handleBlurFavoriteListCreation(poza.key),
+                      onNewListCancel: handleCancelFavoriteListCreation,
                     } : null}
                     onClick={() => {
                       const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
@@ -1865,30 +1898,18 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                   activeListId={activeSelectionList?.id || DEFAULT_SELECTION_LIST_ID}
                   newListName={newFavoriteListName}
                   creatingNewList={creatingFavoriteList}
+                  inputRef={newFavoriteListInputRef}
                   onListClick={(listId) => executeFavoriteToggle(favoriteMenuState.photoKey, numeSelectie, {
                     clientEmail: emailInputValue,
                     clientPhone: phoneInputValue,
                     clientAdditionalInfo: additionalInfoInputValue,
                     clientComment: commentInputValue,
                   }, listId)}
-                  onCreateNewListClick={() => {
-                    setCreatingFavoriteList(true);
-                    setNewFavoriteListName('');
-                  }}
+                  onCreateNewListClick={handleStartFavoriteListCreation}
                   onNewListNameChange={setNewFavoriteListName}
-                  onNewListConfirm={(value) => handleCreateFavoriteList(favoriteMenuState.photoKey, value)}
-                  onNewListBlur={(value) => {
-                    if (String(value || '').trim()) {
-                      handleCreateFavoriteList(favoriteMenuState.photoKey, value);
-                    } else {
-                      setCreatingFavoriteList(false);
-                      setNewFavoriteListName('');
-                    }
-                  }}
-                  onNewListCancel={() => {
-                    setCreatingFavoriteList(false);
-                    setNewFavoriteListName('');
-                  }}
+                  onNewListConfirm={() => handleConfirmFavoriteListCreation(favoriteMenuState.photoKey)}
+                  onNewListBlur={() => handleBlurFavoriteListCreation(favoriteMenuState.photoKey)}
+                  onNewListCancel={handleCancelFavoriteListCreation}
                 />
               )}
 

@@ -230,3 +230,12 @@
 - Reparat flow-ul de creare listă nouă din `src/components/ClientGallery.jsx`: confirmarea folosește acum valoarea curentă din input, nu o valoare stale din state
 - La `Enter`, handlerul face `preventDefault()` și apelează direct crearea listei; la `blur`, lista se creează cu textul curent din input; `Escape` continuă să anuleze fără salvare
 - Validat cu `npm run build` și redeploy pe hosting prin `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-26 — Fix creare listă nouă cu ref și guard Enter/blur
+
+- Refăcut flow-ul de `+ Listă nouă` din `src/components/ClientGallery.jsx` pentru a evita stale closure pe valoarea inputului
+- Adăugat `newFavoriteListInputRef` pentru a citi valoarea curentă direct din input în momentul confirmării
+- Adăugat `newFavoriteListHandledRef` ca să diferențieze confirmarea pornită de `Enter` față de `blur` și să prevină dublul trigger
+- La `Enter`, handlerul face `preventDefault()`, citește valoarea din ref și creează lista imediat, adăugând poza curentă în ea
+- La `blur`, lista se creează doar dacă nu a fost deja procesată de Enter; la `Escape`, anularea consumă blur-ul ulterior fără să salveze lista
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
