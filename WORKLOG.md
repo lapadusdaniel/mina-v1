@@ -141,3 +141,10 @@
 - Reduse padding-urile și spacing-ul din modal: tabs, URL row, butoane social, input-uri și butonul `Trimite email`
 - Păstrat layout-ul pe tabs și logica existentă, dar cu o prezentare mai compactă și mai apropiată de dashboard
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Fix rename folder fără duplicare
+
+- Investigat flow-ul de rename din `src/components/Dashboard.jsx` și confirmat că duplicarea nu venea din `updateFolder`, ci din branch-ul special pentru `DEFAULT_FOLDER_ID`, care crea un folder nou prin `createFolder(...)`
+- Înlocuit rename-ul pentru folderul implicit cu update in-place pe documentul galeriei, prin câmpul `defaultFolderName`, fără crearea unui document nou în subcolecția `folders`
+- Actualizat `src/components/GalleryDetailView.jsx` să afișeze și să redenumească folderul implicit folosind `galerie.defaultFolderName`, cu fallback la `Galeria mea`
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

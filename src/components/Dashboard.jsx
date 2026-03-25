@@ -793,48 +793,17 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
     try {
       if (folderId === DEFAULT_FOLDER_ID) {
-        const createdFolder = await galleriesService.createFolder(galerieActiva.id, { name })
-        if (!createdFolder?.id) {
-          throw new Error('Folderul nu a putut fi creat.')
-        }
-
-        const defaultPhotos = pozeGalerie.filter(
-          (photo) => normalizePhotoFolderId(photo?.folderId) === DEFAULT_FOLDER_ID
-        )
-        const photoMetadata = defaultPhotos.length
-          ? await galleriesService.listPhotoMetadata(galerieActiva.id).catch(() => [])
-          : []
-        const photoMetadataByKey = new Map(
-          (photoMetadata || [])
-            .filter((photo) => photo?.key)
-            .map((photo) => [photo.key, photo])
-        )
-
-        if (defaultPhotos.length) {
-          await Promise.all(defaultPhotos.map((photo) => {
-            const existingPhoto = photoMetadataByKey.get(photo.key)
-            return galleriesService.upsertPhotoMetadata(galerieActiva.id, photo.key, {
-              folderId: createdFolder.id,
-              size: Number((existingPhoto?.size ?? photo?.size) || 0),
-              lastModified: existingPhoto?.lastModified || photo?.lastModified || null,
-              createdAt: existingPhoto?.createdAt || new Date(),
-            })
-          }))
-        }
-
-        const nextPhotos = pozeGalerie.map((photo) => (
-          normalizePhotoFolderId(photo?.folderId) === DEFAULT_FOLDER_ID
-            ? { ...photo, folderId: createdFolder.id }
-            : photo
+        await galleriesService.updateGallery(galerieActiva.id, { defaultFolderName: name })
+        setGalerieActiva((prev) => (
+          prev?.id === galerieActiva.id
+            ? { ...prev, defaultFolderName: name }
+            : prev
         ))
-        const nextFolders = attachFolderCounts(
-          [{ ...createdFolder, name }, ...galleryFolders],
-          nextPhotos
-        )
-
-        setPozeGalerie(nextPhotos)
-        setGalleryFolders(nextFolders)
-        setActiveFolderId(createdFolder.id)
+        setGalerii((prev) => prev.map((gallery) => (
+          gallery.id === galerieActiva.id
+            ? { ...gallery, defaultFolderName: name }
+            : gallery
+        )))
         return
       }
 

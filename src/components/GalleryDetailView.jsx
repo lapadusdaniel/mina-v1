@@ -501,6 +501,7 @@ export default function GalleryDetailView({
 
   const totalPhotosCount = Array.isArray(allPozeGalerie) ? allPozeGalerie.length : pozeGalerie.length
   const hasExplicitFolders = galleryFolders.length > 0
+  const defaultFolderName = String(galerie?.defaultFolderName || '').trim() || DEFAULT_FOLDER_NAME
   const isPasswordProtected = galerie?.settings?.privacy?.passwordProtected === true
     && String(galerie?.settings?.privacy?.passwordHash || '').trim().length > 0
   const galleryShareUrl = useMemo(() => getGalleryPublicUrl(galerie), [galerie])
@@ -512,8 +513,8 @@ export default function GalleryDetailView({
   // the upload is targeting the default folder.
   const showDefaultTab = !hasExplicitFolders || defaultPhotosCount > 0 || uploading
   const defaultFolder = useMemo(
-    () => ({ id: DEFAULT_FOLDER_ID, name: DEFAULT_FOLDER_NAME, photoCount: defaultPhotosCount }),
-    [defaultPhotosCount]
+    () => ({ id: DEFAULT_FOLDER_ID, name: defaultFolderName, photoCount: defaultPhotosCount }),
+    [defaultFolderName, defaultPhotosCount]
   )
   const selectedFolder = useMemo(
     () => galleryFolders.find((folder) => folder.id === activeFolderId) || (
@@ -525,8 +526,8 @@ export default function GalleryDetailView({
   )
   const subtitle = activeFolderId === DEFAULT_FOLDER_ID
     ? (hasExplicitFolders
-      ? `${DEFAULT_FOLDER_NAME} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
-      : `${DEFAULT_FOLDER_NAME} • ${totalPhotosCount} poze`)
+      ? `${defaultFolderName} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
+      : `${defaultFolderName} • ${totalPhotosCount} poze`)
     : `${selectedFolder?.name || 'Folder'} • ${pozeGalerie.length} din ${totalPhotosCount} poze`
   const elapsedSeconds = uploadStartedAt
     ? Math.max((now - uploadStartedAt) / 1000, 0.001)
@@ -812,7 +813,7 @@ export default function GalleryDetailView({
                   className={`dashboard-folder-chip ${activeFolderId === DEFAULT_FOLDER_ID ? 'is-active' : ''}`}
                   onClick={() => onSelectFolder?.(DEFAULT_FOLDER_ID)}
                 >
-                  <span>{DEFAULT_FOLDER_NAME}</span>
+                  <span>{defaultFolderName}</span>
                   <span className="dashboard-folder-chip-count">{defaultPhotosCount}</span>
                 </button>
               )}
@@ -821,7 +822,7 @@ export default function GalleryDetailView({
                 type="button"
                 onClick={() => startFolderRename(defaultFolder)}
                 disabled={renamingFolderId === DEFAULT_FOLDER_ID}
-                aria-label={`Redenumește folderul ${DEFAULT_FOLDER_NAME}`}
+                aria-label={`Redenumește folderul ${defaultFolderName}`}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -947,7 +948,7 @@ export default function GalleryDetailView({
           <div className="dashboard-empty-state">
             <p className="dashboard-empty-icon">📸</p>
             <p className="dashboard-empty-text">
-              {activeFolderId === DEFAULT_FOLDER_ID ? 'Galeria mea nu are poze încă' : 'Acest folder nu are poze încă'}
+              {activeFolderId === DEFAULT_FOLDER_ID ? `${defaultFolderName} nu are poze încă` : 'Acest folder nu are poze încă'}
             </p>
             <button onClick={() => fileInputRef.current?.click()} className="btn-primary">
               + Adaugă prima poză
