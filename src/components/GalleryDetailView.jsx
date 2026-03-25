@@ -419,6 +419,7 @@ export default function GalleryDetailView({
   onSelectFolder,
   onCreateFolder,
   onRenameFolder,
+  onReorderFolders,
   onDeleteFolder,
   onUploadPoze,
   onCancelUpload,
@@ -431,6 +432,8 @@ export default function GalleryDetailView({
   const [editingFolderId, setEditingFolderId] = useState(null)
   const [editingFolderName, setEditingFolderName] = useState('')
   const [renamingFolderId, setRenamingFolderId] = useState(null)
+  const [draggedFolderId, setDraggedFolderId] = useState(null)
+  const [dragOverFolderId, setDragOverFolderId] = useState(null)
   const [selectedKeys, setSelectedKeys] = useState(new Set())
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [sendLinkOpen, setSendLinkOpen] = useState(false)
@@ -568,6 +571,46 @@ export default function GalleryDetailView({
     setEditingFolderId(null)
     setEditingFolderName('')
     setRenamingFolderId(null)
+  }
+
+  const handleFolderDragStart = (event, folderId) => {
+    if (!folderId || editingFolderId === folderId) return
+    try {
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/plain', folderId)
+    } catch (_) {
+    }
+    setDraggedFolderId(folderId)
+    setDragOverFolderId(null)
+  }
+
+  const handleFolderDragOver = (event, folderId) => {
+    if (!draggedFolderId || !folderId || draggedFolderId === folderId) return
+    event.preventDefault()
+    if (dragOverFolderId !== folderId) {
+      setDragOverFolderId(folderId)
+    }
+  }
+
+  const handleFolderDrop = async (event, folderId) => {
+    event.preventDefault()
+    if (!draggedFolderId || !folderId || draggedFolderId === folderId) {
+      setDragOverFolderId(null)
+      return
+    }
+
+    const activeDraggedFolderId = draggedFolderId
+    setDragOverFolderId(null)
+    setDraggedFolderId(null)
+    try {
+      await onReorderFolders?.(activeDraggedFolderId, folderId)
+    } catch (_) {
+    }
+  }
+
+  const handleFolderDragEnd = () => {
+    setDraggedFolderId(null)
+    setDragOverFolderId(null)
   }
 
   const closeSendLinkModal = () => {
@@ -844,7 +887,21 @@ export default function GalleryDetailView({
           {hasExplicitFolders && galleryFolders.map((folder) => (
             <div
               key={folder.id}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              draggable={editingFolderId !== folder.id}
+              onDragStart={(event) => handleFolderDragStart(event, folder.id)}
+              onDragOver={(event) => handleFolderDragOver(event, folder.id)}
+              onDrop={(event) => handleFolderDrop(event, folder.id)}
+              onDragEnd={handleFolderDragEnd}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                opacity: draggedFolderId === folder.id ? 0.55 : 1,
+                borderRadius: 12,
+                boxShadow: dragOverFolderId === folder.id ? '0 0 0 2px rgba(29, 29, 31, 0.18)' : 'none',
+                background: dragOverFolderId === folder.id ? 'rgba(29, 29, 31, 0.05)' : 'transparent',
+                transition: 'background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease',
+              }}
             >
               {editingFolderId === folder.id ? (
                 <input

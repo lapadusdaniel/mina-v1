@@ -76,6 +76,23 @@ export function createFoldersService({ db }) {
       })
     },
 
+    async reorderFolders(galleryId, orderedFolderIds = []) {
+      if (!galleryId) throw new Error('reorderFolders: galleryId este obligatoriu')
+      const nextIds = Array.isArray(orderedFolderIds)
+        ? orderedFolderIds.map((id) => String(id || '').trim()).filter(Boolean)
+        : []
+      if (!nextIds.length) return
+
+      const batch = writeBatch(db)
+      nextIds.forEach((folderId, index) => {
+        batch.update(doc(db, 'galerii', galleryId, 'folders', folderId), {
+          order: index,
+          updatedAt: new Date(),
+        })
+      })
+      await batch.commit()
+    },
+
     async deleteFolder(galleryId, folderId) {
       if (!galleryId || !folderId) throw new Error('deleteFolder: galleryId și folderId sunt obligatorii')
       await deleteDoc(doc(db, 'galerii', galleryId, 'folders', folderId))

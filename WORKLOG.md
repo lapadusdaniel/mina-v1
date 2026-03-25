@@ -148,3 +148,12 @@
 - Înlocuit rename-ul pentru folderul implicit cu update in-place pe documentul galeriei, prin câmpul `defaultFolderName`, fără crearea unui document nou în subcolecția `folders`
 - Actualizat `src/components/GalleryDetailView.jsx` să afișeze și să redenumească folderul implicit folosind `galerie.defaultFolderName`, cu fallback la `Galeria mea`
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Drag & drop reorder pentru foldere
+
+- Investigat read-only render-ul folderelor din `src/components/GalleryDetailView.jsx` și confirmat că ordinea era deja modelată în Firestore prin câmpul `order`, iar `getFolders()` citea cu `orderBy('order', 'asc')`
+- Adăugat `reorderFolders()` în `src/modules/galleries/folders.service.js`, cu persistare batch a noii ordini pe documentele din `galerii/{galleryId}/folders`
+- Adăugat `handleReorderFolders()` în `src/components/Dashboard.jsx`, cu update optimist local și fallback prin reîncărcarea galeriei dacă persistarea eșuează
+- Implementat HTML5 drag & drop în `src/components/GalleryDetailView.jsx` pentru folderele explicite, cu feedback vizual: folderul drag-uit devine semi-transparent, iar ținta de drop este evidențiată
+- Confirmat că `src/components/ClientGallery.jsx` respecta deja ordinea din Firestore, deci nu a fost necesară modificarea fișierului protejat
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

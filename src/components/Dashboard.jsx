@@ -820,6 +820,31 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
   }
 
+  const handleReorderFolders = async (draggedFolderId, targetFolderId) => {
+    if (!galerieActiva?.id || !draggedFolderId || !targetFolderId || draggedFolderId === targetFolderId) return
+
+    const sourceIndex = galleryFolders.findIndex((folder) => folder.id === draggedFolderId)
+    const targetIndex = galleryFolders.findIndex((folder) => folder.id === targetFolderId)
+    if (sourceIndex === -1 || targetIndex === -1) return
+
+    const nextFolders = [...galleryFolders]
+    const [movedFolder] = nextFolders.splice(sourceIndex, 1)
+    nextFolders.splice(targetIndex, 0, movedFolder)
+
+    setGalleryFolders(nextFolders)
+    try {
+      await galleriesService.reorderFolders(
+        galerieActiva.id,
+        nextFolders.map((folder) => folder.id)
+      )
+    } catch (error) {
+      console.error('Error reordering folders:', error)
+      await handleDeschideGalerie(galerieActiva)
+      alert('Nu am putut reordona folderele. Încearcă din nou.')
+      throw error
+    }
+  }
+
   const handleDeleteFolder = async (folderId) => {
     if (!galerieActiva?.id || !folderId || folderId === DEFAULT_FOLDER_ID) return
     const folder = galleryFolders.find((f) => f.id === folderId)
@@ -1191,6 +1216,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             onSelectFolder={setActiveFolderId}
             onCreateFolder={handleCreateFolder}
             onRenameFolder={handleRenameFolder}
+            onReorderFolders={handleReorderFolders}
             onDeleteFolder={handleDeleteFolder}
             onUploadPoze={handleUploadPoze}
             onCancelUpload={handleCancelUpload}
