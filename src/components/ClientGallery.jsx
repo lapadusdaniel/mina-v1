@@ -20,6 +20,8 @@ const LIGHTBOX_PRELOAD_OFFSETS_MOBILE = [0, -1, 1];
 const MAX_URL_CACHE_ENTRIES = 400;
 const DEFAULT_FOLDER_ID = 'default';
 const DEFAULT_FOLDER_NAME = 'Galeria mea';
+const DEFAULT_SELECTION_LIST_ID = 'default';
+const DEFAULT_SELECTION_LIST_NAME = 'Favorite';
 
 const urlCache = new Map();
 const { galleries: galleriesService, media: mediaService, sites: sitesService } = getAppServices();
@@ -82,6 +84,63 @@ function getGalleryUnlockStorageKey(galleryId) {
   return `${GALLERY_UNLOCK_STORAGE_KEY_PREFIX}${galleryId || ''}`;
 }
 
+function sanitizeSelectionKeys(keys = []) {
+  if (!Array.isArray(keys)) return [];
+  return Array.from(new Set(keys.filter((key) => typeof key === 'string' && key.trim())));
+}
+
+function sanitizeSelectionListName(name = '') {
+  const normalized = String(name || '').trim().slice(0, 80);
+  return normalized || DEFAULT_SELECTION_LIST_NAME;
+}
+
+function buildSelectionListId(name = '') {
+  const slug = sanitizeSelectionListName(name)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  const unique = Date.now().toString(36);
+  return slug ? `list_${slug}_${unique}` : `list_${unique}`;
+}
+
+function aggregateSelectionKeys(lists = []) {
+  return sanitizeSelectionKeys(
+    lists.flatMap((list) => sanitizeSelectionKeys(list?.keys || []))
+  );
+}
+
+function normalizeSelectionLists(lists = [], fallbackKeys = []) {
+  const seenIds = new Set();
+  const normalized = (Array.isArray(lists) ? lists : [])
+    .map((list, index) => {
+      const name = sanitizeSelectionListName(list?.name || '');
+      let id = String(list?.id || '').trim().slice(0, 120);
+      if (!id) {
+        id = index === 0 ? DEFAULT_SELECTION_LIST_ID : buildSelectionListId(name);
+      }
+      while (seenIds.has(id)) {
+        id = `${id}_${seenIds.size + 1}`;
+      }
+      seenIds.add(id);
+      return {
+        id,
+        name,
+        keys: sanitizeSelectionKeys(list?.keys || []),
+      };
+    });
+
+  if (normalized.length > 0) return normalized;
+
+  return [{
+    id: DEFAULT_SELECTION_LIST_ID,
+    name: DEFAULT_SELECTION_LIST_NAME,
+    keys: sanitizeSelectionKeys(fallbackKeys),
+  }];
+}
+
 async function sha256Hex(value) {
   const raw = new TextEncoder().encode(String(value || ''));
   const digest = await crypto.subtle.digest('SHA-256', raw);
@@ -127,6 +186,7 @@ function LazyGalleryImage({
   watermarkEnabled = false,
   watermarkLabel = 'Mina',
   quality = 'thumb',
+  favoritePicker = null,
 }) {
   const [url, setUrl] = useState(() => getCachedUrl(`${quality}:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -231,8 +291,8 @@ function LazyGalleryImage({
             {allowPhotoSelection && (
               <button
                 type="button"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onFavoriteClick(pozaKey); }}
-                className={`cg-action-btn ${isFav ? 'cg-action-btn--active' : ''}`}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onFavoriteClick(pozaKey, 'grid'); }}
+                className={`cg-action-btn cg-action-btn--favorite ${isFav ? 'cg-action-btn--active' : ''}`}
                 aria-label="Favorite"
                 style={{ color: isFav ? (accentColor || '#b8965a') : 'rgba(255,255,255,0.9)' }}
               >
@@ -251,8 +311,100 @@ function LazyGalleryImage({
               </button>
             )}
           </div>
+          {favoritePicker?.isOpen && (
+            <FavoriteListPicker
+              photoKey={pozaKey}
+              className="cg-fav-picker--inline"
+              lists={favoritePicker.lists}
+              activeListId={favoritePicker.activeListId}
+              newListName={favoritePicker.newListName}
+              creatingNewList={favoritePicker.creatingNewList}
+              onListClick={favoritePicker.onListClick}
+              onCreateNewListClick={favoritePicker.onCreateNewListClick}
+              onNewListNameChange={favoritePicker.onNewListNameChange}
+              onNewListConfirm={favoritePicker.onNewListConfirm}
+              onNewListCancel={favoritePicker.onNewListCancel}
+            />
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function FavoriteListPicker({
+  photoKey,
+  lists = [],
+  activeListId = DEFAULT_SELECTION_LIST_ID,
+  newListName = '',
+  creatingNewList = false,
+  onListClick,
+  onCreateNewListClick,
+  onNewListNameChange,
+  onNewListConfirm,
+  onNewListCancel,
+  className = '',
+}) {
+  return (
+    <div
+      className={`cg-fav-picker ${className}`.trim()}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <div className="cg-fav-picker-list">
+        {lists.map((list) => {
+          const hasPhoto = Array.isArray(list?.keys) && list.keys.includes(photoKey);
+          return (
+            <button
+              key={list.id}
+              type="button"
+              className={`cg-fav-picker-item ${hasPhoto ? 'is-active' : ''} ${activeListId === list.id ? 'is-current' : ''}`}
+              onClick={() => onListClick?.(list.id)}
+            >
+              <span className="cg-fav-picker-item-name">{list.name}</span>
+              <span className="cg-fav-picker-item-meta">
+                {hasPhoto ? 'Selectată' : `${list.keys?.length || 0} poze`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {creatingNewList ? (
+        <div className="cg-fav-picker-new">
+          <input
+            autoFocus
+            type="text"
+            value={newListName}
+            placeholder="Nume listă"
+            className="cg-fav-picker-input"
+            onChange={(event) => onNewListNameChange?.(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                onNewListConfirm?.();
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                onNewListCancel?.();
+              }
+            }}
+          />
+          <div className="cg-fav-picker-new-actions">
+            <button type="button" className="cg-fav-picker-btn cg-fav-picker-btn--ghost" onClick={onNewListCancel}>
+              Anulează
+            </button>
+            <button type="button" className="cg-fav-picker-btn cg-fav-picker-btn--confirm" onClick={onNewListConfirm}>
+              Salvează
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="cg-fav-picker-create" onClick={onCreateNewListClick}>
+          + Listă nouă
+        </button>
+      )}
     </div>
   );
 }
@@ -289,7 +441,7 @@ function LightboxFavoriteButton({ galerie, pozeAfisate, onFavoriteClick, accentC
     <button
       type="button"
       className="yarl__button"
-      onClick={() => onFavoriteClick(poza.key)}
+      onClick={() => onFavoriteClick(poza.key, 'lightbox')}
       aria-label="Favorite"
       style={{ color: isFav ? heartColor : 'rgba(255,255,255,0.75)', background: 'none', border: 'none', cursor: 'pointer', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
@@ -379,6 +531,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const [commentInputValue, setCommentInputValue] = useState('');
   const [selectionTitleInputValue, setSelectionTitleInputValue] = useState('');
   const [pendingFavAction, setPendingFavAction] = useState(null);
+  const [selectionLists, setSelectionLists] = useState(() => normalizeSelectionLists());
+  const [activeSelectionListId, setActiveSelectionListId] = useState(DEFAULT_SELECTION_LIST_ID);
+  const [favoriteMenuState, setFavoriteMenuState] = useState(null);
+  const [creatingFavoriteList, setCreatingFavoriteList] = useState(false);
+  const [newFavoriteListName, setNewFavoriteListName] = useState('');
+  const [favoriteListMenuId, setFavoriteListMenuId] = useState(null);
+  const [editingFavoriteListId, setEditingFavoriteListId] = useState(null);
+  const [editingFavoriteListName, setEditingFavoriteListName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [lightboxDownloading, setLightboxDownloading] = useState(false);
   const [countPop, setCountPop] = useState(false);
@@ -439,13 +599,32 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     ];
   }, [clientFolders, effectiveActiveClientFolderId, poze]);
 
+  const normalizedSelectionLists = useMemo(
+    () => normalizeSelectionLists(selectionLists, galerie?.favorite || []),
+    [galerie?.favorite, selectionLists]
+  );
+  const allFavoriteKeys = useMemo(
+    () => aggregateSelectionKeys(normalizedSelectionLists),
+    [normalizedSelectionLists]
+  );
+  const allFavoriteKeySet = useMemo(() => new Set(allFavoriteKeys), [allFavoriteKeys]);
+  const activeSelectionList = useMemo(() => {
+    if (!normalizedSelectionLists.length) return null;
+    return normalizedSelectionLists.find((list) => list.id === activeSelectionListId) || normalizedSelectionLists[0];
+  }, [activeSelectionListId, normalizedSelectionLists]);
+  const activeFavoriteKeys = useMemo(
+    () => sanitizeSelectionKeys(activeSelectionList?.keys || []),
+    [activeSelectionList]
+  );
+  const activeFavoriteKeySet = useMemo(() => new Set(activeFavoriteKeys), [activeFavoriteKeys]);
+
   const pozeAfisate = useMemo(
     () => (galerie
       ? (doarFavorite
-          ? pozeFiltratePeFolder.filter((p) => galerie.favorite?.includes(p.key))
+          ? pozeFiltratePeFolder.filter((p) => activeFavoriteKeySet.has(p.key))
           : pozeFiltratePeFolder)
       : []),
-    [galerie, doarFavorite, pozeFiltratePeFolder]
+    [activeFavoriteKeySet, galerie, doarFavorite, pozeFiltratePeFolder]
   );
   const gallerySettings = galerie?.settings || {};
   const mainSettings = gallerySettings.main || {};
@@ -477,6 +656,65 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const limit = settingsLimitEnabled && settingsMaxSelected > 0
     ? settingsMaxSelected
     : (galerie?.limitSelectie ?? galerie?.maxSelectie ?? null);
+  const applySelectionListsLocally = useCallback((lists, options = {}) => {
+    const normalizedLists = normalizeSelectionLists(lists);
+    const aggregatedKeys = aggregateSelectionKeys(normalizedLists);
+    const preferredActiveId = options.activeListId;
+    const nextActiveId = normalizedLists.some((list) => list.id === preferredActiveId)
+      ? preferredActiveId
+      : (normalizedLists.some((list) => list.id === activeSelectionListId)
+          ? activeSelectionListId
+          : normalizedLists[0]?.id || DEFAULT_SELECTION_LIST_ID);
+
+    setSelectionLists(normalizedLists);
+    setActiveSelectionListId(nextActiveId);
+    setGalerie((prev) => (prev ? { ...prev, favorite: aggregatedKeys } : prev));
+  }, [activeSelectionListId]);
+
+  const buildClientSelectionMeta = useCallback((latestSelection = null, metaOverride = null) => ({
+    clientEmail: String(metaOverride?.clientEmail ?? latestSelection?.clientEmail ?? emailInputValue ?? '').trim(),
+    clientPhone: String(metaOverride?.clientPhone ?? latestSelection?.clientPhone ?? phoneInputValue ?? '').trim(),
+    clientAdditionalInfo: String(metaOverride?.clientAdditionalInfo ?? latestSelection?.clientAdditionalInfo ?? additionalInfoInputValue ?? '').trim(),
+    clientComment: String(metaOverride?.clientComment ?? latestSelection?.clientComment ?? commentInputValue ?? '').trim(),
+  }), [additionalInfoInputValue, commentInputValue, emailInputValue, phoneInputValue]);
+
+  const saveSelectionLists = useCallback(async (lists, metaOverride = null, options = {}) => {
+    if (!galerie?.id || !numeSelectie) return null;
+
+    const latestSelection = await galleriesService.getClientSelection(galerie.id, numeSelectie).catch(() => null);
+    const normalizedLists = normalizeSelectionLists(lists, latestSelection?.keys || []);
+    const savedSelection = await galleriesService.saveClientSelectionLists(
+      galerie.id,
+      numeSelectie,
+      normalizedLists,
+      selectionTitle,
+      buildClientSelectionMeta(latestSelection, metaOverride)
+    );
+    const resolvedLists = normalizeSelectionLists(savedSelection?.lists || normalizedLists, savedSelection?.keys || []);
+    applySelectionListsLocally(resolvedLists, { activeListId: options.activeListId });
+    return resolvedLists;
+  }, [applySelectionListsLocally, buildClientSelectionMeta, galerie?.id, numeSelectie, selectionTitle]);
+
+  const closeFavoriteMenus = useCallback(() => {
+    setFavoriteMenuState(null);
+    setCreatingFavoriteList(false);
+    setNewFavoriteListName('');
+    setFavoriteListMenuId(null);
+  }, []);
+
+  const openFavoriteMenu = useCallback((pozaKey, source = 'grid') => {
+    if (!allowPhotoSelection || !pozaKey) return;
+    setFavoriteListMenuId(null);
+    setEditingFavoriteListId(null);
+    setEditingFavoriteListName('');
+    setCreatingFavoriteList(false);
+    setNewFavoriteListName('');
+    setFavoriteMenuState((prev) => (
+      prev?.photoKey === pozaKey && prev?.source === source
+        ? null
+        : { photoKey: pozaKey, source }
+    ));
+  }, [allowPhotoSelection]);
 
   const closeLightbox = useCallback(() => {
     setSelectedImage(null);
@@ -755,7 +993,17 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   }, [slug, galleryId, resolvedGalleryId, loadGalleryPhotos]);
 
   useEffect(() => {
-    if (!galerie?.id || !numeSelectie) return;
+    if (!galerie?.id) return;
+
+    if (!numeSelectie) {
+      applySelectionListsLocally(normalizeSelectionLists([], []), { activeListId: DEFAULT_SELECTION_LIST_ID });
+      setEmailInputValue('');
+      setPhoneInputValue('');
+      setAdditionalInfoInputValue('');
+      setCommentInputValue('');
+      return;
+    }
+
     let cancelled = false;
 
     const loadClientSelection = async () => {
@@ -765,11 +1013,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
         const fallbackLegacy = Array.isArray(galerie?.selectii?.[numeSelectie]) ? galerie.selectii[numeSelectie] : [];
         const fallbackCurrent = Array.isArray(galerie?.favorite) ? galerie.favorite : [];
-        const keys = Array.isArray(selection?.keys) && selection.keys.length > 0
-          ? selection.keys
-          : (fallbackLegacy.length > 0 ? fallbackLegacy : fallbackCurrent);
+        const fallbackKeys = fallbackLegacy.length > 0 ? fallbackLegacy : fallbackCurrent;
+        const lists = normalizeSelectionLists(selection?.lists || [], fallbackKeys);
 
-        setGalerie(prev => prev ? ({ ...prev, favorite: Array.from(new Set(keys)) }) : prev);
+        applySelectionListsLocally(lists);
         setEmailInputValue(String(selection?.clientEmail || ''));
         setPhoneInputValue(String(selection?.clientPhone || ''));
         setAdditionalInfoInputValue(String(selection?.clientAdditionalInfo || ''));
@@ -780,9 +1027,51 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
     loadClientSelection();
     return () => { cancelled = true; };
-  }, [galerie?.id, numeSelectie]);
+  }, [applySelectionListsLocally, galerie?.id, numeSelectie]);
 
   useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [doarFavorite, activeClientFolderId]);
+
+  useEffect(() => {
+    if (!normalizedSelectionLists.some((list) => list.id === activeSelectionListId)) {
+      setActiveSelectionListId(normalizedSelectionLists[0]?.id || DEFAULT_SELECTION_LIST_ID);
+    }
+  }, [activeSelectionListId, normalizedSelectionLists]);
+
+  useEffect(() => {
+    if (!favoriteMenuState && !favoriteListMenuId && !editingFavoriteListId) return undefined;
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest('.cg-fav-picker')
+        || target.closest('.cg-action-btn--favorite')
+        || target.closest('.cg-favorite-list-menu')
+        || target.closest('.cg-favorite-list-menu-toggle')
+        || target.closest('.cg-favorite-list-input')
+      ) {
+        return;
+      }
+
+      closeFavoriteMenus();
+      setEditingFavoriteListId(null);
+      setEditingFavoriteListName('');
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      closeFavoriteMenus();
+      setEditingFavoriteListId(null);
+      setEditingFavoriteListName('');
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeFavoriteMenus, editingFavoriteListId, favoriteListMenuId, favoriteMenuState]);
 
   useEffect(() => {
     if (!clientFolders.length) {
@@ -854,6 +1143,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   }, [lightboxOpen, lightboxIndex, pozeAfisate.length, closeLightbox]);
 
   useEffect(() => {
+    if (!lightboxOpen && favoriteMenuState?.source === 'lightbox') {
+      closeFavoriteMenus();
+    }
+  }, [closeFavoriteMenus, favoriteMenuState, lightboxOpen]);
+
+  useEffect(() => {
     if (!lightboxOpen) return undefined
     const scrollY = window.scrollY
     document.documentElement.style.scrollBehavior = 'auto'
@@ -894,17 +1189,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     } catch (err) { console.log('Share canceled'); }
   };
 
-  const handleFavoriteClick = (pozaKey) => {
+  const handleFavoriteClick = (pozaKey, source = 'grid') => {
     if (!allowPhotoSelection) return;
-    if (!numeSelectie) { setPendingFavAction(pozaKey); setShowNameModal(true); }
-    else {
-      executeFavoriteToggle(pozaKey, numeSelectie, {
-        clientEmail: emailInputValue,
-        clientPhone: phoneInputValue,
-        clientAdditionalInfo: additionalInfoInputValue,
-        clientComment: commentInputValue,
-      });
+    if (!numeSelectie) {
+      setPendingFavAction({ photoKey: pozaKey, source });
+      setShowNameModal(true);
+      return;
     }
+    openFavoriteMenu(pozaKey, source);
   };
 
   const handleSaveName = async () => {
@@ -931,12 +1223,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     }
     setSelectionTitleInputValue('');
     if (pendingFavAction) {
-      executeFavoriteToggle(pendingFavAction, cleanName, {
-        clientEmail: emailInputValue,
-        clientPhone: phoneInputValue,
-        clientAdditionalInfo: additionalInfoInputValue,
-        clientComment: commentInputValue,
-      });
+      openFavoriteMenu(pendingFavAction.photoKey, pendingFavAction.source || 'grid');
       setPendingFavAction(null);
     }
   };
@@ -945,21 +1232,22 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     clearStoredSelectionName();
     setNumeSelectie('');
     setNameInputValue('');
+    applySelectionListsLocally(normalizeSelectionLists([], []), { activeListId: DEFAULT_SELECTION_LIST_ID });
+    closeFavoriteMenus();
   };
 
-  const executeFavoriteToggle = async (pozaKey, numeClient, metaOverride = null) => {
+  const executeFavoriteToggle = async (pozaKey, numeClient, metaOverride = null, listId = activeSelectionListId) => {
     if (!allowPhotoSelection || !galerie?.id || !numeClient) return;
     const latestSelection = await galleriesService.getClientSelection(galerie.id, numeClient).catch(() => null);
-    const currentFav = Array.isArray(latestSelection?.keys)
-      ? latestSelection.keys
-      : (Array.isArray(galerie?.favorite) ? galerie.favorite : []);
-    const isFav = currentFav.includes(pozaKey);
-    const clientMeta = {
-      clientEmail: String(metaOverride?.clientEmail ?? latestSelection?.clientEmail ?? emailInputValue ?? '').trim(),
-      clientPhone: String(metaOverride?.clientPhone ?? latestSelection?.clientPhone ?? phoneInputValue ?? '').trim(),
-      clientAdditionalInfo: String(metaOverride?.clientAdditionalInfo ?? latestSelection?.clientAdditionalInfo ?? additionalInfoInputValue ?? '').trim(),
-      clientComment: String(metaOverride?.clientComment ?? latestSelection?.clientComment ?? commentInputValue ?? '').trim(),
-    };
+    const currentLists = normalizeSelectionLists(latestSelection?.lists || normalizedSelectionLists, latestSelection?.keys || allFavoriteKeys);
+    const currentFav = aggregateSelectionKeys(currentLists);
+    const nextListId = currentLists.some((list) => list.id === listId)
+      ? listId
+      : (currentLists[0]?.id || DEFAULT_SELECTION_LIST_ID);
+    const targetList = currentLists.find((list) => list.id === nextListId) || currentLists[0];
+    const targetKeys = sanitizeSelectionKeys(targetList?.keys || []);
+    const isFav = targetKeys.includes(pozaKey);
+    const clientMeta = buildClientSelectionMeta(latestSelection, metaOverride);
     if (requiresEmail && !clientMeta.clientEmail) {
       setShowNameModal(true);
       return;
@@ -973,28 +1261,122 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       return;
     }
     try {
-      const title = selectionTitle;
       if (isFav) {
-        await galleriesService.removeClientFavorite(galerie.id, numeClient, pozaKey, title, clientMeta);
-        const next = currentFav.filter(k => k !== pozaKey);
-        setGalerie(prev => ({ ...prev, favorite: next }));
+        const nextLists = currentLists.map((list) => (
+          list.id === nextListId
+            ? { ...list, keys: sanitizeSelectionKeys(list.keys.filter((key) => key !== pozaKey)) }
+            : list
+        ));
+        await saveSelectionLists(nextLists, clientMeta, { activeListId: nextListId });
       } else {
-        if (limit != null && Number(limit) > 0 && currentFav.length >= Number(limit)) {
+        if (limit != null && Number(limit) > 0 && !currentFav.includes(pozaKey) && currentFav.length >= Number(limit)) {
           alert(`Ai atins limita de ${limit} fotografii pentru această selecție.`);
           return;
         }
-        await galleriesService.addClientFavorite(galerie.id, numeClient, pozaKey, title, clientMeta);
-        const next = Array.from(new Set([...currentFav, pozaKey]));
-        setGalerie(prev => ({ ...prev, favorite: next }));
+        const nextLists = currentLists.map((list) => (
+          list.id === nextListId
+            ? { ...list, keys: sanitizeSelectionKeys([...(list.keys || []), pozaKey]) }
+            : list
+        ));
+        const nextFavoriteKeys = aggregateSelectionKeys(nextLists);
+        await saveSelectionLists(nextLists, clientMeta, { activeListId: nextListId });
+        if (nextFavoriteKeys.length > currentFav.length) {
+          setCountPop(true);
+          setTimeout(() => setCountPop(false), 450);
+        }
+      }
+      closeFavoriteMenus();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleCreateFavoriteList = async (photoKey = favoriteMenuState?.photoKey || null) => {
+    const rawName = String(newFavoriteListName || '').trim();
+    if (!rawName) return;
+    const cleanName = sanitizeSelectionListName(rawName);
+
+    const nextListId = buildSelectionListId(cleanName);
+    const nextKeys = photoKey ? sanitizeSelectionKeys([photoKey]) : [];
+    const currentCount = allFavoriteKeys.length;
+    const nextLists = [
+      ...normalizedSelectionLists,
+      { id: nextListId, name: cleanName, keys: nextKeys },
+    ];
+    const nextFavoriteKeys = aggregateSelectionKeys(nextLists);
+
+    if (limit != null && Number(limit) > 0 && nextFavoriteKeys.length > Number(limit) && !allFavoriteKeySet.has(photoKey)) {
+      alert(`Ai atins limita de ${limit} fotografii pentru această selecție.`);
+      return;
+    }
+
+    try {
+      await saveSelectionLists(nextLists, null, { activeListId: nextListId });
+      if (nextFavoriteKeys.length > currentCount) {
         setCountPop(true);
         setTimeout(() => setCountPop(false), 450);
       }
-    } catch (e) { console.error(e); }
+      closeFavoriteMenus();
+      setActiveSelectionListId(nextListId);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleStartRenameFavoriteList = (listId) => {
+    const list = normalizedSelectionLists.find((item) => item.id === listId);
+    if (!list) return;
+    setFavoriteListMenuId(null);
+    setEditingFavoriteListId(listId);
+    setEditingFavoriteListName(list.name);
+  };
+
+  const handleRenameFavoriteList = async (listId) => {
+    const list = normalizedSelectionLists.find((item) => item.id === listId);
+    if (!list) return;
+    const rawName = String(editingFavoriteListName || '').trim();
+    const cleanName = sanitizeSelectionListName(rawName || list.name);
+
+    try {
+      await saveSelectionLists(
+        normalizedSelectionLists.map((item) => (
+          item.id === listId ? { ...item, name: cleanName } : item
+        )),
+        null,
+        { activeListId: listId }
+      );
+      setEditingFavoriteListId(null);
+      setEditingFavoriteListName('');
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleDeleteFavoriteList = async (listId) => {
+    const list = normalizedSelectionLists.find((item) => item.id === listId);
+    if (!list) return;
+    const confirmed = window.confirm(`Ștergi lista "${list.name}"?`);
+    if (!confirmed) return;
+
+    const remainingLists = normalizedSelectionLists.filter((item) => item.id !== listId);
+    const nextLists = remainingLists.length > 0
+      ? remainingLists
+      : normalizeSelectionLists([], []);
+    const nextActiveId = nextLists.some((item) => item.id === activeSelectionListId)
+      ? activeSelectionListId
+      : (nextLists[0]?.id || DEFAULT_SELECTION_LIST_ID);
+
+    try {
+      await saveSelectionLists(nextLists, null, { activeListId: nextActiveId });
+      setFavoriteListMenuId(null);
+      setEditingFavoriteListId(null);
+      setEditingFavoriteListName('');
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const handleDownload = async () => {
     if (!allowOriginalDownloads) return;
-    const targets = doarFavorite ? poze.filter(p => galerie.favorite?.includes(p.key)) : poze;
+    const targets = doarFavorite ? poze.filter((p) => activeFavoriteKeySet.has(p.key)) : poze;
     if (!window.confirm(`Descarci ${targets.length} fotografii?`)) return;
     setDownloadingAll(true);
     for (const p of targets) {
@@ -1174,7 +1556,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     ? Math.max(0, Math.min(100, Number(coverFocalPoint.x))) + '% ' + Math.max(0, Math.min(100, Number(coverFocalPoint.y))) + '%'
     : 'center';
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
-  const favCount = galerie?.favorite?.length ?? 0;
+  const favCount = allFavoriteKeys.length;
   const activeClientFolder = clientFolders.find((folder) => folder.id === effectiveActiveClientFolderId) || null;
   const activeClientFolderName = activeClientFolder?.name || '';
   const isArchived = galerie?.status === 'archived';
@@ -1332,12 +1714,79 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           </div>
         </div>
 
+        {allowPhotoSelection && doarFavorite && normalizedSelectionLists.length > 0 && (
+          <div className="cg-favorite-lists-bar" role="tablist" aria-label="Liste favorite">
+            {normalizedSelectionLists.map((list) => {
+              const isActive = activeSelectionList?.id === list.id;
+              const isEditing = editingFavoriteListId === list.id;
+              return (
+                <div key={list.id} className="cg-favorite-list-shell">
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editingFavoriteListName}
+                      className="cg-favorite-list-input"
+                      onChange={(event) => setEditingFavoriteListName(event.target.value)}
+                      onBlur={() => handleRenameFavoriteList(list.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          handleRenameFavoriteList(list.id);
+                        }
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setEditingFavoriteListId(null);
+                          setEditingFavoriteListName('');
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className={`cg-favorite-list-tab ${isActive ? 'is-active' : ''}`}
+                      onClick={() => setActiveSelectionListId(list.id)}
+                      aria-pressed={isActive}
+                    >
+                      <span>{list.name}</span>
+                      <span className="cg-favorite-list-count">{list.keys?.length || 0}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="cg-favorite-list-menu-toggle"
+                    aria-label={`Acțiuni pentru lista ${list.name}`}
+                    onClick={() => {
+                      setFavoriteMenuState(null);
+                      setCreatingFavoriteList(false);
+                      setNewFavoriteListName('');
+                      setFavoriteListMenuId((prev) => (prev === list.id ? null : list.id));
+                    }}
+                  >
+                    ⋯
+                  </button>
+                  {favoriteListMenuId === list.id && (
+                    <div className="cg-favorite-list-menu">
+                      <button type="button" className="cg-favorite-list-menu-item" onClick={() => handleStartRenameFavoriteList(list.id)}>
+                        Redenumește
+                      </button>
+                      <button type="button" className="cg-favorite-list-menu-item is-danger" onClick={() => handleDeleteFavoriteList(list.id)}>
+                        Șterge lista
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Gallery Grid */}
         <div className="cg-gallery">
           {pozeAfisate.length === 0 ? (
             <div className="cg-empty">
               {doarFavorite
-                ? 'Nu ai selectat nicio fotografie încă.'
+                ? `Lista "${activeSelectionList?.name || DEFAULT_SELECTION_LIST_NAME}" nu conține fotografii încă.`
                 : (!clientFolders.length
                     ? 'Galeria este goală.'
                     : `Folderul "${activeClientFolderName || 'selectat'}" nu conține fotografii.`)}
@@ -1360,13 +1809,36 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                     key={poza.key}
                     pozaKey={poza.key}
                     quality={gridLayout === '4col' ? 'thumb' : 'medium'}
-                    isFav={galerie.favorite?.includes(poza.key)}
+                    isFav={allFavoriteKeySet.has(poza.key)}
                     onFavoriteClick={handleFavoriteClick}
                     accentColor={profile.accentColor}
                     allowPhotoSelection={allowPhotoSelection}
                     allowOriginalDownloads={allowOriginalDownloads}
                     watermarkEnabled={watermarkEnabled}
                     watermarkLabel={watermarkLabel}
+                    favoritePicker={favoriteMenuState?.source === 'grid' && favoriteMenuState?.photoKey === poza.key ? {
+                      isOpen: true,
+                      lists: normalizedSelectionLists,
+                      activeListId: activeSelectionList?.id || DEFAULT_SELECTION_LIST_ID,
+                      newListName: newFavoriteListName,
+                      creatingNewList: creatingFavoriteList,
+                      onListClick: (listId) => executeFavoriteToggle(poza.key, numeSelectie, {
+                        clientEmail: emailInputValue,
+                        clientPhone: phoneInputValue,
+                        clientAdditionalInfo: additionalInfoInputValue,
+                        clientComment: commentInputValue,
+                      }, listId),
+                      onCreateNewListClick: () => {
+                        setCreatingFavoriteList(true);
+                        setNewFavoriteListName('');
+                      },
+                      onNewListNameChange: setNewFavoriteListName,
+                      onNewListConfirm: () => handleCreateFavoriteList(poza.key),
+                      onNewListCancel: () => {
+                        setCreatingFavoriteList(false);
+                        setNewFavoriteListName('');
+                      },
+                    } : null}
                     onClick={() => {
                       const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
                       if (nextIndex < 0) return;
@@ -1380,6 +1852,33 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
               </Masonry>
               {visibleCount < pozeAfisate.length && (
                 <div ref={loadMoreRef} style={{ height: 1, marginTop: 20 }} aria-hidden="true" />
+              )}
+
+              {favoriteMenuState?.source === 'lightbox' && favoriteMenuState?.photoKey && (
+                <FavoriteListPicker
+                  photoKey={favoriteMenuState.photoKey}
+                  className="cg-fav-picker--floating"
+                  lists={normalizedSelectionLists}
+                  activeListId={activeSelectionList?.id || DEFAULT_SELECTION_LIST_ID}
+                  newListName={newFavoriteListName}
+                  creatingNewList={creatingFavoriteList}
+                  onListClick={(listId) => executeFavoriteToggle(favoriteMenuState.photoKey, numeSelectie, {
+                    clientEmail: emailInputValue,
+                    clientPhone: phoneInputValue,
+                    clientAdditionalInfo: additionalInfoInputValue,
+                    clientComment: commentInputValue,
+                  }, listId)}
+                  onCreateNewListClick={() => {
+                    setCreatingFavoriteList(true);
+                    setNewFavoriteListName('');
+                  }}
+                  onNewListNameChange={setNewFavoriteListName}
+                  onNewListConfirm={() => handleCreateFavoriteList(favoriteMenuState.photoKey)}
+                  onNewListCancel={() => {
+                    setCreatingFavoriteList(false);
+                    setNewFavoriteListName('');
+                  }}
+                />
               )}
 
               <Lightbox
@@ -2027,6 +2526,119 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           font-weight: 600;
           color: #6a6a70;
         }
+        .cg-favorite-lists-bar {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          overflow-x: auto;
+          padding: 16px 40px 0;
+          scrollbar-width: none;
+        }
+        .cg-favorite-lists-bar::-webkit-scrollbar {
+          display: none;
+        }
+        .cg-favorite-list-shell {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          flex: 0 0 auto;
+        }
+        .cg-favorite-list-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 999px;
+          background: #fff;
+          color: #5f5f65;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          white-space: nowrap;
+        }
+        .cg-favorite-list-tab:hover {
+          color: #1a1a1f;
+          border-color: rgba(0,0,0,0.15);
+        }
+        .cg-favorite-list-tab.is-active {
+          background: #1a1a1f;
+          border-color: #1a1a1f;
+          color: #fff;
+        }
+        .cg-favorite-list-count {
+          font-size: 11px;
+          opacity: 0.72;
+        }
+        .cg-favorite-list-menu-toggle {
+          width: 28px;
+          height: 28px;
+          border: none;
+          border-radius: 999px;
+          background: transparent;
+          color: #8d8d94;
+          font-size: 16px;
+          line-height: 1;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        .cg-favorite-list-menu-toggle:hover {
+          background: rgba(0,0,0,0.05);
+          color: #1a1a1f;
+        }
+        .cg-favorite-list-menu {
+          position: absolute;
+          top: calc(100% + 8px);
+          right: 0;
+          min-width: 148px;
+          padding: 6px;
+          border-radius: 12px;
+          background: rgba(255,255,255,0.98);
+          border: 1px solid rgba(0,0,0,0.08);
+          box-shadow: 0 18px 36px rgba(0,0,0,0.12);
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          z-index: 35;
+        }
+        .cg-favorite-list-menu-item {
+          border: none;
+          background: transparent;
+          text-align: left;
+          padding: 9px 10px;
+          border-radius: 8px;
+          color: #1a1a1f;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+          cursor: pointer;
+        }
+        .cg-favorite-list-menu-item:hover {
+          background: #f4f4f7;
+        }
+        .cg-favorite-list-menu-item.is-danger {
+          color: #b42318;
+        }
+        .cg-favorite-list-input {
+          min-width: 140px;
+          border: 1px solid rgba(0,0,0,0.12);
+          border-radius: 999px;
+          padding: 8px 12px;
+          background: #fff;
+          color: #1a1a1f;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+          outline: none;
+        }
+        .cg-favorite-list-input:focus {
+          border-color: rgba(0,0,0,0.22);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+        }
         .cg-scroll-top-btn {
           position: fixed;
           right: 24px;
@@ -2092,6 +2704,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           justify-content: flex-end;
           opacity: 0;
           transition: opacity 0.25s ease;
+          pointer-events: none;
         }
         .cg-watermark {
           position: absolute;
@@ -2111,7 +2724,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           text-shadow: 0 1px 1px rgba(0,0,0,0.35);
         }
         .cg-item:hover .cg-item-overlay { opacity: 1; }
-        .cg-item-actions { display: flex; gap: 8px; }
+        .cg-item-actions { display: flex; gap: 8px; pointer-events: auto; }
         .cg-action-btn {
           display: flex;
           align-items: center;
@@ -2130,6 +2743,124 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         }
         .cg-action-btn:hover { background: rgba(255,255,255,0.28); transform: scale(1.06); }
         .cg-action-btn--active { color: #b8965a !important; }
+        .cg-fav-picker {
+          width: min(210px, calc(100% - 20px));
+          border-radius: 14px;
+          background: rgba(20,20,22,0.92);
+          border: 1px solid rgba(255,255,255,0.16);
+          box-shadow: 0 18px 32px rgba(0,0,0,0.24);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          overflow: hidden;
+          pointer-events: auto;
+        }
+        .cg-fav-picker--inline {
+          position: absolute;
+          right: 14px;
+          bottom: 60px;
+          z-index: 4;
+        }
+        .cg-fav-picker--floating {
+          position: fixed;
+          top: max(76px, calc(env(safe-area-inset-top, 0px) + 20px));
+          right: 20px;
+          z-index: 10030;
+          width: min(240px, calc(100vw - 32px));
+        }
+        .cg-fav-picker-list {
+          display: flex;
+          flex-direction: column;
+          max-height: 220px;
+          overflow-y: auto;
+        }
+        .cg-fav-picker-item {
+          border: none;
+          background: transparent;
+          padding: 11px 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          color: rgba(255,255,255,0.88);
+          text-align: left;
+          cursor: pointer;
+          font-family: 'DM Sans', sans-serif;
+        }
+        .cg-fav-picker-item:hover,
+        .cg-fav-picker-item.is-current {
+          background: rgba(255,255,255,0.08);
+        }
+        .cg-fav-picker-item.is-active .cg-fav-picker-item-name {
+          color: #fff;
+        }
+        .cg-fav-picker-item-name {
+          font-size: 13px;
+          font-weight: 500;
+        }
+        .cg-fav-picker-item-meta {
+          font-size: 11px;
+          color: rgba(255,255,255,0.55);
+          white-space: nowrap;
+        }
+        .cg-fav-picker-create {
+          width: 100%;
+          border: none;
+          border-top: 1px solid rgba(255,255,255,0.12);
+          background: transparent;
+          color: #fff;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12.5px;
+          font-weight: 500;
+          padding: 11px 12px;
+          text-align: left;
+          cursor: pointer;
+        }
+        .cg-fav-picker-create:hover {
+          background: rgba(255,255,255,0.08);
+        }
+        .cg-fav-picker-new {
+          border-top: 1px solid rgba(255,255,255,0.12);
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .cg-fav-picker-input {
+          width: 100%;
+          border: 1px solid rgba(255,255,255,0.16);
+          border-radius: 10px;
+          background: rgba(255,255,255,0.1);
+          color: #fff;
+          padding: 10px 12px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12.5px;
+          outline: none;
+        }
+        .cg-fav-picker-input::placeholder {
+          color: rgba(255,255,255,0.42);
+        }
+        .cg-fav-picker-new-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+        }
+        .cg-fav-picker-btn {
+          border: none;
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 11.5px;
+          font-weight: 500;
+          cursor: pointer;
+        }
+        .cg-fav-picker-btn--ghost {
+          background: rgba(255,255,255,0.12);
+          color: rgba(255,255,255,0.76);
+        }
+        .cg-fav-picker-btn--confirm {
+          background: #fff;
+          color: #1a1a1f;
+        }
 
         /* ── Reviews ── */
         .cg-reviews {
@@ -2380,6 +3111,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         /* ── Tablet ── */
         @media (max-width: 900px) {
           .cg-toolbar { padding: 0 16px; min-height: 52px; height: 52px; }
+          .cg-favorite-lists-bar { padding: 14px 16px 0; }
           .cg-gallery { padding: 28px 16px 0; }
           .cg-footer { padding: 48px 20px 40px; }
           .cg-masonry { margin-left: -6px; }
@@ -2408,6 +3140,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-toolbar-btn { padding: 8px 10px; }
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
           .cg-toolbar-fav-badge { display: inline; }
+          .cg-favorite-lists-bar { padding: 12px 12px 0; gap: 8px; }
+          .cg-favorite-list-tab { padding: 7px 10px; }
+          .cg-favorite-list-menu-toggle { width: 26px; height: 26px; }
           .cg-gallery { padding: 20px 8px 0; }
           .cg-masonry { margin-left: -6px; }
           .cg-masonry-col { padding-left: 6px; }

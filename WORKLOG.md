@@ -204,3 +204,12 @@
 - Adăugat buton mic `✕` lângă indicator pentru resetarea numelui din localStorage și din state-ul curent, astfel încât clientul să poată reintroduce alt nume la următoarea acțiune
 - Extins stilurile responsive ale toolbar-ului pentru noul indicator, păstrând tabs-urile și butoanele existente neatinse
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Liste multiple de favorite pentru clienți
+
+- Extins `src/modules/galleries/galleries.service.js` pentru a salva selecțiile clientului și în format nou `lists: [{ id, name, keys }]`, păstrând totodată câmpul `keys` ca uniune pentru compatibilitate cu flow-urile existente
+- Actualizat `src/components/ClientGallery.jsx` să încarce, salveze și randaze multiple liste de favorite folosind aceeași identitate locală a clientului (`numeSelectie`)
+- La click pe inimă se deschide acum un picker mic cu listele existente și acțiunea `+ Listă nouă`, inclusiv input inline pentru numele listei
+- În modul `Favorites`, fiecare listă apare ca tab separat, cu meniuri mici pentru redenumire și ștergere
+- Păstrată compatibilitatea pentru clienții existenți fără `lists`, care sunt migrați local într-o listă implicită `Favorite`
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

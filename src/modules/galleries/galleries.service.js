@@ -23,6 +23,9 @@ import {
 } from './selection.utils'
 import { createFoldersService } from './folders.service'
 
+const DEFAULT_SELECTION_LIST_ID = 'default'
+const DEFAULT_SELECTION_LIST_NAME = 'Favorite'
+
 function mapDoc(snap) {
   return { id: snap.id, ...snap.data() }
 }
@@ -47,6 +50,61 @@ function sanitizeReviewPayload(payload = {}) {
     message,
     rating,
   }
+}
+
+function sanitizeSelectionListName(name = '') {
+  const normalized = String(name || '').trim().slice(0, 80)
+  return normalized || DEFAULT_SELECTION_LIST_NAME
+}
+
+function sanitizeSelectionListId(value = '', fallbackName = '', index = 0) {
+  const normalized = String(value || '').trim()
+  if (normalized) return normalized.slice(0, 120)
+
+  const slug = sanitizeSelectionListName(fallbackName)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
+
+  if (slug) return `list_${slug}_${index}`
+  return `list_${index}`
+}
+
+function aggregateSelectionKeysFromLists(lists = []) {
+  return sanitizeKeys(
+    lists.flatMap((list) => sanitizeKeys(list?.keys || []))
+  )
+}
+
+function sanitizeSelectionLists(lists = [], fallbackKeys = []) {
+  const seenIds = new Set()
+  const normalizedLists = (Array.isArray(lists) ? lists : [])
+    .map((list, index) => {
+      const name = sanitizeSelectionListName(list?.name || '')
+      let id = sanitizeSelectionListId(list?.id, name, index)
+      while (seenIds.has(id)) {
+        id = `${id}_${seenIds.size + 1}`
+      }
+      seenIds.add(id)
+      return {
+        id,
+        name,
+        keys: sanitizeKeys(list?.keys || []),
+      }
+    })
+
+  if (normalizedLists.length > 0) {
+    return normalizedLists
+  }
+
+  return [{
+    id: DEFAULT_SELECTION_LIST_ID,
+    name: DEFAULT_SELECTION_LIST_NAME,
+    keys: sanitizeKeys(fallbackKeys),
+  }]
 }
 
 async function syncSelectionAggregates(db, galleryId) {
@@ -250,6 +308,8 @@ export function createGalleriesModule({ db }) {
       const selectionSnap = await getDoc(selectionRef)
       if (selectionSnap.exists()) {
         const data = selectionSnap.data()
+        const lists = sanitizeSelectionLists(data?.lists || [], data?.keys || [])
+        const keys = aggregateSelectionKeysFromLists(lists)
         return {
           id: selectionSnap.id,
           clientId: data?.clientId || clientId,
@@ -258,8 +318,9 @@ export function createGalleriesModule({ db }) {
           clientPhone: String(data?.clientPhone || ''),
           clientAdditionalInfo: String(data?.clientAdditionalInfo || ''),
           clientComment: String(data?.clientComment || ''),
-          keys: sanitizeKeys(data?.keys || []),
-          count: Number(data?.count || 0),
+          lists,
+          keys,
+          count: Number(data?.count || keys.length),
           selectionTitle: data?.selectionTitle || '',
           updatedAt: data?.updatedAt || null,
           source: 'new',
@@ -280,6 +341,11 @@ export function createGalleriesModule({ db }) {
         clientPhone: '',
         clientAdditionalInfo: '',
         clientComment: '',
+        lists: [{
+          id: DEFAULT_SELECTION_LIST_ID,
+          name: DEFAULT_SELECTION_LIST_NAME,
+          keys: legacyKeys,
+        }],
         keys: legacyKeys,
         count: legacyKeys.length,
         selectionTitle: gallerySnap.data()?.numeSelectieClient || '',
@@ -295,7 +361,8 @@ export function createGalleriesModule({ db }) {
       const fromNew = snap.docs
         .map((d) => {
           const data = d.data()
-          const keys = sanitizeKeys(data?.keys || [])
+          const lists = sanitizeSelectionLists(data?.lists || [], data?.keys || [])
+          const keys = aggregateSelectionKeysFromLists(lists)
           return {
             id: d.id,
             clientId: data?.clientId || d.id,
@@ -304,6 +371,7 @@ export function createGalleriesModule({ db }) {
             clientPhone: String(data?.clientPhone || ''),
             clientAdditionalInfo: String(data?.clientAdditionalInfo || ''),
             clientComment: String(data?.clientComment || ''),
+            lists,
             keys,
             count: Number(data?.count || keys.length),
             selectionTitle: data?.selectionTitle || '',
@@ -339,6 +407,11 @@ export function createGalleriesModule({ db }) {
             clientPhone: '',
             clientAdditionalInfo: '',
             clientComment: '',
+            lists: [{
+              id: DEFAULT_SELECTION_LIST_ID,
+              name: DEFAULT_SELECTION_LIST_NAME,
+              keys: normalizedKeys,
+            }],
             keys: normalizedKeys,
             count: normalizedKeys.length,
             selectionTitle: galleryData?.numeSelectieClient || '',
@@ -362,13 +435,29 @@ export function createGalleriesModule({ db }) {
     },
 
     async saveClientSelection(galleryId, clientName, keys, selectionTitle = '', clientMeta = {}) {
+      const cleanKeys = sanitizeKeys(keys)
+      return this.saveClientSelectionLists(
+        galleryId,
+        clientName,
+        [{
+          id: DEFAULT_SELECTION_LIST_ID,
+          name: DEFAULT_SELECTION_LIST_NAME,
+          keys: cleanKeys,
+        }],
+        selectionTitle,
+        clientMeta
+      )
+    },
+
+    async saveClientSelectionLists(galleryId, clientName, lists, selectionTitle = '', clientMeta = {}) {
       const normalizedName = normalizeClientName(clientName)
       if (!galleryId || !normalizedName) throw new Error('saveClientSelection: galleryId și clientName sunt obligatorii')
 
       const clientId = toClientSelectionId(normalizedName)
       if (!clientId) throw new Error('saveClientSelection: clientId invalid')
 
-      const cleanKeys = sanitizeKeys(keys)
+      const normalizedLists = sanitizeSelectionLists(lists)
+      const cleanKeys = aggregateSelectionKeysFromLists(normalizedLists)
       const cleanMeta = sanitizeClientMeta(clientMeta)
       await setDoc(
         doc(db, 'gallerySelections', galleryId, 'clients', clientId),
@@ -376,6 +465,7 @@ export function createGalleriesModule({ db }) {
           clientId,
           clientName: normalizedName,
           ...cleanMeta,
+          lists: normalizedLists,
           keys: cleanKeys,
           count: cleanKeys.length,
           selectionTitle: selectionTitle || '',
@@ -390,7 +480,13 @@ export function createGalleriesModule({ db }) {
       } catch (_) {
       }
 
-      return { clientId, clientName: normalizedName, ...cleanMeta, keys: cleanKeys }
+      return {
+        clientId,
+        clientName: normalizedName,
+        ...cleanMeta,
+        lists: normalizedLists,
+        keys: cleanKeys,
+      }
     },
 
     async migrateLegacySelections(galleryId, { selectionTitle = '' } = {}) {
