@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Masonry from 'react-masonry-css'
 import { httpsCallable } from 'firebase/functions'
 import { FolderPlus, Link as LinkIcon, MessageCircle, Pencil, Settings, Trash2 } from 'lucide-react'
@@ -433,8 +433,7 @@ export default function GalleryDetailView({
   const [editingFolderName, setEditingFolderName] = useState('')
   const [renamingFolderId, setRenamingFolderId] = useState(null)
   const [draggedFolderId, setDraggedFolderId] = useState(null)
-  const [dragOverFolderId, setDragOverFolderId] = useState(null)
-  const [dragOverPosition, setDragOverPosition] = useState(null)
+  const [dragOverDropIndex, setDragOverDropIndex] = useState(null)
   const [selectedKeys, setSelectedKeys] = useState(new Set())
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [sendLinkOpen, setSendLinkOpen] = useState(false)
@@ -582,53 +581,107 @@ export default function GalleryDetailView({
     } catch (_) {
     }
     setDraggedFolderId(folderId)
-    setDragOverFolderId(null)
-    setDragOverPosition(null)
+    setDragOverDropIndex(null)
   }
 
-  const handleFolderDragOver = (event, folderId) => {
-    if (!draggedFolderId || !folderId || draggedFolderId === folderId) return
+  const handleFolderDragOver = (event, dropIndex) => {
+    if (!draggedFolderId || typeof dropIndex !== 'number') return
     event.preventDefault()
-    const rect = event.currentTarget.getBoundingClientRect()
-    const nextPosition = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
-    if (dragOverFolderId !== folderId || dragOverPosition !== nextPosition) {
-      setDragOverFolderId(folderId)
-      setDragOverPosition(nextPosition)
+    try {
+      event.dataTransfer.dropEffect = 'move'
+    } catch (_) {
+    }
+    if (dragOverDropIndex !== dropIndex) {
+      setDragOverDropIndex(dropIndex)
     }
   }
 
-  const handleFolderDragLeave = (event, folderId) => {
+  const handleFolderDragLeave = (event, dropIndex) => {
     const nextTarget = event.relatedTarget
     if (nextTarget && event.currentTarget.contains(nextTarget)) return
-    if (dragOverFolderId === folderId) {
-      setDragOverFolderId(null)
-      setDragOverPosition(null)
+    if (dragOverDropIndex === dropIndex) {
+      setDragOverDropIndex(null)
     }
   }
 
-  const handleFolderDrop = async (event, folderId) => {
+  const handleFolderDrop = async (event, dropIndex) => {
     event.preventDefault()
-    if (!draggedFolderId || !folderId || draggedFolderId === folderId) {
-      setDragOverFolderId(null)
-      setDragOverPosition(null)
+    if (!draggedFolderId || typeof dropIndex !== 'number') {
+      setDragOverDropIndex(null)
       return
     }
 
     const activeDraggedFolderId = draggedFolderId
-    const activeDragOverPosition = dragOverPosition || 'before'
-    setDragOverFolderId(null)
-    setDragOverPosition(null)
+    const sourceIndex = galleryFolders.findIndex((folder) => folder.id === activeDraggedFolderId)
+    if (sourceIndex === -1) {
+      setDragOverDropIndex(null)
+      setDraggedFolderId(null)
+      return
+    }
+
+    const remainingFolders = galleryFolders.filter((folder) => folder.id !== activeDraggedFolderId)
+    const adjustedDropIndex = sourceIndex < dropIndex ? dropIndex - 1 : dropIndex
+    const clampedDropIndex = Math.max(0, Math.min(adjustedDropIndex, remainingFolders.length))
+
+    let targetFolderId = ''
+    let insertPosition = 'before'
+    if (clampedDropIndex <= 0) {
+      targetFolderId = remainingFolders[0]?.id || ''
+      insertPosition = 'before'
+    } else if (clampedDropIndex >= remainingFolders.length) {
+      targetFolderId = remainingFolders[remainingFolders.length - 1]?.id || ''
+      insertPosition = 'after'
+    } else {
+      targetFolderId = remainingFolders[clampedDropIndex]?.id || ''
+      insertPosition = 'before'
+    }
+
+    setDragOverDropIndex(null)
     setDraggedFolderId(null)
+    if (!targetFolderId) return
     try {
-      await onReorderFolders?.(activeDraggedFolderId, folderId, activeDragOverPosition)
+      await onReorderFolders?.(activeDraggedFolderId, targetFolderId, insertPosition)
     } catch (_) {
     }
   }
 
   const handleFolderDragEnd = () => {
     setDraggedFolderId(null)
-    setDragOverFolderId(null)
-    setDragOverPosition(null)
+    setDragOverDropIndex(null)
+  }
+
+  const renderFolderDropZone = (dropIndex) => {
+    const isActive = !!draggedFolderId && dragOverDropIndex === dropIndex
+
+    return (
+      <div
+        key={`folder-drop-zone-${dropIndex}`}
+        onDragOver={(event) => handleFolderDragOver(event, dropIndex)}
+        onDragLeave={(event) => handleFolderDragLeave(event, dropIndex)}
+        onDrop={(event) => handleFolderDrop(event, dropIndex)}
+        aria-hidden="true"
+        style={{
+          flex: '0 0 auto',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: isActive ? 24 : 8,
+          height: isActive ? 24 : 8,
+          transition: 'width 0.15s ease, height 0.15s ease',
+        }}
+      >
+        <span
+          style={{
+            width: 2,
+            height: isActive ? 24 : 8,
+            borderRadius: 999,
+            background: isActive ? '#1a1a1f' : 'transparent',
+            transition: 'height 0.15s ease, background 0.15s ease',
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+    )
   }
 
   const closeSendLinkModal = () => {
@@ -902,117 +955,90 @@ export default function GalleryDetailView({
             </div>
           )}
 
-          {hasExplicitFolders && galleryFolders.map((folder) => (
-            <div
-              key={folder.id}
-              draggable={editingFolderId !== folder.id}
-              onDragStart={(event) => handleFolderDragStart(event, folder.id)}
-              onDragOver={(event) => handleFolderDragOver(event, folder.id)}
-              onDragLeave={(event) => handleFolderDragLeave(event, folder.id)}
-              onDrop={(event) => handleFolderDrop(event, folder.id)}
-              onDragEnd={handleFolderDragEnd}
-              style={{
-                display: 'inline-flex',
-                position: 'relative',
-                alignItems: 'center',
-                gap: 6,
-                opacity: draggedFolderId === folder.id ? 0.55 : 1,
-                borderRadius: 12,
-                transition: 'opacity 0.15s ease',
-              }}
-            >
-              {dragOverFolderId === folder.id && dragOverPosition === 'before' && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    top: -4,
-                    height: 2,
-                    borderRadius: 999,
-                    background: '#1a1a1f',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-              {dragOverFolderId === folder.id && dragOverPosition === 'after' && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    bottom: -4,
-                    height: 2,
-                    borderRadius: 999,
-                    background: '#1a1a1f',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-              {editingFolderId === folder.id ? (
-                <input
-                  type="text"
-                  value={editingFolderName}
-                  autoFocus
-                  disabled={renamingFolderId === folder.id}
-                  onChange={(event) => setEditingFolderName(event.target.value)}
-                  onBlur={() => {
-                    if (skipBlurSaveRef.current) {
-                      skipBlurSaveRef.current = false
-                      return
-                    }
-                    saveFolderRename(folder)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      saveFolderRename(folder)
-                    }
-                    if (event.key === 'Escape') {
-                      event.preventDefault()
-                      skipBlurSaveRef.current = true
-                      cancelFolderRename()
-                    }
-                  }}
-                  className="dashboard-folder-chip is-active"
-                  style={{ minWidth: 120 }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className={`dashboard-folder-chip ${activeFolderId === folder.id ? 'is-active' : ''}`}
-                  onClick={() => onSelectFolder?.(folder.id)}
-                  title={folder.name}
-                >
-                  <span>{folder.name}</span>
-                  <span className="dashboard-folder-chip-count">{Number(folder.photoCount || 0)}</span>
-                </button>
-              )}
+          {hasExplicitFolders && (
+            <>
+              {renderFolderDropZone(0)}
+              {galleryFolders.map((folder, index) => (
+                <Fragment key={folder.id}>
+                  <div
+                    draggable={editingFolderId !== folder.id}
+                    onDragStart={(event) => handleFolderDragStart(event, folder.id)}
+                    onDragEnd={handleFolderDragEnd}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      opacity: draggedFolderId === folder.id ? 0.55 : 1,
+                      borderRadius: 12,
+                      transition: 'opacity 0.15s ease',
+                    }}
+                  >
+                    {editingFolderId === folder.id ? (
+                      <input
+                        type="text"
+                        value={editingFolderName}
+                        autoFocus
+                        disabled={renamingFolderId === folder.id}
+                        onChange={(event) => setEditingFolderName(event.target.value)}
+                        onBlur={() => {
+                          if (skipBlurSaveRef.current) {
+                            skipBlurSaveRef.current = false
+                            return
+                          }
+                          saveFolderRename(folder)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            saveFolderRename(folder)
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            skipBlurSaveRef.current = true
+                            cancelFolderRename()
+                          }
+                        }}
+                        className="dashboard-folder-chip is-active"
+                        style={{ minWidth: 120 }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className={`dashboard-folder-chip ${activeFolderId === folder.id ? 'is-active' : ''}`}
+                        onClick={() => onSelectFolder?.(folder.id)}
+                        title={folder.name}
+                      >
+                        <span>{folder.name}</span>
+                        <span className="dashboard-folder-chip-count">{Number(folder.photoCount || 0)}</span>
+                      </button>
+                    )}
 
-              <button
-                type="button"
-                onClick={() => startFolderRename(folder)}
-                disabled={renamingFolderId === folder.id}
-                aria-label={`Redenumește folderul ${folder.name}`}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#86868b',
-                  padding: 4,
-                  width: 20,
-                  height: 20,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                }}
-              >
-                <Pencil size={12} />
-              </button>
-            </div>
-          ))}
+                    <button
+                      type="button"
+                      onClick={() => startFolderRename(folder)}
+                      disabled={renamingFolderId === folder.id}
+                      aria-label={`Redenumește folderul ${folder.name}`}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#86868b',
+                        padding: 4,
+                        width: 20,
+                        height: 20,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                  {renderFolderDropZone(index + 1)}
+                </Fragment>
+              ))}
+            </>
+          )}
 
           {loadingFolders && (
             <span className="dashboard-folder-loading">Se încarcă foldere...</span>

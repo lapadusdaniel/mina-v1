@@ -165,3 +165,11 @@
 - Înlocuit highlight-ul de fundal cu un indicator vizual de inserare: linie de `2px` în `#1a1a1f`, afișată deasupra sau dedesubtul folderului țintă și curățată la `dragleave`, `drop` și `dragend`
 - Extins `handleReorderFolders()` din `src/components/Dashboard.jsx` cu parametrul `insertPosition`, astfel încât ordinea să fie persistată corect în Firestore când folderul este mutat înainte sau după țintă
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Fix drag & drop foldere cu drop zones explicite
+
+- Investigat UX-ul din `src/components/GalleryDetailView.jsx` și confirmat că indicatorul de drop apărea doar pe folderul hover-uit, nu în spațiile reale dintre foldere
+- Eliminată logica anterioară bazată pe jumătatea de sus / jos a folderului și introdusă o listă flat cu drop zones explicite între item-uri și după ultimul folder
+- Fiecare drop zone se extinde vizual pe dragover și afișează o linie verticală `#1a1a1f`, astfel încât repoziționarea să poată fi făcută clar înainte de primul folder, între două foldere sau după ultimul
+- La drop, componenta derivă poziția finală din indexul zonei și o mapează pe `onReorderFolders(...)`, păstrând compatibilitatea cu persistarea existentă din dashboard
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
