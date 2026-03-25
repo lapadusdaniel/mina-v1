@@ -213,3 +213,12 @@
 - În modul `Favorites`, fiecare listă apare ca tab separat, cu meniuri mici pentru redenumire și ștergere
 - Păstrată compatibilitatea pentru clienții existenți fără `lists`, care sunt migrați local într-o listă implicită `Favorite`
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-26 — Fix indicator nume client și creare imediată listă nouă
+
+- Mutat indicatorul `Bună, {clientName}` din toolbarul de sus în partea de jos a paginii, deasupra footerului, păstrând butonul `✕` pentru resetarea numelui
+- Ajustat stilul indicatorului pentru poziționare centrată și prezentare discretă (`13px`, `#9a9a9a`)
+- Eliminat butoanele separate `Anulează` / `Salvează` din inputul de creare listă nouă din `src/components/ClientGallery.jsx`
+- Lista nouă se creează acum automat la `Enter` sau la `blur`, iar `Escape` anulează inputul fără salvare
+- Actualizat și handlerul global de click-outside ca să nu închidă pickerul înainte ca `blur` să confirme lista nouă
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

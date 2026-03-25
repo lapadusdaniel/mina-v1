@@ -342,6 +342,7 @@ function FavoriteListPicker({
   onCreateNewListClick,
   onNewListNameChange,
   onNewListConfirm,
+  onNewListBlur,
   onNewListCancel,
   className = '',
 }) {
@@ -380,10 +381,11 @@ function FavoriteListPicker({
             placeholder="Nume listă"
             className="cg-fav-picker-input"
             onChange={(event) => onNewListNameChange?.(event.target.value)}
+            onBlur={() => onNewListBlur?.()}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                onNewListConfirm?.();
+                event.currentTarget.blur();
               }
               if (event.key === 'Escape') {
                 event.preventDefault();
@@ -391,14 +393,6 @@ function FavoriteListPicker({
               }
             }}
           />
-          <div className="cg-fav-picker-new-actions">
-            <button type="button" className="cg-fav-picker-btn cg-fav-picker-btn--ghost" onClick={onNewListCancel}>
-              Anulează
-            </button>
-            <button type="button" className="cg-fav-picker-btn cg-fav-picker-btn--confirm" onClick={onNewListConfirm}>
-              Salvează
-            </button>
-          </div>
         </div>
       ) : (
         <button type="button" className="cg-fav-picker-create" onClick={onCreateNewListClick}>
@@ -1043,6 +1037,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     const handlePointerDown = (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      if (creatingFavoriteList) return;
       if (
         target.closest('.cg-fav-picker')
         || target.closest('.cg-action-btn--favorite')
@@ -1071,7 +1066,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [closeFavoriteMenus, editingFavoriteListId, favoriteListMenuId, favoriteMenuState]);
+  }, [closeFavoriteMenus, creatingFavoriteList, editingFavoriteListId, favoriteListMenuId, favoriteMenuState]);
 
   useEffect(() => {
     if (!clientFolders.length) {
@@ -1654,20 +1649,6 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                 </button>
               ))}
             </div>
-            {visibleClientName && (
-              <div className="cg-client-name-indicator">
-                <span>{`Bună, ${visibleClientName}`}</span>
-                <button
-                  type="button"
-                  className="cg-client-name-clear"
-                  onClick={handleClearClientName}
-                  aria-label="Șterge numele clientului"
-                  title="Șterge numele"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
           </div>
 
           <div className="cg-toolbar-right">
@@ -1834,6 +1815,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                       },
                       onNewListNameChange: setNewFavoriteListName,
                       onNewListConfirm: () => handleCreateFavoriteList(poza.key),
+                      onNewListBlur: () => {
+                        if (String(newFavoriteListName || '').trim()) {
+                          handleCreateFavoriteList(poza.key);
+                        } else {
+                          setCreatingFavoriteList(false);
+                          setNewFavoriteListName('');
+                        }
+                      },
                       onNewListCancel: () => {
                         setCreatingFavoriteList(false);
                         setNewFavoriteListName('');
@@ -1874,6 +1863,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                   }}
                   onNewListNameChange={setNewFavoriteListName}
                   onNewListConfirm={() => handleCreateFavoriteList(favoriteMenuState.photoKey)}
+                  onNewListBlur={() => {
+                    if (String(newFavoriteListName || '').trim()) {
+                      handleCreateFavoriteList(favoriteMenuState.photoKey);
+                    } else {
+                      setCreatingFavoriteList(false);
+                      setNewFavoriteListName('');
+                    }
+                  }}
                   onNewListCancel={() => {
                     setCreatingFavoriteList(false);
                     setNewFavoriteListName('');
@@ -1987,6 +1984,21 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
               </form>
             )}
           </section>
+        )}
+
+        {visibleClientName && (
+          <div className="cg-client-name-indicator">
+            <span>{`Bună, ${visibleClientName}`}</span>
+            <button
+              type="button"
+              className="cg-client-name-clear"
+              onClick={handleClearClientName}
+              aria-label="Șterge numele clientului"
+              title="Șterge numele"
+            >
+              ✕
+            </button>
+          </div>
         )}
 
         {/* Footer Brand */}
@@ -2430,16 +2442,16 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           flex: 0 0 auto;
         }
         .cg-client-name-indicator {
-          display: inline-flex;
+          display: flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
-          align-self: flex-end;
-          margin-bottom: 8px;
+          margin: 36px auto 0;
+          width: fit-content;
           font-family: 'DM Sans', sans-serif;
-          font-size: 12px;
+          font-size: 13px;
           color: #9a9a9a;
           white-space: nowrap;
-          flex: 0 0 auto;
         }
         .cg-client-name-clear {
           border: none;
@@ -2821,9 +2833,6 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-fav-picker-new {
           border-top: 1px solid rgba(255,255,255,0.12);
           padding: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
         }
         .cg-fav-picker-input {
           width: 100%;
@@ -2839,29 +2848,6 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-fav-picker-input::placeholder {
           color: rgba(255,255,255,0.42);
         }
-        .cg-fav-picker-new-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-        }
-        .cg-fav-picker-btn {
-          border: none;
-          border-radius: 999px;
-          padding: 8px 12px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 11.5px;
-          font-weight: 500;
-          cursor: pointer;
-        }
-        .cg-fav-picker-btn--ghost {
-          background: rgba(255,255,255,0.12);
-          color: rgba(255,255,255,0.76);
-        }
-        .cg-fav-picker-btn--confirm {
-          background: #fff;
-          color: #1a1a1f;
-        }
-
         /* ── Reviews ── */
         .cg-reviews {
           max-width: 760px;
@@ -3136,7 +3122,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-toolbar-left { gap: 14px; flex: 1; }
           .cg-toolbar-tabs { gap: 14px; }
           .cg-tab-all { font-size: 13px; padding: 0; height: 100%; }
-          .cg-client-name-indicator { margin-bottom: 7px; }
+          .cg-client-name-indicator { margin-top: 28px; font-size: 12px; }
           .cg-toolbar-btn { padding: 8px 10px; }
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
           .cg-toolbar-fav-badge { display: inline; }
