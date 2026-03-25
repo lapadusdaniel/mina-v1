@@ -181,3 +181,10 @@
 - Rafinat tab-urile de foldere: `13px`, `font-weight: 400`, `letter-spacing: 0.04em`, inactive `#9a9a9a`, active cu underline de `1.5px`
 - Ajustat butoanele `Favorites`, `Share` și `Descarcă` din header la `13px`, gap de `6px`, text implicit `#6e6e73` și hover `#1a1a1f`
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Revert fix iOS save / calitate imagini în Client Gallery
+
+- Revertat commitul `e9d770c` (`fix: use img tags for iOS save and improve photo quality`) după regresia confirmată pe mobile, unde interacțiunea cu pozele din client gallery devenise instabilă
+- Rulat `git revert e9d770c --no-edit` fără conflicte
+- Validat revertul cu `npm run build`
+- Redeploy pe hosting cu `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
