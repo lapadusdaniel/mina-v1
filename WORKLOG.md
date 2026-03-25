@@ -134,3 +134,10 @@
 - Păstrată logica existentă pentru copy link, WhatsApp, Messenger și trimitere email; la galeriile protejate, parola se completează în tab-ul `Email` și este reutilizată pentru email / WhatsApp
 - Eliminat stilul inline anterior pentru share buttons și înlocuit cu clase dedicate în modal
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Compactare modal share galerie
+
+- Îngustat modalul `Trimite galeria` la `max-width: 480px` printr-o clasă locală în `src/components/GalleryDetailView.jsx`
+- Reduse padding-urile și spacing-ul din modal: tabs, URL row, butoane social, input-uri și butonul `Trimite email`
+- Păstrat layout-ul pe tabs și logica existentă, dar cu o prezentare mai compactă și mai apropiată de dashboard
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

@@ -93,10 +93,40 @@ const uploadProgressOverlayCss = `
   }
 `
 const shareOptionsModalCss = `
+  .gallery-share-modal {
+    width: min(480px, calc(100vw - 32px));
+  }
+
+  .gallery-share-modal .gallery-config-header {
+    padding: 20px 24px 14px;
+  }
+
+  .gallery-share-modal .gallery-config-body {
+    padding: 24px;
+    gap: 12px;
+    background: var(--theme-bg-card);
+  }
+
+  .gallery-share-modal .gallery-config-card {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .gallery-share-modal .gallery-config-actions {
+    padding: 0 24px 24px;
+  }
+
+  .gallery-share-modal .gallery-config-input {
+    padding: 10px 14px;
+  }
+
   .gallery-share-tabs {
     display: flex;
     gap: 24px;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
@@ -104,9 +134,9 @@ const shareOptionsModalCss = `
     border: none;
     background: transparent;
     border-bottom: 2px solid transparent;
-    padding: 0 0 12px;
+    padding: 0 0 10px;
     font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     color: #a0a0a7;
     cursor: pointer;
@@ -121,28 +151,26 @@ const shareOptionsModalCss = `
   .gallery-share-link-panel,
   .gallery-share-email-panel {
     display: grid;
-    gap: 16px;
+    gap: 14px;
   }
 
   .gallery-share-url-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    background: #f4f5f8;
-    border-radius: 10px;
-    padding: 8px;
+    gap: 8px;
   }
 
   .gallery-share-url-input {
     flex: 1 1 auto;
     min-width: 0;
     border: none;
-    background: transparent;
+    border-radius: 10px;
+    background: #f4f5f8;
     color: #1a1a1f;
     font-family: 'DM Sans', sans-serif;
     font-size: 13px;
     line-height: 1.4;
-    padding: 4px 8px;
+    padding: 10px 14px;
   }
 
   .gallery-share-url-input:focus {
@@ -157,7 +185,7 @@ const shareOptionsModalCss = `
     font-family: 'DM Sans', sans-serif;
     font-size: 12px;
     font-weight: 500;
-    padding: 8px 14px;
+    padding: 10px 14px;
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -178,7 +206,7 @@ const shareOptionsModalCss = `
     border: none;
     border-radius: 10px;
     background: #f4f5f8;
-    padding: 14px;
+    padding: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -213,7 +241,7 @@ const shareOptionsModalCss = `
 
   .gallery-share-social-btn__label {
     font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1;
     color: #1a1a1f;
   }
@@ -250,7 +278,7 @@ const shareOptionsModalCss = `
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 500;
-    padding: 14px 16px;
+    padding: 12px 16px;
     cursor: pointer;
   }
 
@@ -984,7 +1012,7 @@ export default function GalleryDetailView({
 
       {sendLinkOpen && (
         <div className="gallery-config-overlay" onClick={closeSendLinkModal}>
-          <div className="gallery-config-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="gallery-config-modal gallery-share-modal" onClick={(event) => event.stopPropagation()}>
             <style>{shareOptionsModalCss}</style>
             <div className="gallery-config-header">
               <h3>Trimite galeria</h3>
