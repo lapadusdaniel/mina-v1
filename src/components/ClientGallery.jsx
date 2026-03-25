@@ -20,6 +20,7 @@ const LIGHTBOX_PRELOAD_OFFSETS_MOBILE = [0, -1, 1];
 const MAX_URL_CACHE_ENTRIES = 400;
 const DEFAULT_FOLDER_ID = 'default';
 const DEFAULT_FOLDER_NAME = 'Galeria mea';
+const WORKER_URL = import.meta.env.VITE_R2_WORKER_URL;
 
 const urlCache = new Map();
 const { galleries: galleriesService, media: mediaService, sites: sitesService } = getAppServices();
@@ -77,6 +78,44 @@ function getGalleryUnlockStorageKey(galleryId) {
   return `${GALLERY_UNLOCK_STORAGE_KEY_PREFIX}${galleryId || ''}`;
 }
 
+function baseWorkerUrl() {
+  if (!WORKER_URL) return '';
+  return WORKER_URL.endsWith('/') ? WORKER_URL : `${WORKER_URL}/`;
+}
+
+function readShareTokenFromLocation() {
+  if (typeof window === 'undefined') return '';
+  try {
+    const token = new URLSearchParams(window.location.search).get('st');
+    return token ? String(token).trim() : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function resolvePhotoVariantPath(photoKey, type = 'original') {
+  if (!photoKey) return '';
+  const str = String(photoKey).trim();
+  const match = str.match(/^galerii\/([^/]+)\/originals\/(.+)$/);
+  if (match) {
+    const [, galleryId, fileName] = match;
+    const baseName = fileName.replace(/\.[^.]+$/, '');
+    if (type === 'thumb') return `galerii/${galleryId}/thumbnails/${baseName}.webp`;
+    if (type === 'medium') return `galerii/${galleryId}/medium/${baseName}.webp`;
+  }
+  return str;
+}
+
+function buildWorkerPhotoUrl(photoKey, type = 'original') {
+  const workerBase = baseWorkerUrl();
+  const path = resolvePhotoVariantPath(photoKey, type);
+  if (!workerBase || !path) return '';
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+  const shareToken = readShareTokenFromLocation();
+  const query = shareToken ? `?st=${encodeURIComponent(shareToken)}` : '';
+  return `${workerBase}${encodedPath}${query}`;
+}
+
 async function sha256Hex(value) {
   const raw = new TextEncoder().encode(String(value || ''));
   const digest = await crypto.subtle.digest('SHA-256', raw);
@@ -123,18 +162,22 @@ function LazyGalleryImage({
   watermarkLabel = 'Mina',
   quality = 'thumb',
 }) {
-  const [url, setUrl] = useState(() => getCachedUrl(`${quality}:${pozaKey}`) || null);
+  const directUrl = useMemo(() => buildWorkerPhotoUrl(pozaKey, quality), [pozaKey, quality]);
+  const [url, setUrl] = useState(() => (directUrl ? null : (getCachedUrl(`${quality}:${pozaKey}`) || null)));
+  const [useDirectUrl, setUseDirectUrl] = useState(() => !!directUrl);
   const [isDownloading, setIsDownloading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [naturalRatio, setNaturalRatio] = useState(null);
   const imgRef = useRef(null);
+  const resolvedUrl = useDirectUrl ? directUrl : url;
 
   // Reset when quality changes (e.g. user switches grid mode while component stays mounted).
   useEffect(() => {
-    setUrl(getCachedUrl(`${quality}:${pozaKey}`) || null);
+    setUseDirectUrl(!!directUrl);
+    setUrl(directUrl ? null : (getCachedUrl(`${quality}:${pozaKey}`) || null));
     setNaturalRatio(null);
     setRetryCount(0);
-  }, [quality, pozaKey]);
+  }, [directUrl, quality, pozaKey]);
 
   // Covers the case where the browser resolves the image synchronously from
   // cache before React attaches onLoad — in that case onLoad never fires.
@@ -143,10 +186,10 @@ function LazyGalleryImage({
     if (img && img.complete && img.naturalWidth > 0) {
       setNaturalRatio(`${img.naturalWidth} / ${img.naturalHeight}`);
     }
-  }, [url]);
+  }, [resolvedUrl]);
 
   useEffect(() => {
-    if (url) return;
+    if (useDirectUrl || url) return;
     let cancelled = false;
 
     const cachedUrl = getCachedUrl(`${quality}:${pozaKey}`);
@@ -169,7 +212,7 @@ function LazyGalleryImage({
 
     loadUrl();
     return () => { cancelled = true; };
-  }, [pozaKey, quality, url]);
+  }, [pozaKey, quality, url, useDirectUrl]);
 
   const handleImgLoad = useCallback((e) => {
     const { naturalWidth: w, naturalHeight: h } = e.target;
@@ -177,6 +220,10 @@ function LazyGalleryImage({
   }, []);
 
   const handleThumbError = useCallback(() => {
+    if (useDirectUrl) {
+      setUseDirectUrl(false);
+      return;
+    }
     if (!url) return;
     if (retryCount >= 2) return;
     const cKey = `${quality}:${pozaKey}`;
@@ -185,7 +232,7 @@ function LazyGalleryImage({
     }
     setRetryCount((prev) => prev + 1);
     setUrl(null);
-  }, [pozaKey, quality, retryCount, url]);
+  }, [pozaKey, quality, retryCount, url, useDirectUrl]);
 
   const handleDownload = useCallback(async () => {
     if (isDownloading) return;
@@ -202,10 +249,10 @@ function LazyGalleryImage({
   return (
     <div className="cg-item" style={naturalRatio ? { aspectRatio: naturalRatio } : undefined}>
       <div className="cg-item-inner">
-        {url ? (
+        {resolvedUrl ? (
           <img
             ref={imgRef}
-            src={url}
+            src={resolvedUrl}
             alt=""
             className="cg-item-img"
             loading="lazy"
@@ -511,23 +558,16 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
   const resolveLightboxSrc = useCallback((key) => {
     if (!key) return '';
-    if (isMobile) {
-      return (
-        lightboxMediumUrls[key]
-        || getCachedUrl(`medium:${key}`)
-        || getCachedUrl(`thumb:${key}`)
-        || ''
-      );
-    }
     return (
-      lightboxMediumUrls[key]
-      || getCachedUrl(`medium:${key}`)
+      buildWorkerPhotoUrl(key, 'original')
       || lightboxOriginalUrls[key]
       || getCachedUrl(`original:${key}`)
+      || lightboxMediumUrls[key]
+      || getCachedUrl(`medium:${key}`)
       || getCachedUrl(`thumb:${key}`)
       || ''
     );
-  }, [isMobile, lightboxMediumUrls, lightboxOriginalUrls]);
+  }, [lightboxMediumUrls, lightboxOriginalUrls]);
 
   const loadGalleryPhotos = useCallback(async (galleryData) => {
     if (!galleryData?.id) {
@@ -1331,7 +1371,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                   <LazyGalleryImage
                     key={poza.key}
                     pozaKey={poza.key}
-                    quality={gridLayout === '4col' ? 'thumb' : 'medium'}
+                    quality="medium"
                     isFav={galerie.favorite?.includes(poza.key)}
                     onFavoriteClick={handleFavoriteClick}
                     accentColor={profile.accentColor}
@@ -2025,6 +2065,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           align-items: flex-end;
           justify-content: flex-end;
           opacity: 0;
+          pointer-events: none;
           transition: opacity 0.25s ease;
         }
         .cg-watermark {
@@ -2045,7 +2086,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           text-shadow: 0 1px 1px rgba(0,0,0,0.35);
         }
         .cg-item:hover .cg-item-overlay { opacity: 1; }
-        .cg-item-actions { display: flex; gap: 8px; }
+        .cg-item-actions { display: flex; gap: 8px; pointer-events: auto; }
         .cg-action-btn {
           display: flex;
           align-items: center;
