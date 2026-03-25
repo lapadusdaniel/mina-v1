@@ -27,6 +27,7 @@ const B2_BUCKET_NAME = defineSecret('B2_BUCKET_NAME')
 
 const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
+const SELECTION_EMAIL_DEBOUNCE_MS = 2 * 60 * 60 * 1000
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
   esential_monthly: 'price_1TAwpq1pBe1FB1ICMrpWiGvp',
@@ -1390,6 +1391,44 @@ exports.onSelectionSaved = functionsV1
     if (favoritesCount <= 0) return null
 
     try {
+      const logDocId = `${galleryId}_${clientId}`
+      const logRef = db.collection('selectionEmailLog').doc(logDocId)
+      const now = admin.firestore.Timestamp.now()
+      const debounceGuard = await db.runTransaction(async (transaction) => {
+        const logSnap = await transaction.get(logRef)
+        const lastSentAt = logSnap.exists ? logSnap.get('lastSentAt') : null
+        const lastSentDate = typeof lastSentAt?.toDate === 'function' ? lastSentAt.toDate() : null
+        const shouldSkip = !!lastSentDate && (Date.now() - lastSentDate.getTime()) < SELECTION_EMAIL_DEBOUNCE_MS
+
+        if (shouldSkip) {
+          return {
+            shouldSend: false,
+            lastSentAt: lastSentDate,
+          }
+        }
+
+        transaction.set(logRef, {
+          galleryId,
+          clientId,
+          lastSentAt: now,
+          updatedAt: now,
+        }, { merge: true })
+
+        return {
+          shouldSend: true,
+          lastSentAt: null,
+        }
+      })
+
+      if (!debounceGuard.shouldSend) {
+        logger.info('onSelectionSaved skipped: debounced', {
+          galleryId,
+          clientId,
+          lastSentAt: debounceGuard.lastSentAt?.toISOString?.() || null,
+        })
+        return null
+      }
+
       const gallerySnap = await db.collection('galerii').doc(galleryId).get()
       if (!gallerySnap.exists) {
         logger.warn('onSelectionSaved skipped: gallery missing', { galleryId, clientId })

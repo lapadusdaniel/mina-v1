@@ -188,3 +188,11 @@
 - Rulat `git revert e9d770c --no-edit` fără conflicte
 - Validat revertul cu `npm run build`
 - Redeploy pe hosting cu `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Debounce pentru emailul de favorite
+
+- Actualizat `functions/index.js` în `onSelectionSaved` ca să consulte `selectionEmailLog/{galleryId}_{clientId}` înainte de trimiterea emailului către fotograf
+- Adăugat guard tranzacțional în Firestore: dacă `lastSentAt` este mai nou de 2 ore, emailul este sărit; altfel `lastSentAt` este actualizat și notificarea se trimite
+- Adăugat constantă dedicată pentru fereastra de debounce de 2 ore și log de tip `debounced` pentru cazurile în care triggerul este ignorat intenționat
+- Validate local cu `node --check functions/index.js` și `npm run build`
+- Deploy reușit cu `firebase deploy --only functions --project mina-v1-aea51 --force`
