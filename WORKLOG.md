@@ -222,3 +222,11 @@
 - Lista nouă se creează acum automat la `Enter` sau la `blur`, iar `Escape` anulează inputul fără salvare
 - Actualizat și handlerul global de click-outside ca să nu închidă pickerul înainte ca `blur` să confirme lista nouă
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-26 — Corecție poziție nume client și salvare listă nouă
+
+- Mutat indicatorul `Bună, {clientName}` înapoi în header, în dreapta, înainte de butoanele `Favorites`, `Share` și `Descarcă`, pentru a rămâne mereu vizibil indiferent de numărul de poze
+- Ajustat stilul indicatorului la `12px`, `#9a9a9a`, păstrând butonul `✕` pentru resetarea numelui
+- Reparat flow-ul de creare listă nouă din `src/components/ClientGallery.jsx`: confirmarea folosește acum valoarea curentă din input, nu o valoare stale din state
+- La `Enter`, handlerul face `preventDefault()` și apelează direct crearea listei; la `blur`, lista se creează cu textul curent din input; `Escape` continuă să anuleze fără salvare
+- Validat cu `npm run build` și redeploy pe hosting prin `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`

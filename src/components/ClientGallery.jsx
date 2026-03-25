@@ -381,11 +381,11 @@ function FavoriteListPicker({
             placeholder="Nume listă"
             className="cg-fav-picker-input"
             onChange={(event) => onNewListNameChange?.(event.target.value)}
-            onBlur={() => onNewListBlur?.()}
+            onBlur={(event) => onNewListBlur?.(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                event.currentTarget.blur();
+                onNewListConfirm?.(event.currentTarget.value);
               }
               if (event.key === 'Escape') {
                 event.preventDefault();
@@ -1284,8 +1284,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     } catch (e) { console.error(e); }
   };
 
-  const handleCreateFavoriteList = async (photoKey = favoriteMenuState?.photoKey || null) => {
-    const rawName = String(newFavoriteListName || '').trim();
+  const handleCreateFavoriteList = async (photoKey = favoriteMenuState?.photoKey || null, explicitName = '') => {
+    const rawName = String(explicitName || newFavoriteListName || '').trim();
     if (!rawName) return;
     const cleanName = sanitizeSelectionListName(rawName);
 
@@ -1652,6 +1652,20 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           </div>
 
           <div className="cg-toolbar-right">
+            {visibleClientName && (
+              <div className="cg-client-name-indicator">
+                <span>{`Bună, ${visibleClientName}`}</span>
+                <button
+                  type="button"
+                  className="cg-client-name-clear"
+                  onClick={handleClearClientName}
+                  aria-label="Șterge numele clientului"
+                  title="Șterge numele"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             {allowPhotoSelection && (
               <button
                 type="button"
@@ -1814,10 +1828,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                         setNewFavoriteListName('');
                       },
                       onNewListNameChange: setNewFavoriteListName,
-                      onNewListConfirm: () => handleCreateFavoriteList(poza.key),
-                      onNewListBlur: () => {
-                        if (String(newFavoriteListName || '').trim()) {
-                          handleCreateFavoriteList(poza.key);
+                      onNewListConfirm: (value) => handleCreateFavoriteList(poza.key, value),
+                      onNewListBlur: (value) => {
+                        if (String(value || '').trim()) {
+                          handleCreateFavoriteList(poza.key, value);
                         } else {
                           setCreatingFavoriteList(false);
                           setNewFavoriteListName('');
@@ -1862,10 +1876,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                     setNewFavoriteListName('');
                   }}
                   onNewListNameChange={setNewFavoriteListName}
-                  onNewListConfirm={() => handleCreateFavoriteList(favoriteMenuState.photoKey)}
-                  onNewListBlur={() => {
-                    if (String(newFavoriteListName || '').trim()) {
-                      handleCreateFavoriteList(favoriteMenuState.photoKey);
+                  onNewListConfirm={(value) => handleCreateFavoriteList(favoriteMenuState.photoKey, value)}
+                  onNewListBlur={(value) => {
+                    if (String(value || '').trim()) {
+                      handleCreateFavoriteList(favoriteMenuState.photoKey, value);
                     } else {
                       setCreatingFavoriteList(false);
                       setNewFavoriteListName('');
@@ -1984,21 +1998,6 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
               </form>
             )}
           </section>
-        )}
-
-        {visibleClientName && (
-          <div className="cg-client-name-indicator">
-            <span>{`Bună, ${visibleClientName}`}</span>
-            <button
-              type="button"
-              className="cg-client-name-clear"
-              onClick={handleClearClientName}
-              aria-label="Șterge numele clientului"
-              title="Șterge numele"
-            >
-              ✕
-            </button>
-          </div>
         )}
 
         {/* Footer Brand */}
@@ -2442,16 +2441,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           flex: 0 0 auto;
         }
         .cg-client-name-indicator {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          justify-content: center;
           gap: 6px;
-          margin: 36px auto 0;
-          width: fit-content;
           font-family: 'DM Sans', sans-serif;
-          font-size: 13px;
+          font-size: 12px;
           color: #9a9a9a;
           white-space: nowrap;
+          flex: 0 0 auto;
         }
         .cg-client-name-clear {
           border: none;
@@ -3122,7 +3119,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-toolbar-left { gap: 14px; flex: 1; }
           .cg-toolbar-tabs { gap: 14px; }
           .cg-tab-all { font-size: 13px; padding: 0; height: 100%; }
-          .cg-client-name-indicator { margin-top: 28px; font-size: 12px; }
+          .cg-client-name-indicator { font-size: 12px; }
           .cg-toolbar-btn { padding: 8px 10px; }
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
           .cg-toolbar-fav-badge { display: inline; }
