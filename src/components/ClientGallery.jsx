@@ -73,6 +73,11 @@ function persistSelectionName(name) {
   localStorage.setItem(LEGACY_SELECTION_NAME_STORAGE_KEY, name);
 }
 
+function clearStoredSelectionName() {
+  localStorage.removeItem(SELECTION_NAME_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_SELECTION_NAME_STORAGE_KEY);
+}
+
 function getGalleryUnlockStorageKey(galleryId) {
   return `${GALLERY_UNLOCK_STORAGE_KEY_PREFIX}${galleryId || ''}`;
 }
@@ -462,6 +467,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const watermarkLabel = (profile?.brandName || 'Mina').slice(0, 64);
 
   const selectionTitle = favoritesSettings.favoritesName || galerie?.numeSelectieClient || 'Selecție';
+  const visibleClientName = String(numeSelectie || nameInputValue || '').trim();
   const requiresEmail = favoritesSettings.requireEmail === true;
   const requiresPhone = favoritesSettings.requirePhoneNumber === true;
   const requiresAdditionalInfo = favoritesSettings.requireAdditionalInfo === true;
@@ -935,6 +941,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     }
   };
 
+  const handleClearClientName = () => {
+    clearStoredSelectionName();
+    setNumeSelectie('');
+    setNameInputValue('');
+  };
+
   const executeFavoriteToggle = async (pozaKey, numeClient, metaOverride = null) => {
     if (!allowPhotoSelection || !galerie?.id || !numeClient) return;
     const latestSelection = await galleriesService.getClientSelection(galerie.id, numeClient).catch(() => null);
@@ -1246,18 +1258,34 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         <>
         {/* Sticky Toolbar */}
         <div className="cg-toolbar">
-          <div className="cg-toolbar-left" role="tablist" aria-label="Foldere galerie">
-            {clientFolders.map((folder) => (
-              <button
-                key={folder.id}
-                type="button"
-                className={`cg-tab-all ${effectiveActiveClientFolderId === folder.id ? 'is-active' : ''}`}
-                onClick={() => setActiveClientFolderId(folder.id)}
-                aria-pressed={effectiveActiveClientFolderId === folder.id}
-              >
-                {folder.name}
-              </button>
-            ))}
+          <div className="cg-toolbar-left">
+            <div className="cg-toolbar-tabs" role="tablist" aria-label="Foldere galerie">
+              {clientFolders.map((folder) => (
+                <button
+                  key={folder.id}
+                  type="button"
+                  className={`cg-tab-all ${effectiveActiveClientFolderId === folder.id ? 'is-active' : ''}`}
+                  onClick={() => setActiveClientFolderId(folder.id)}
+                  aria-pressed={effectiveActiveClientFolderId === folder.id}
+                >
+                  {folder.name}
+                </button>
+              ))}
+            </div>
+            {visibleClientName && (
+              <div className="cg-client-name-indicator">
+                <span>{`Bună, ${visibleClientName}`}</span>
+                <button
+                  type="button"
+                  className="cg-client-name-clear"
+                  onClick={handleClearClientName}
+                  aria-label="Șterge numele clientului"
+                  title="Șterge numele"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="cg-toolbar-right">
@@ -1894,6 +1922,44 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-toolbar-left::-webkit-scrollbar {
           display: none;
         }
+        .cg-toolbar-tabs {
+          display: flex;
+          align-items: flex-end;
+          gap: 18px;
+          height: 100%;
+          min-width: 0;
+          flex: 0 0 auto;
+        }
+        .cg-client-name-indicator {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          align-self: flex-end;
+          margin-bottom: 8px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+          color: #9a9a9a;
+          white-space: nowrap;
+          flex: 0 0 auto;
+        }
+        .cg-client-name-clear {
+          border: none;
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+          line-height: 1;
+          color: #9a9a9a;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: color 0.15s ease;
+        }
+        .cg-client-name-clear:hover {
+          color: #1a1a1f;
+        }
         .cg-tab-all {
           border: none;
           border-bottom: 1.5px solid transparent;
@@ -2336,7 +2402,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-cover-count { bottom: 24px; }
           .cg-toolbar { padding: 0 12px; min-height: 52px; height: 52px; }
           .cg-toolbar-left { gap: 14px; flex: 1; }
+          .cg-toolbar-tabs { gap: 14px; }
           .cg-tab-all { font-size: 13px; padding: 0; height: 100%; }
+          .cg-client-name-indicator { margin-bottom: 7px; }
           .cg-toolbar-btn { padding: 8px 10px; }
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
           .cg-toolbar-fav-badge { display: inline; }

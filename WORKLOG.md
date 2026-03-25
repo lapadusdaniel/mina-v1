@@ -196,3 +196,11 @@
 - Adăugat constantă dedicată pentru fereastra de debounce de 2 ore și log de tip `debounced` pentru cazurile în care triggerul este ignorat intenționat
 - Validate local cu `node --check functions/index.js` și `npm run build`
 - Deploy reușit cu `firebase deploy --only functions --project mina-v1-aea51 --force`
+
+### 2026-03-25 — Indicator nume client în header-ul galeriei
+
+- Actualizat `src/components/ClientGallery.jsx` să afișeze în toolbar un indicator discret cu textul `Bună, {clientName}` atunci când numele clientului există în state-ul galeriei
+- Numele este derivat din aceeași sursă folosită pentru selecții (`numeSelectie` / localStorage), fără să modifice flow-ul de favorite sau formularul modal existent
+- Adăugat buton mic `✕` lângă indicator pentru resetarea numelui din localStorage și din state-ul curent, astfel încât clientul să poată reintroduce alt nume la următoarea acțiune
+- Extins stilurile responsive ale toolbar-ului pentru noul indicator, păstrând tabs-urile și butoanele existente neatinse
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
