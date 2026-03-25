@@ -1272,7 +1272,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                   size={16}
                   strokeWidth={1.6}
                   fill={doarFavorite ? (profile.accentColor || '#1d1d1f') : 'none'}
-                  style={{ color: doarFavorite ? (profile.accentColor || '#1d1d1f') : '#1d1d1f' }}
+                  style={{ color: doarFavorite ? (profile.accentColor || '#1d1d1f') : '#6e6e73' }}
                 />
                 <span>Favorites</span>
                 {favCount > 0 && (
@@ -1621,7 +1621,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
         .cg-root {
           font-family: 'DM Sans', -apple-system, sans-serif;
-          background: #fff;
+          background: #f9f8f6;
           min-height: 100vh;
           color: #1d1d1f;
           -webkit-font-smoothing: antialiased;
@@ -1872,10 +1872,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           position: sticky;
           top: 0;
           z-index: 40;
-          background: #fff;
-          border-bottom: 1px solid rgba(0,0,0,0.1);
+          background: #f9f8f6;
+          border-bottom: 1px solid rgba(0,0,0,0.06);
           padding: 0 40px;
-          min-height: 64px;
+          height: 52px;
+          min-height: 52px;
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -1895,40 +1896,29 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         }
         .cg-tab-all {
           border: none;
+          border-bottom: 1.5px solid transparent;
           background: none;
           cursor: pointer;
           font-family: 'DM Sans', sans-serif;
-          font-size: 14px;
-          font-weight: 500;
-          color: #6e6e73;
-          padding: 20px 0 16px;
+          font-size: 13px;
+          font-weight: 400;
+          color: #9a9a9a;
+          padding: 0;
+          height: 100%;
+          display: inline-flex;
+          align-items: center;
           margin: 0;
           position: relative;
-          letter-spacing: 0.01em;
+          letter-spacing: 0.04em;
           white-space: nowrap;
-          transition: color 0.15s ease;
+          transition: color 0.15s ease, border-color 0.15s ease;
         }
         .cg-tab-all:hover {
           color: #1d1d1f;
         }
-        .cg-tab-all::after {
-          content: '';
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: -1px;
-          height: 2px;
-          background: #1d1d1f;
-          border-radius: 999px;
-          transform: scaleX(0);
-          transition: transform 0.2s ease;
-          transform-origin: center;
-        }
         .cg-tab-all.is-active {
           color: #1d1d1f;
-        }
-        .cg-tab-all.is-active::after {
-          transform: scaleX(1);
+          border-bottom-color: #1a1a1f;
         }
         .cg-toolbar-right {
           display: flex;
@@ -1940,15 +1930,15 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-toolbar-btn {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           background: #fff;
           border: 1px solid rgba(0,0,0,0.1);
           border-radius: 999px;
           cursor: pointer;
           font-family: 'DM Sans', sans-serif;
-          font-size: 13.5px;
+          font-size: 13px;
           font-weight: 500;
-          color: #1d1d1f;
+          color: #6e6e73;
           padding: 9px 14px;
           transition: background 0.15s, border-color 0.15s, color 0.15s;
           white-space: nowrap;
@@ -1956,6 +1946,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-toolbar-btn:hover {
           background: #f7f7f7;
           border-color: rgba(0,0,0,0.2);
+          color: #1a1a1f;
         }
         .cg-toolbar-btn:disabled {
           opacity: 0.55;
@@ -2006,9 +1997,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           font-weight: 300;
           color: #a1a1a6;
         }
-        .cg-masonry { display: flex; margin-left: -16px; width: auto; }
-        .cg-masonry-col { padding-left: 16px; background-clip: padding-box; }
-        .cg-masonry-col > div { margin-bottom: 16px; }
+        .cg-masonry { display: flex; margin-left: -6px; width: auto; }
+        .cg-masonry-col { padding-left: 6px; background-clip: padding-box; }
+        .cg-masonry-col > div { margin-bottom: 6px; }
 
         /* ── Item ── */
         .cg-item { cursor: pointer; overflow: hidden; border-radius: 6px; }
@@ -2322,12 +2313,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
         /* ── Tablet ── */
         @media (max-width: 900px) {
-          .cg-toolbar { padding: 0 16px; min-height: 58px; }
+          .cg-toolbar { padding: 0 16px; min-height: 52px; height: 52px; }
           .cg-gallery { padding: 28px 16px 0; }
           .cg-footer { padding: 48px 20px 40px; }
-          .cg-masonry { margin-left: -10px; }
-          .cg-masonry-col { padding-left: 10px; }
-          .cg-masonry-col > div { margin-bottom: 10px; }
+          .cg-masonry { margin-left: -6px; }
+          .cg-masonry-col { padding-left: 6px; }
+          .cg-masonry-col > div { margin-bottom: 6px; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -2343,16 +2334,16 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-cover-overlay { padding: 24px 20px 32px; }
           .cg-cover-brand { top: 24px; }
           .cg-cover-count { bottom: 24px; }
-          .cg-toolbar { padding: 0 12px; min-height: 52px; }
+          .cg-toolbar { padding: 0 12px; min-height: 52px; height: 52px; }
           .cg-toolbar-left { gap: 14px; flex: 1; }
-          .cg-tab-all { font-size: 13px; padding: 16px 0 12px; }
+          .cg-tab-all { font-size: 13px; padding: 0; height: 100%; }
           .cg-toolbar-btn { padding: 8px 10px; }
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
           .cg-toolbar-fav-badge { display: inline; }
           .cg-gallery { padding: 20px 8px 0; }
-          .cg-masonry { margin-left: -8px; }
-          .cg-masonry-col { padding-left: 8px; }
-          .cg-masonry-col > div { margin-bottom: 8px; }
+          .cg-masonry { margin-left: -6px; }
+          .cg-masonry-col { padding-left: 6px; }
+          .cg-masonry-col > div { margin-bottom: 6px; }
           .cg-item { border-radius: 4px; }
           .cg-item-overlay { opacity: 1; background: linear-gradient(to top, rgba(0,0,0,0.35) 0%, transparent 60%); }
           .cg-action-btn { width: 36px; height: 36px; }

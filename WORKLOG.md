@@ -173,3 +173,11 @@
 - Fiecare drop zone se extinde vizual pe dragover și afișează o linie verticală `#1a1a1f`, astfel încât repoziționarea să poată fi făcută clar înainte de primul folder, între două foldere sau după ultimul
 - La drop, componenta derivă poziția finală din indexul zonei și o mapează pe `onReorderFolders(...)`, păstrând compatibilitatea cu persistarea existentă din dashboard
 - Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-25 — Polish vizual pentru Client Gallery
+
+- Ajustat `src/components/ClientGallery.jsx` pentru un look mai cald și mai editorial: fundalul paginii a devenit `#f9f8f6`, inclusiv toolbar-ul sticky al folderelor
+- Redus gap-ul din masonry grid la `6px` pe desktop, tabletă și mobile prin actualizarea `cg-masonry`, `cg-masonry-col` și a spacing-ului vertical dintre item-uri
+- Rafinat tab-urile de foldere: `13px`, `font-weight: 400`, `letter-spacing: 0.04em`, inactive `#9a9a9a`, active cu underline de `1.5px`
+- Ajustat butoanele `Favorites`, `Share` și `Descarcă` din header la `13px`, gap de `6px`, text implicit `#6e6e73` și hover `#1a1a1f`
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
