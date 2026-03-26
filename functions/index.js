@@ -27,7 +27,7 @@ const B2_BUCKET_NAME = defineSecret('B2_BUCKET_NAME')
 
 const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
-const SELECTION_EMAIL_DEBOUNCE_MS = 2 * 60 * 60 * 1000
+const SELECTION_EMAIL_DEBOUNCE_MS = 8 * 60 * 60 * 1000
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
   esential_monthly: 'price_1TAwpq1pBe1FB1ICMrpWiGvp',

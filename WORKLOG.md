@@ -247,3 +247,8 @@
 - În `functions/index.js`, `onSelectionSaved` folosește acum lungimea reală a `keys` pentru a decide trimiterea emailului și ignoră selecțiile goale rezultate doar din crearea unei liste fără poze
 - Adăugat log explicit pentru verificarea debounce-ului: cheia `selectionEmailLog/{galleryId}_{clientId}`, existența documentului și `lastSentAt`, ca să fie vizibil imediat dacă triggerul citește logul corect
 - Rulate cu succes `node --check functions/index.js`, `npm run build` și `npx firebase-tools deploy --only functions --project mina-v1-aea51 --force`
+
+### 2026-03-26 — Debounce email favorite extins la 8 ore
+
+- Modificată constanta `SELECTION_EMAIL_DEBOUNCE_MS` din `functions/index.js` de la `2 * 60 * 60 * 1000` la `8 * 60 * 60 * 1000`
+- Păstrată aceeași cheie de debounce `selectionEmailLog/{galleryId}_{clientId}` și același flow tranzacțional; s-a schimbat doar fereastra de timp
