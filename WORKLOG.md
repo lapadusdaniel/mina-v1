@@ -238,4 +238,12 @@
 - Adăugat `newFavoriteListHandledRef` ca să diferențieze confirmarea pornită de `Enter` față de `blur` și să prevină dublul trigger
 - La `Enter`, handlerul face `preventDefault()`, citește valoarea din ref și creează lista imediat, adăugând poza curentă în ea
 - La `blur`, lista se creează doar dacă nu a fost deja procesată de Enter; la `Escape`, anularea consumă blur-ul ulterior fără să salveze lista
-- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
+### 2026-03-26 — Fix liste favorite + debounce email selecții
+
+- Commit `63234cd` — `fix: favorites lists working - fix firestore rules and picker ref`
+- Mersat fixul pentru pickerul inline din `src/components/ClientGallery.jsx`, astfel încât `inputRef` și `onNewListBlur` să ajungă până la inputul real din grid
+- Actualizate `firestore.rules` pentru a permite câmpul `lists` în `gallerySelections/{galleryId}/clients/{clientId}`, deblocând salvarea listelor multiple de favorite
+- În `functions/index.js`, `onSelectionSaved` folosește acum lungimea reală a `keys` pentru a decide trimiterea emailului și ignoră selecțiile goale rezultate doar din crearea unei liste fără poze
+- Adăugat log explicit pentru verificarea debounce-ului: cheia `selectionEmailLog/{galleryId}_{clientId}`, existența documentului și `lastSentAt`, ca să fie vizibil imediat dacă triggerul citește logul corect
+- Rulate cu succes `node --check functions/index.js`, `npm run build` și `npx firebase-tools deploy --only functions --project mina-v1-aea51 --force`

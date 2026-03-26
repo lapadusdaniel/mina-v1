@@ -1382,12 +1382,13 @@ exports.onSelectionSaved = functionsV1
     const clientId = String(context.params?.clientId || '').trim()
     const beforeData = change.before.exists ? (change.before.data() || {}) : {}
     const afterData = change.after.exists ? (change.after.data() || {}) : {}
+    const afterKeys = keysFromSelection(afterData)
 
     if (!galleryId || !clientId) return null
     if (!change.after.exists) return null
     if (!didSelectionChange(beforeData, afterData)) return null
 
-    const favoritesCount = getSelectionCount(afterData)
+    const favoritesCount = afterKeys.length
     if (favoritesCount <= 0) return null
 
     try {
@@ -1403,6 +1404,8 @@ exports.onSelectionSaved = functionsV1
         if (shouldSkip) {
           return {
             shouldSend: false,
+            logDocId,
+            logExists: logSnap.exists,
             lastSentAt: lastSentDate,
           }
         }
@@ -1416,8 +1419,19 @@ exports.onSelectionSaved = functionsV1
 
         return {
           shouldSend: true,
-          lastSentAt: null,
+          logDocId,
+          logExists: logSnap.exists,
+          lastSentAt: lastSentDate,
         }
+      })
+
+      logger.info('onSelectionSaved debounce check', {
+        galleryId,
+        clientId,
+        logDocId: debounceGuard.logDocId,
+        logExists: debounceGuard.logExists,
+        lastSentAt: debounceGuard.lastSentAt?.toISOString?.() || null,
+        favoritesCount,
       })
 
       if (!debounceGuard.shouldSend) {
