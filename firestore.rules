@@ -56,6 +56,7 @@ service cloud.firestore {
           'clientPhone',
           'clientAdditionalInfo',
           'clientComment',
+          'lists',
           'keys',
           'count',
           'selectionTitle',
@@ -67,6 +68,13 @@ service cloud.firestore {
         && request.resource.data.clientName.size() <= 120
         && request.resource.data.keys is list
         && request.resource.data.keys.size() <= 3000
+        && (
+          !('lists' in request.resource.data)
+          || (
+            request.resource.data.lists is list
+            && request.resource.data.lists.size() <= 50
+          )
+        )
         && request.resource.data.count is int
         && request.resource.data.count == request.resource.data.keys.size()
         && (

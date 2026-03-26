@@ -319,10 +319,12 @@ function LazyGalleryImage({
               activeListId={favoritePicker.activeListId}
               newListName={favoritePicker.newListName}
               creatingNewList={favoritePicker.creatingNewList}
+              inputRef={favoritePicker.inputRef}
               onListClick={favoritePicker.onListClick}
               onCreateNewListClick={favoritePicker.onCreateNewListClick}
               onNewListNameChange={favoritePicker.onNewListNameChange}
               onNewListConfirm={favoritePicker.onNewListConfirm}
+              onNewListBlur={favoritePicker.onNewListBlur}
               onNewListCancel={favoritePicker.onNewListCancel}
             />
           )}
@@ -387,10 +389,12 @@ function FavoriteListPicker({
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
+                event.stopPropagation();
                 onNewListConfirm?.();
               }
               if (event.key === 'Escape') {
                 event.preventDefault();
+                event.stopPropagation();
                 onNewListCancel?.();
               }
             }}
