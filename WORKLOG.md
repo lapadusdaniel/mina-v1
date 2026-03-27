@@ -1,3 +1,9 @@
+### 2026-03-28 — Meniu contextual galerie păstrat în viewport pe mobil
+
+- Adăugat override mobil în `src/components/Dashboard.css` pentru dropdown-ul `⋯` din rândurile de galerie, cu `right: 0` și `left: auto`
+- Meniul contextual se deschide acum spre stânga butonului pe ecrane `max-width: 768px`, evitând overflow-ul în afara marginii din dreapta
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Layout mobil reparat pentru facturare în Settings
 
 - Ajustat containerul din `src/pages/Settings.css` pentru mobil la `max-width: 100%`, `overflow-x: hidden` și `padding: 16px`, plus lățimi explicite de `100%` pentru stack-ul de facturare și cardurile aferente

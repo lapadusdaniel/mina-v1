@@ -1,5 +1,5 @@
 # ARCHITECTURE.md — Mina v1
-> Ultima actualizare: 2026-03-27
+> Ultima actualizare: 2026-03-28
 
 ## Pagini și Rute
 - `/` — LandingPage.jsx
@@ -47,7 +47,7 @@
 
 ## Ce e implementat ✅
 - Auth complet (register/login/logout)
-- Dashboard fotograf cu upload, galerii, folder management, sumar compact inline pentru galerii active + storage și CTA mobil compact pentru adăugare galerie
+- Dashboard fotograf cu upload, galerii, folder management, sumar compact inline pentru galerii active + storage, CTA mobil compact pentru adăugare galerie și meniu contextual galerii ancorat corect pe mobil
 - Galerie client publică (masonry, lightbox, favorite, download)
 - Abonamente Stripe live cu facturi SmartBill și secțiune de subscription centrată pentru header, toggle și cardurile de plan
 - Email bun venit (Resend)
