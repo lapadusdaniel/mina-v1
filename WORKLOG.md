@@ -1,3 +1,11 @@
+### 2026-03-27 — Compactare carduri statistici în Dashboard
+
+- Ajustat cardurile de overview din `src/components/Dashboard.css` pentru un format mai compact atât pe desktop, cât și pe mobil
+- Reduse dimensiunile principale: `padding: 12px 16px`, `border-radius: 10px`, label `10px` cu `letter-spacing: 0.08em`, valoare `24px`, subtitlu `11px`
+- Pe mobil (`max-width: 768px`) cardurile folosesc `padding: 10px 12px`, iar valorile numerice coboară la `20px`
+- Eliminat override-ul care cobora cardurile la o singură coloană sub `480px`, astfel încât layout-ul mobil rămâne 2x2
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Compactare meniu hamburger mobil în Dashboard
 
 - Ajustat meniul hamburger mobil din `src/components/Dashboard.jsx` + `src/components/Dashboard.css` ca panel compact, aliniat la dreapta, în loc de dropdown full-width

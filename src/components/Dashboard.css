@@ -3177,15 +3177,15 @@
 .dash-overview-cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  padding: 16px 24px 0;
+  gap: 12px;
+  padding: 12px 16px 0;
 }
 
 .dash-overview-card {
   position: relative;
   overflow: hidden;
-  border-radius: 14px;
-  padding: 16px 18px 14px;
+  border-radius: 10px;
+  padding: 12px 16px;
   color: #ffffff;
 }
 
@@ -3198,16 +3198,16 @@
 }
 
 .dash-overview-card--sm {
-  padding: 12px 14px 10px;
+  padding: 10px 12px;
 }
 
 .dash-overview-card--sm .dash-overview-card__label {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .dash-overview-card--sm .dash-overview-card__value {
-  font-size: 28px;
-  margin-bottom: 4px;
+  font-size: 24px;
+  margin-bottom: 3px;
 }
 
 .dash-overview-card__circle {
@@ -3223,32 +3223,32 @@
 
 .dash-overview-card__label {
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #a0a0a7;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .dash-overview-card__value {
   font-family: 'DM Serif Display', Georgia, serif;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 300;
   color: #1a1a1f;
   line-height: 1;
   letter-spacing: -0.02em;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .dash-overview-card__unit {
-  font-size: 13px;
+  font-size: 11px;
   opacity: 0.8;
 }
 
 .dash-overview-card__sub {
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: 11px;
   color: #c0c0c7;
   margin: 0;
 }
@@ -3288,7 +3288,8 @@
 @media (max-width: 900px) {
   .dash-overview-cards {
     grid-template-columns: repeat(2, 1fr);
-    padding: 16px 16px 0;
+    gap: 10px;
+    padding: 12px 12px 0;
   }
   .dash-overview-cards__stack {
     grid-column: 1 / -1;
@@ -3298,7 +3299,9 @@
 
 @media (max-width: 480px) {
   .dash-overview-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 12px 12px 0;
   }
   .dash-overview-cards__stack {
     grid-column: auto;
@@ -3307,6 +3310,14 @@
 }
 
 @media (max-width: 768px) {
+  .dash-overview-card {
+    padding: 10px 12px;
+  }
+
+  .dash-overview-card__value {
+    font-size: 20px;
+  }
+
   .dashboard-sidebar {
     display: none;
   }
