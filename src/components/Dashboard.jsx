@@ -34,12 +34,12 @@ const {
 } = getAppServices()
 
 const SIDEBAR_TABS = [
-  { key: 'galerii', label: 'Galerii', icon: Layout },
-  { key: 'card', label: 'Card', icon: Contact },
-  { key: 'trash', label: 'Coș de gunoi', icon: Trash2 },
-  { key: 'site', label: 'Site-ul meu (Beta)', icon: Layout },
-  { key: 'abonament', label: 'Abonament', icon: CreditCard },
-  { key: 'setari', label: 'Setări', icon: SettingsIcon }
+  { key: 'galerii', label: 'Galerii', mobileLabel: 'Galerii', icon: Layout },
+  { key: 'card', label: 'Card', mobileLabel: 'Card', icon: Contact },
+  { key: 'trash', label: 'Coș de gunoi', mobileLabel: 'Coș de gunoi', icon: Trash2 },
+  { key: 'site', label: 'Site-ul meu (Beta)', mobileLabel: 'Site-ul meu', icon: Layout },
+  { key: 'abonament', label: 'Abonament', mobileLabel: 'Abonament', icon: CreditCard },
+  { key: 'setari', label: 'Setări', mobileLabel: 'Setări', icon: SettingsIcon }
 ]
 const TRASH_RETENTION_DAYS = 30
 const ACTIVE_GALLERY_STORAGE_KEY = 'mina_active_gallery_id'
@@ -74,7 +74,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [activeFolderId, setActiveFolderId] = useState(DEFAULT_FOLDER_ID)
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const userMenuRef = useRef(null)
+  const mobileNavRef = useRef(null)
 
   const { userPlan, storageLimit, checkAccess } = useUserSubscription(user?.uid)
 
@@ -98,6 +100,25 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [userMenuOpen])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const handler = (e) => {
+      if (mobileNavRef.current && !mobileNavRef.current.contains(e.target)) {
+        setMobileNavOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [mobileNavOpen])
+
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [location.pathname, location.search])
 
   // Profile / Branding State
   const [profileData, setProfileData] = useState({
@@ -1099,6 +1120,24 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     callback?.()
   }
 
+  const handleGoToGalerii = useCallback(() => {
+    setMobileNavOpen(false)
+    closeActiveGallery()
+    if (location.pathname === '/settings') navigate('/dashboard?tab=galerii')
+    else setSearchParams({ tab: 'galerii' })
+  }, [closeActiveGallery, location.pathname, navigate, setSearchParams])
+
+  const handleSelectTab = useCallback((key) => {
+    setMobileNavOpen(false)
+    closeActiveGallery()
+    if (key === 'setari') {
+      navigate('/settings')
+      return
+    }
+    if (location.pathname === '/settings') navigate(`/dashboard?tab=${key}`)
+    else setSearchParams({ tab: key })
+  }, [closeActiveGallery, location.pathname, navigate, setSearchParams])
+
   const pozeGalerieFiltrate = useMemo(() => {
     if (activeFolderId === DEFAULT_FOLDER_ID) {
       if (!galleryFolders.length) return pozeGalerie
@@ -1110,11 +1149,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const renderSidebar = () => (
     <div className="dashboard-sidebar">
       <div className="sidebar-logo-area">
-        <h1 className="dashboard-logo" onClick={() => runUiTransition(() => {
-          closeActiveGallery()
-          if (location.pathname === '/settings') navigate('/dashboard?tab=galerii')
-          else setSearchParams({ tab: 'galerii' })
-        })}>
+        <h1 className="dashboard-logo" onClick={() => runUiTransition(handleGoToGalerii)}>
           <span style={{
   fontFamily: "'Cormorant Garamond', Georgia, serif",
   fontWeight: 300,
@@ -1132,14 +1167,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             key={key}
             type="button"
             className={`dashboard-sidebar-btn ${activeTab === key ? 'active' : ''}`}
-            onClick={() => runUiTransition(() => {
-              closeActiveGallery()
-              if (key === 'setari') navigate('/settings')
-              else {
-                if (location.pathname === '/settings') navigate(`/dashboard?tab=${key}`)
-                else setSearchParams({ tab: key })
-              }
-            })}
+            onClick={() => runUiTransition(() => handleSelectTab(key))}
           >
             <span className="dashboard-sidebar-btn-indicator" />
             {Icon && <Icon size={18} className="dashboard-sidebar-btn-icon" />}
@@ -1178,6 +1206,48 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
+      </div>
+    </div>
+  )
+
+  const renderMobileHeader = () => (
+    <div className="dashboard-mobile-nav-shell" ref={mobileNavRef}>
+      <div className="dashboard-mobile-header">
+        <button
+          type="button"
+          className="dashboard-mobile-logo"
+          onClick={() => runUiTransition(handleGoToGalerii)}
+        >
+          MINA
+        </button>
+        <button
+          type="button"
+          className="dashboard-mobile-menu-trigger"
+          onClick={() => {
+            setUserMenuOpen(false)
+            setMobileNavOpen((open) => !open)
+          }}
+          aria-expanded={mobileNavOpen}
+          aria-controls="dashboard-mobile-menu"
+          aria-label={mobileNavOpen ? 'Închide meniul de navigare' : 'Deschide meniul de navigare'}
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
+      </div>
+      <div
+        id="dashboard-mobile-menu"
+        className={`dashboard-mobile-menu ${mobileNavOpen ? 'is-open' : ''}`}
+      >
+        {SIDEBAR_TABS.map(({ key, mobileLabel, label }) => (
+          <button
+            key={key}
+            type="button"
+            className={`dashboard-mobile-menu-item ${activeTab === key ? 'active' : ''}`}
+            onClick={() => runUiTransition(() => handleSelectTab(key))}
+          >
+            {mobileLabel || label}
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -1479,6 +1549,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     <div className="dashboard-layout">
       {renderSidebar()}
       <div className={`dashboard-main-content ${!galerieActiva ? 'page-content dashboard-app' : ''}`}>
+        {renderMobileHeader()}
         {renderMainContent()}
       </div>
 

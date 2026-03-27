@@ -1,3 +1,11 @@
+### 2026-03-27 — Dashboard mobile nav mutat sus cu meniu hamburger
+
+- Înlocuit navigația mobilă fixă din partea de jos din `src/components/Dashboard.jsx` + `src/components/Dashboard.css` cu un header sticky de `52px`, fundal alb și border-bottom `rgba(0, 0, 0, 0.06)`
+- Adăugat logo-ul `MINA` în stânga, cu `Cormorant Garamond` weight `300`, și buton hamburger `☰` în dreapta
+- Implementat meniu slide-down pe mobil pentru tab-urile `Galerii`, `Card`, `Coș de gunoi`, `Site-ul meu`, `Abonament`, `Setări`, cu închidere la selecția unui item sau la tap în afara meniului
+- Păstrată navigația desktop existentă în sidebar, folosind aceeași logică de schimbare tab/rută pentru ambele variante
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-22 — Migrare storage R2 → Backblaze B2
 
 - Rescris `worker/r2-worker.js` — înlocuite toate operațiile native R2 (`env.R2_BUCKET.get/put/delete/list`) cu AWS S3 SDK pointing la Backblaze B2
