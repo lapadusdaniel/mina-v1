@@ -1,3 +1,10 @@
+### 2026-03-27 — Buton „Adaugă galerie” mai mic și aliniat stânga pe mobil
+
+- Ajustat override-ul mobil din `src/components/Dashboard.css` pentru `.dashboard-add-galerie-btn`, fără a modifica stilul desktop
+- Pe `max-width: 768px`, butonul nu mai ocupă toată lățimea: `width: auto`, `align-self: flex-start`, `padding: 8px 16px`, `font-size: 13px`
+- Păstrat layout-ul mobil existent din `dashboard-section-header`, dar CTA-ul rămâne acum compact și aliniat la stânga
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Bară progres storage inline și subtilă în Dashboard
 
 - Mutată bara de progres pentru storage din `src/components/Dashboard.jsx` în același rând cu textul de sumar, după segmentul `GB / total`

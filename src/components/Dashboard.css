@@ -3533,7 +3533,10 @@
   }
 
   .dashboard-add-galerie-btn {
-    width: 100%;
+    width: auto;
+    align-self: flex-start;
+    padding: 8px 16px;
+    font-size: 13px;
   }
 
   .gallery-config-overlay {
