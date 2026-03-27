@@ -5,6 +5,9 @@
   background: linear-gradient(180deg, #101015 0%, #16161d 100%);
   padding: 20px;
   box-shadow: 0 14px 34px rgba(5, 5, 8, 0.24);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .bill-history-head {
@@ -157,6 +160,7 @@
 @media (max-width: 900px) {
   .bill-history-card {
     padding: 16px;
+    min-width: 0;
   }
 
   .bill-history-head {

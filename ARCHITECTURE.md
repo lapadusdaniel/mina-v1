@@ -56,6 +56,6 @@
 - Admin panel
 
 ## Ce lipsește ❌
-- Responsive mobil
+- Responsive mobil parțial: dashboard și pagina Settings/Facturare au primit ajustări mobile dedicate, restul suprafețelor încă necesită lucru
 - Landing page actualizat
 - Logică retenție galerii (grace period, cold storage, ștergere ziua 91)

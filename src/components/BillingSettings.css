@@ -4,6 +4,9 @@
   border: 1px solid #e8e8ed;
   border-radius: 20px;
   padding: 22px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .bill-settings-head h3 {
@@ -29,6 +32,8 @@
 
 .bill-settings-form {
   margin-top: 16px;
+  width: 100%;
+  min-width: 0;
 }
 
 .bill-settings-type-switch {
@@ -36,6 +41,8 @@
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 14px;
+  width: 100%;
+  min-width: 0;
 }
 
 .bill-type-btn {
@@ -54,6 +61,7 @@
   gap: 8px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
+  box-sizing: border-box;
 }
 
 .bill-type-btn:hover {
@@ -70,12 +78,15 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
+  min-width: 0;
 }
 
 .bill-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .bill-field-full {
@@ -91,6 +102,7 @@
 }
 
 .bill-field input {
+  width: 100%;
   height: 40px;
   border: 1px solid #d8d8de;
   border-radius: 10px;
@@ -99,6 +111,7 @@
   font-size: 0.86rem;
   color: #1d1d1f;
   outline: none;
+  box-sizing: border-box;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 

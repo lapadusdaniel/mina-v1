@@ -1,3 +1,10 @@
+### 2026-03-27 — Layout mobil reparat pentru facturare în Settings
+
+- Ajustat containerul din `src/pages/Settings.css` pentru mobil la `max-width: 100%`, `overflow-x: hidden` și `padding: 16px`, plus lățimi explicite de `100%` pentru stack-ul de facturare și cardurile aferente
+- Consolidat formularul din `src/components/BillingSettings.css` astfel încât grid-ul, switch-ul de tip client, inputurile și butonul de salvare să respecte `width: 100%` și `box-sizing: border-box` pe mobil
+- Forțat cardul de istoric facturare să rămână în viewport prin constrângeri `width/max-width/min-width` în `src/components/BillingHistory.css`, păstrând scroll-ul intern doar pentru tabel
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Conținut secțiune abonamente centrat
 
 - Centrat containerul principal din `src/components/SubscriptionSection.css` prin `margin: 0 auto`, `display: flex`, `align-items: center` și `text-align: center`, astfel încât header-ul și toggle-ul Lunar/Anual să rămână pe axa centrală

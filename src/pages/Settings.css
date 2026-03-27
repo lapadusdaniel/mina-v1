@@ -1,10 +1,12 @@
 .settings-page {
   width: 100%;
+  max-width: 100%;
   min-height: 100%;
   padding: 32px 0 48px;
   display: grid;
   gap: 20px;
   background: #f4f5f8;
+  box-sizing: border-box;
 }
 
 .settings-header {
@@ -56,6 +58,8 @@
 .settings-tab-panel {
   display: grid;
   gap: 18px;
+  width: 100%;
+  min-width: 0;
 }
 
 .settings-panel-head {
@@ -119,11 +123,17 @@
 .settings-billing-stack {
   display: grid;
   gap: 20px;
+  width: 100%;
+  min-width: 0;
 }
 
 .settings-billing-stack .bill-settings-card,
 .settings-billing-stack .bill-history-card {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .settings-danger-zone {
@@ -170,7 +180,9 @@
 
 @media (max-width: 768px) {
   .settings-page {
-    padding: 20px 0 88px;
+    max-width: 100%;
+    overflow-x: hidden;
+    padding: 16px 16px 88px;
     gap: 16px;
   }
 
@@ -193,8 +205,14 @@
   }
 
   .settings-account-subscription .sub-billing-card,
+  .settings-billing-stack .bill-settings-card,
+  .settings-billing-stack .bill-history-card,
   .settings-danger-zone {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     padding: 16px;
+    box-sizing: border-box;
   }
 
   .settings-delete-account-btn,
