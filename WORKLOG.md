@@ -1,3 +1,10 @@
+### 2026-03-27 — Eliminare carduri statistici din Dashboard
+
+- Eliminată complet secțiunea celor 4 carduri de overview din `src/components/Dashboard.jsx`: `Galerii active`, `Storage folosit`, `Vizualizări luna aceasta`, `Descărcări luna aceasta`
+- Scoase calculele derivate folosite exclusiv pentru acea secțiune (`galeriiActive`, `usedGB`, `storagePercent`, `vizualizariLuna`, `descarcariLuna`, `totalPhotos`)
+- Eliminat tot CSS-ul asociat claselor `dash-overview*` din `src/components/Dashboard.css`, inclusiv override-urile responsive dedicate
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Compactare carduri statistici în Dashboard
 
 - Ajustat cardurile de overview din `src/components/Dashboard.css` pentru un format mai compact atât pe desktop, cât și pe mobil
