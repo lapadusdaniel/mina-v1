@@ -1234,6 +1234,13 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           <span aria-hidden="true">☰</span>
         </button>
       </div>
+      {mobileNavOpen && (
+        <div
+          className="dashboard-mobile-menu-overlay"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
       <div
         id="dashboard-mobile-menu"
         className={`dashboard-mobile-menu ${mobileNavOpen ? 'is-open' : ''}`}

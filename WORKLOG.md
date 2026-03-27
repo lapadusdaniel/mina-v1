@@ -1,3 +1,11 @@
+### 2026-03-27 — Compactare meniu hamburger mobil în Dashboard
+
+- Ajustat meniul hamburger mobil din `src/components/Dashboard.jsx` + `src/components/Dashboard.css` ca panel compact, aliniat la dreapta, în loc de dropdown full-width
+- Adăugat overlay semi-transparent sub header (`rgba(0,0,0,0.3)`) care acoperă ecranul sub bara sticky și închide meniul la tap
+- Dropdown-ul mobil are acum fundal alb, `max-width: 220px`, item-uri cu `padding: 12px 20px`, `font-size: 14px` și separatoare `border-bottom: 1px solid rgba(0,0,0,0.05)`
+- Păstrat flow-ul existent de închidere la selectarea unui item și la interacțiune în afara meniului
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Dashboard mobile nav mutat sus cu meniu hamburger
 
 - Înlocuit navigația mobilă fixă din partea de jos din `src/components/Dashboard.jsx` + `src/components/Dashboard.css` cu un header sticky de `52px`, fundal alb și border-bottom `rgba(0, 0, 0, 0.06)`
