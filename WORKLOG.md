@@ -1,3 +1,10 @@
+### 2026-03-27 — Conținut secțiune abonamente centrat
+
+- Centrat containerul principal din `src/components/SubscriptionSection.css` prin `margin: 0 auto`, `display: flex`, `align-items: center` și `text-align: center`, astfel încât header-ul și toggle-ul Lunar/Anual să rămână pe axa centrală
+- Centrat cardurile de plan și conținutul lor: titluri, pricing, listă de beneficii și add-on-ul Studio folosesc acum aliniere centrală în loc de layout orientat spre stânga
+- Păstrat pe mobil layout-ul cu carduri pe toată lățimea disponibilă, dar cu conținutul fiecărui card centrat vizual
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Buton „Adaugă galerie” mai mic și aliniat stânga pe mobil
 
 - Ajustat override-ul mobil din `src/components/Dashboard.css` pentru `.dashboard-add-galerie-btn`, fără a modifica stilul desktop

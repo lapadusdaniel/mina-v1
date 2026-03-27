@@ -49,7 +49,7 @@
 - Auth complet (register/login/logout)
 - Dashboard fotograf cu upload, galerii, folder management, sumar compact inline pentru galerii active + storage și CTA mobil compact pentru adăugare galerie
 - Galerie client publică (masonry, lightbox, favorite, download)
-- Abonamente Stripe live cu facturi SmartBill
+- Abonamente Stripe live cu facturi SmartBill și secțiune de subscription centrată pentru header, toggle și cardurile de plan
 - Email bun venit (Resend)
 - Email notificări favorite + trimitere link galerie prin Resend
 - Pagini legale (Termeni, Confidențialitate, Refund)
