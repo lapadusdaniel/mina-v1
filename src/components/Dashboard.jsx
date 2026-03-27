@@ -1334,13 +1334,13 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       <div key={`view-${activeTab}`} className="dashboard-view-animate">
         {activeTab === 'galerii' && (
           <div className="dashboard-stats-line">
-            <div className="dashboard-stats-line-text">{dashboardStatsLine.text}</div>
-            <div className="dashboard-stats-line-progress" aria-hidden="true">
+            <span className="dashboard-stats-line-text">{dashboardStatsLine.text}</span>
+            <span className="dashboard-stats-line-progress" aria-hidden="true">
               <div
                 className="dashboard-stats-line-progress-fill"
                 style={{ width: `${dashboardStatsLine.storagePercent}%` }}
               />
-            </div>
+            </span>
           </div>
         )}
 

@@ -1,3 +1,10 @@
+### 2026-03-27 — Bară progres storage inline și subtilă în Dashboard
+
+- Mutată bara de progres pentru storage din `src/components/Dashboard.jsx` în același rând cu textul de sumar, după segmentul `GB / total`
+- Redusă bara în `src/components/Dashboard.css` la `height: 2px`, `max-width: 120px`, `border-radius: 2px`, fundal `#e8e8ed` și fill `#1a1a1f`
+- Ajustat `.dashboard-stats-line` pentru layout inline, cu scroll orizontal dacă spațiul este insuficient, astfel încât tot sumarul rămâne pe un singur rând
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Linie statistici cu progres storage în Dashboard
 
 - Actualizată linia de sumar din `src/components/Dashboard.jsx` să afișeze doar numărul de galerii active și storage-ul folosit din total

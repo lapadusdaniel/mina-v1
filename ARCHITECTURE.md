@@ -47,7 +47,7 @@
 
 ## Ce e implementat ✅
 - Auth complet (register/login/logout)
-- Dashboard fotograf cu upload, galerii, folder management și sumar compact pentru galerii active + storage
+- Dashboard fotograf cu upload, galerii, folder management și sumar compact inline pentru galerii active + storage
 - Galerie client publică (masonry, lightbox, favorite, download)
 - Abonamente Stripe live cu facturi SmartBill
 - Email bun venit (Resend)
