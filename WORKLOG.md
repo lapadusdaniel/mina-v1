@@ -1,3 +1,10 @@
+### 2026-03-27 — Statistici ca linie text compactă în Dashboard
+
+- Reintrodus în `src/components/Dashboard.jsx` calculul agregatelor folosite anterior de cardurile de overview și randat ca o singură linie text de sumar deasupra filtrelor din galerii
+- Linia afișează numărul de galerii active, storage-ul folosit vs limită, vizualizările lunii și descărcările lunii, păstrând aceeași logică de derivare din `galerii`
+- Adăugat stilul `.dashboard-stats-line` în `src/components/Dashboard.css` cu `DM Sans`, `12px`, `#a0a0a7`, `padding: 8px 24px`
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Eliminare carduri statistici din Dashboard
 
 - Eliminată complet secțiunea celor 4 carduri de overview din `src/components/Dashboard.jsx`: `Galerii active`, `Storage folosit`, `Vizualizări luna aceasta`, `Descărcări luna aceasta`

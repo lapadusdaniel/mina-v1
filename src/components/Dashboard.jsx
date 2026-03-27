@@ -1146,6 +1146,29 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     return pozeGalerie.filter((photo) => normalizePhotoFolderId(photo?.folderId) === activeFolderId)
   }, [activeFolderId, galleryFolders, normalizePhotoFolderId, pozeGalerie])
 
+  const dashboardStatsLine = useMemo(() => {
+    const galeriiActive = galerii.filter((g) => g?.status !== 'trash' && g?.status !== 'archived')
+    const totalBytes = galerii.reduce((sum, g) => sum + Math.max(0, Number(g?.storageBytes || 0)), 0)
+    const usedGB = (totalBytes / (1024 ** 3)).toFixed(1)
+    const limitGB = storageLimit ?? 15
+    const now = new Date()
+    const isThisMonth = (g) => {
+      const d = g.createdAt?.toDate?.() || (g.data ? new Date(g.data) : null)
+      return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    }
+    const galeriiLunaAceasta = galeriiActive.filter(isThisMonth)
+    const vizualizariLuna = galeriiLunaAceasta.reduce((sum, g) => sum + Math.max(0, Number(g?.vizualizari || 0)), 0)
+    const descarcariLuna = galeriiLunaAceasta.reduce((sum, g) => sum + Math.max(0, Number(g?.descarcari || 0)), 0)
+
+    const galeriiLabel = galeriiActive.length === 1
+      ? '1 galerie activă'
+      : `${galeriiActive.length} galerii active`
+    const vizualizariLabel = `${vizualizariLuna.toLocaleString('ro-RO')} ${vizualizariLuna === 1 ? 'vizualizare' : 'vizualizări'}`
+    const descarcariLabel = `${descarcariLuna.toLocaleString('ro-RO')} ${descarcariLuna === 1 ? 'descărcare' : 'descărcări'}`
+
+    return `${galeriiLabel} · ${usedGB} GB / ${Number(limitGB).toLocaleString('ro-RO')} GB · ${vizualizariLabel} · ${descarcariLabel}`
+  }, [galerii, storageLimit])
+
   const renderSidebar = () => (
     <div className="dashboard-sidebar">
       <div className="sidebar-logo-area">
@@ -1312,6 +1335,10 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
     return (
       <div key={`view-${activeTab}`} className="dashboard-view-animate">
+        {activeTab === 'galerii' && (
+          <div className="dashboard-stats-line">{dashboardStatsLine}</div>
+        )}
+
         {/* Tab-uri Galerii / Coș */}
         {(activeTab === 'galerii' || activeTab === 'trash') && (
           <AdminGalleryTable
