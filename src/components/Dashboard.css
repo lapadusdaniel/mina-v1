@@ -628,13 +628,30 @@
 }
 
 .dashboard-stats-line {
-  padding: 8px 24px;
+  padding: 8px 24px 12px;
   font-family: 'DM Sans', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-stats-line-text {
   font-size: 12px;
   color: #a0a0a7;
-  white-space: nowrap;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-stats-line-progress {
+  height: 3px;
+  border-radius: 2px;
+  background: #e8e8ed;
+  overflow: hidden;
+}
+
+.dashboard-stats-line-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #1a1a1f;
+  transition: width 0.25s ease;
 }
 
 /* ══════════════════════════════

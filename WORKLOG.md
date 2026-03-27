@@ -1,3 +1,11 @@
+### 2026-03-27 — Linie statistici cu progres storage în Dashboard
+
+- Actualizată linia de sumar din `src/components/Dashboard.jsx` să afișeze doar numărul de galerii active și storage-ul folosit din total
+- Eliminat complet din sumar afișajul pentru vizualizări și descărcări
+- Adăugată sub text o bară de progres subțire în `src/components/Dashboard.css` (`3px`, `#e8e8ed`, fill `#1a1a1f`) cu lățime proporțională la `used / total`
+- Ajustat containerul `.dashboard-stats-line` la `padding: 8px 24px 12px`
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID=\"mina-v1-aea51\" npm run deploy:hosting`
+
 ### 2026-03-27 — Statistici ca linie text compactă în Dashboard
 
 - Reintrodus în `src/components/Dashboard.jsx` calculul agregatelor folosite anterior de cardurile de overview și randat ca o singură linie text de sumar deasupra filtrelor din galerii

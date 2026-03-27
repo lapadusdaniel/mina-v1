@@ -1151,22 +1151,19 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     const totalBytes = galerii.reduce((sum, g) => sum + Math.max(0, Number(g?.storageBytes || 0)), 0)
     const usedGB = (totalBytes / (1024 ** 3)).toFixed(1)
     const limitGB = storageLimit ?? 15
-    const now = new Date()
-    const isThisMonth = (g) => {
-      const d = g.createdAt?.toDate?.() || (g.data ? new Date(g.data) : null)
-      return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-    }
-    const galeriiLunaAceasta = galeriiActive.filter(isThisMonth)
-    const vizualizariLuna = galeriiLunaAceasta.reduce((sum, g) => sum + Math.max(0, Number(g?.vizualizari || 0)), 0)
-    const descarcariLuna = galeriiLunaAceasta.reduce((sum, g) => sum + Math.max(0, Number(g?.descarcari || 0)), 0)
+    const limitGbNumber = Math.max(0, Number(limitGB) || 0)
+    const storagePercent = limitGbNumber > 0
+      ? Math.min(100, (totalBytes / (1024 ** 3) / limitGbNumber) * 100)
+      : 0
 
     const galeriiLabel = galeriiActive.length === 1
       ? '1 galerie activă'
       : `${galeriiActive.length} galerii active`
-    const vizualizariLabel = `${vizualizariLuna.toLocaleString('ro-RO')} ${vizualizariLuna === 1 ? 'vizualizare' : 'vizualizări'}`
-    const descarcariLabel = `${descarcariLuna.toLocaleString('ro-RO')} ${descarcariLuna === 1 ? 'descărcare' : 'descărcări'}`
 
-    return `${galeriiLabel} · ${usedGB} GB / ${Number(limitGB).toLocaleString('ro-RO')} GB · ${vizualizariLabel} · ${descarcariLabel}`
+    return {
+      text: `${galeriiLabel} · ${usedGB} GB / ${limitGbNumber.toLocaleString('ro-RO')} GB`,
+      storagePercent,
+    }
   }, [galerii, storageLimit])
 
   const renderSidebar = () => (
@@ -1336,7 +1333,15 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     return (
       <div key={`view-${activeTab}`} className="dashboard-view-animate">
         {activeTab === 'galerii' && (
-          <div className="dashboard-stats-line">{dashboardStatsLine}</div>
+          <div className="dashboard-stats-line">
+            <div className="dashboard-stats-line-text">{dashboardStatsLine.text}</div>
+            <div className="dashboard-stats-line-progress" aria-hidden="true">
+              <div
+                className="dashboard-stats-line-progress-fill"
+                style={{ width: `${dashboardStatsLine.storagePercent}%` }}
+              />
+            </div>
+          </div>
         )}
 
         {/* Tab-uri Galerii / Coș */}
