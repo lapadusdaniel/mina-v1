@@ -1,3 +1,20 @@
+### 2026-03-30 — Redesign premium UI site fotograf + editor two-panel
+
+- Redesign complet `PhotographerSite.jsx` și `PhotographerSite.css` cu identitate vizuală premium:
+  - Nav: sticky 60px, fundal alb, brand name în Cormorant Garamond 300 italic, tab-uri cu indicator `border-bottom: 1.5px solid #1a1a1f` (fără fundal), `font-size: 13px`, `letter-spacing: 0.05em`
+  - Acasă: hero full viewport centrat, overlay `rgba(0,0,0,0.25)`, scroll indicator animat (keyframes scrollPulse), fără butoane CTA
+  - Portofoliu: pills centrate, masonry 3 coloane `gap: 4px`, lightbox la click
+  - Prețuri: max-width 900px, pachet "featured" cu `border: 1.5px solid #1a1a1f` și badge "Recomandat"
+  - Despre: portret pătrat (`aspect-ratio: 1/1`), strip orizontal de fotografii (5-6 poze, height 200px) din prima poză per categorie
+  - Contact: centrat max-width 560px, inputuri borderless cu `border-bottom: 1px solid #d0d0d5; border-radius: 0`
+  - Sistem de culori `#1a1a1f` consistent
+- Redesign complet `SiteEditor.jsx` cu layout two-panel:
+  - Panel stânga: 340px sticky (`top: 104px`), tabs editor + preview upload
+  - Panel dreapta: `flex: 1`, live preview cu `<PhotographerSite previewData={...} />` actualizat în timp real
+  - `showFullPreview` toggle pentru preview full-screen pe mobil
+  - Câmp `featured: boolean` per pachet de prețuri cu checkbox "Marcat ca Recomandat"
+- Rulate cu succes `npm run build` și `FIREBASE_PROJECT_ID="mina-v1-aea51" npm run deploy:hosting`
+
 ### 2026-03-30 — Redesign site fotograf cu tabs + editor portofoliu/prețuri
 
 - Redesign complet `PhotographerSite.jsx`: navigare cu tabs sticky (Acasă, Portofoliu, Prețuri, Despre, Contact) în loc de scroll lung

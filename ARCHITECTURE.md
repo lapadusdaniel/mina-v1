@@ -54,11 +54,15 @@
 - Despre: `profilePhotoPath` + bio + stats + `socialLinks`
 - Contact: formular → `contactMessages/{photographerUid}` în Firestore
 
-**SiteEditor.jsx** — editor cu 4 tabs (Acasă, Portofoliu, Prețuri, Despre):
+**SiteEditor.jsx** — editor two-panel (340px stânga sticky + preview live dreapta):
+- Panel stânga: tabs editor (Acasă, Portofoliu, Prețuri, Despre), sticky la `top: 104px`
+- Panel dreapta: `<PhotographerSite previewData={...} />` actualizat în timp real
 - Upload cover: `branding/{uid}/cover.{ext}`
 - Upload profil: `branding/{uid}/profile-photo.{ext}`
 - Upload portofoliu: `branding/{uid}/portfolio/{catId}/{ts}-{file}`
+- Pachet `featured: boolean` → badge "Recomandat" + border accentuat în preview
 - Salvare în `photographerSites/{uid}` cu sync câmpuri legacy
+- Mobile: toggle `showFullPreview` pentru preview full-screen
 
 **Câmpuri noi în `photographerSites/{uid}`:**
 ```

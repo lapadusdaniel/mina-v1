@@ -16,7 +16,7 @@ const normalizeUrl = (url) => {
 }
 
 // ── Contact Form ──────────────────────────────
-function ContactForm({ photographerUid, accentColor }) {
+function ContactForm({ photographerUid }) {
   const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' })
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -39,15 +39,17 @@ function ContactForm({ photographerUid, accentColor }) {
 
   if (sent) {
     return (
-      <div className="ps-form-success">✓ Mesaj trimis! Te vom contacta în curând.</div>
+      <div className="ps-form-success">
+        Mesaj trimis. Te voi contacta în curând.
+      </div>
     )
   }
 
   return (
     <form className="ps-contact-form" onSubmit={handleSubmit}>
       <div className="ps-form-row">
-        <div>
-          <label className="ps-form-label">Nume *</label>
+        <div className="ps-form-field">
+          <label className="ps-form-label">Nume</label>
           <input
             className="ps-form-input"
             type="text"
@@ -57,8 +59,8 @@ function ContactForm({ photographerUid, accentColor }) {
             required
           />
         </div>
-        <div>
-          <label className="ps-form-label">Email *</label>
+        <div className="ps-form-field">
+          <label className="ps-form-label">Email</label>
           <input
             className="ps-form-input"
             type="email"
@@ -69,7 +71,7 @@ function ContactForm({ photographerUid, accentColor }) {
           />
         </div>
       </div>
-      <div>
+      <div className="ps-form-field">
         <label className="ps-form-label">Telefon</label>
         <input
           className="ps-form-input"
@@ -79,7 +81,7 @@ function ContactForm({ photographerUid, accentColor }) {
           onChange={set('phone')}
         />
       </div>
-      <div>
+      <div className="ps-form-field">
         <label className="ps-form-label">Mesaj</label>
         <textarea
           className="ps-form-textarea"
@@ -93,7 +95,6 @@ function ContactForm({ photographerUid, accentColor }) {
         type="submit"
         className="ps-form-submit"
         disabled={sending}
-        style={{ background: accentColor || '#1d1d1f' }}
       >
         {sending ? 'Se trimite...' : 'Trimite mesaj'}
       </button>
@@ -114,9 +115,12 @@ export default function PhotographerSite({ previewData = null }) {
 
   // Portfolio state
   const [selectedCategory, setSelectedCategory] = useState(null)
-  const [categoryPhotos, setCategoryPhotos] = useState({}) // categoryId → [{url, key}]
+  const [categoryPhotos, setCategoryPhotos] = useState({})
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [lightbox, setLightbox] = useState({ open: false, index: 0, slides: [] })
+
+  // Despre: horizontal strip photos
+  const [stripPhotos, setStripPhotos] = useState([])
 
   const slug = previewData
     ? null
@@ -224,9 +228,7 @@ export default function PhotographerSite({ previewData = null }) {
         try {
           const url = await mediaService.getBrandingAsset(photo.key)
           urls.push({ url, key: photo.key })
-        } catch {
-          /* skip failed photos */
-        }
+        } catch { /* skip */ }
       }
       setCategoryPhotos((p) => ({ ...p, [categoryId]: urls }))
       setLoadingPhotos(false)
@@ -238,11 +240,33 @@ export default function PhotographerSite({ previewData = null }) {
     if (selectedCategory) loadCategoryPhotos(selectedCategory)
   }, [selectedCategory, loadCategoryPhotos])
 
+  // ── Load strip photos for Despre tab ──
+  useEffect(() => {
+    if (activeTab !== 'Despre' || !siteData || stripPhotos.length > 0) return
+    const portfolio = siteData.portfolio || []
+    if (!portfolio.length) return
+
+    let cancelled = false
+    const loadStrip = async () => {
+      const photos = []
+      for (const cat of portfolio.slice(0, 6)) {
+        if (!cat.photos?.length) continue
+        try {
+          const url = await mediaService.getBrandingAsset(cat.photos[0].key)
+          photos.push(url)
+        } catch { /* skip */ }
+      }
+      if (!cancelled) setStripPhotos(photos)
+    }
+    loadStrip()
+    return () => { cancelled = true }
+  }, [activeTab, siteData, stripPhotos.length])
+
   if (loading) {
     return (
       <div className="ps-loading">
-        <p className="ps-loading-logo">MINA</p>
-        <p className="ps-loading-text">Se încarcă...</p>
+        <span className="ps-loading-logo">MINA</span>
+        <span className="ps-loading-text">Se încarcă...</span>
       </div>
     )
   }
@@ -250,7 +274,7 @@ export default function PhotographerSite({ previewData = null }) {
   if (error) {
     return (
       <div className="ps-error">
-        <p className="ps-loading-logo">MINA</p>
+        <span className="ps-loading-logo">MINA</span>
         <p className="ps-error-title">{error}</p>
         <p className="ps-error-sub">Verifică adresa și încearcă din nou.</p>
       </div>
@@ -259,12 +283,12 @@ export default function PhotographerSite({ previewData = null }) {
 
   if (!siteData) return null
 
-  // ── Derived values (with backward compat) ──
+  // ── Derived values ──
   const brandName = siteData.siteName || siteData.brandName || profile?.brandName || 'Fotograf'
   const tagline = siteData.tagline || siteData.heroBio || ''
   const heroTitle = siteData.heroTitle || brandName
+  const heroLabel = siteData.heroEyebrow || ''
   const bio = siteData.bio || siteData.aboutBio || ''
-  const accentColor = siteData.accentColor || profile?.accentColor || '#b8965a'
   const portfolio = siteData.portfolio || []
   const pricing = siteData.pricing || []
   const socialLinks = siteData.socialLinks || {}
@@ -279,21 +303,21 @@ export default function PhotographerSite({ previewData = null }) {
   return (
     <div className="ps-root">
 
-      {/* ── Nav with tabs ── */}
+      {/* ── Nav ── */}
       <nav className="ps-nav">
-        <div className="ps-nav-brand-area">
+        <div className="ps-nav-left">
           {logoUrl
             ? <img src={logoUrl} alt={brandName} className="ps-nav-logo" />
             : <span className="ps-nav-brand">{brandName}</span>
           }
         </div>
-        <div className="ps-tabs" role="tablist">
+        <div className="ps-nav-tabs" role="tablist">
           {TABS.map((tab) => (
             <button
               key={tab}
               role="tab"
               aria-selected={activeTab === tab}
-              className={`ps-tab${activeTab === tab ? ' ps-tab--active' : ''}`}
+              className={`ps-nav-tab${activeTab === tab ? ' ps-nav-tab--active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
               {tab}
@@ -303,7 +327,7 @@ export default function PhotographerSite({ previewData = null }) {
       </nav>
 
       {/* ── Tab Content ── */}
-      <div className="ps-tab-content">
+      <main className="ps-main">
 
         {/* ── ACASĂ ── */}
         {activeTab === 'Acasă' && (
@@ -313,27 +337,14 @@ export default function PhotographerSite({ previewData = null }) {
             </div>
             <div className="ps-hero-overlay" />
             <div className="ps-hero-content">
-              <span className="ps-hero-eyebrow">{siteData.heroEyebrow || brandName}</span>
+              {heroLabel && (
+                <span className="ps-hero-label">{heroLabel}</span>
+              )}
               <h1 className="ps-hero-title">{heroTitle}</h1>
-              {tagline && <p className="ps-hero-sub">{tagline}</p>}
-              <div className="ps-hero-actions">
-                <button
-                  className="ps-btn-primary"
-                  onClick={() => setActiveTab('Portofoliu')}
-                >
-                  Vezi portofoliu
-                </button>
-                <button
-                  className="ps-btn-secondary"
-                  onClick={() => setActiveTab('Contact')}
-                >
-                  Contact
-                </button>
-              </div>
+              {tagline && <p className="ps-hero-tagline">{tagline}</p>}
             </div>
-            <div className="ps-hero-scroll">
-              <div className="ps-hero-scroll-line" />
-              <span>scroll</span>
+            <div className="ps-hero-scroll-indicator">
+              <div className="ps-scroll-dot" />
             </div>
           </div>
         )}
@@ -347,11 +358,11 @@ export default function PhotographerSite({ previewData = null }) {
               </div>
             ) : (
               <>
-                <div className="ps-category-filters">
+                <div className="ps-pills-row">
                   {portfolio.map((cat) => (
                     <button
                       key={cat.id}
-                      className={`ps-category-btn${selectedCategory === cat.id ? ' ps-category-btn--active' : ''}`}
+                      className={`ps-pill${selectedCategory === cat.id ? ' ps-pill--active' : ''}`}
                       onClick={() => setSelectedCategory(cat.id)}
                     >
                       {cat.name}
@@ -360,38 +371,35 @@ export default function PhotographerSite({ previewData = null }) {
                 </div>
 
                 {loadingPhotos ? (
-                  <div className="ps-photos-loading">Se încarcă fotografiile...</div>
+                  <div className="ps-photos-loading">Se încarcă...</div>
                 ) : currentCategoryPhotos.length === 0 ? (
                   <div className="ps-empty-state">
                     <p>Nicio fotografie în această categorie.</p>
                   </div>
                 ) : (
-                  <Masonry
-                    breakpointCols={{ default: 3, 1024: 3, 768: 2, 480: 1 }}
-                    className="ps-masonry-grid"
-                    columnClassName="ps-masonry-col"
-                  >
-                    {currentCategoryPhotos.map((photo, i) => (
-                      <div
-                        key={photo.key}
-                        className="ps-masonry-item"
-                        onClick={() =>
-                          setLightbox({
-                            open: true,
-                            index: i,
-                            slides: currentCategoryPhotos.map((p) => ({ src: p.url })),
-                          })
-                        }
-                      >
-                        <img
-                          src={photo.url}
-                          alt=""
-                          loading="lazy"
-                          className="ps-masonry-img"
-                        />
-                      </div>
-                    ))}
-                  </Masonry>
+                  <div className="ps-masonry-wrap">
+                    <Masonry
+                      breakpointCols={{ default: 3, 1024: 3, 768: 2, 480: 1 }}
+                      className="ps-masonry-grid"
+                      columnClassName="ps-masonry-col"
+                    >
+                      {currentCategoryPhotos.map((photo, i) => (
+                        <div
+                          key={photo.key}
+                          className="ps-masonry-item"
+                          onClick={() =>
+                            setLightbox({
+                              open: true,
+                              index: i,
+                              slides: currentCategoryPhotos.map((p) => ({ src: p.url })),
+                            })
+                          }
+                        >
+                          <img src={photo.url} alt="" loading="lazy" className="ps-masonry-img" />
+                        </div>
+                      ))}
+                    </Masonry>
+                  </div>
                 )}
               </>
             )}
@@ -411,7 +419,13 @@ export default function PhotographerSite({ previewData = null }) {
                   <h2 className="ps-pricing-event-title">{eventType.eventType}</h2>
                   <div className="ps-pricing-cards">
                     {(eventType.packages || []).map((pkg) => (
-                      <div key={pkg.id} className="ps-pricing-card">
+                      <div
+                        key={pkg.id}
+                        className={`ps-pricing-card${pkg.featured ? ' ps-pricing-card--featured' : ''}`}
+                      >
+                        {pkg.featured && (
+                          <span className="ps-pricing-badge">Recomandat</span>
+                        )}
                         <h3 className="ps-pricing-card-name">{pkg.name}</h3>
                         <div className="ps-pricing-card-price">
                           {pkg.price}
@@ -421,15 +435,10 @@ export default function PhotographerSite({ previewData = null }) {
                           <p className="ps-pricing-card-desc">{pkg.description}</p>
                         )}
                         {pkg.inclusions?.length > 0 && (
-                          <ul className="ps-pricing-card-inclusions">
+                          <ul className="ps-pricing-inclusions">
                             {pkg.inclusions.map((item, i) => (
                               <li key={i}>
-                                <span
-                                  className="ps-pricing-check"
-                                  style={{ color: accentColor }}
-                                >
-                                  ✓
-                                </span>
+                                <span className="ps-inclusion-check">—</span>
                                 {item}
                               </li>
                             ))}
@@ -437,7 +446,6 @@ export default function PhotographerSite({ previewData = null }) {
                         )}
                         <button
                           className="ps-pricing-cta"
-                          style={{ background: accentColor }}
                           onClick={() => setActiveTab('Contact')}
                         >
                           Rezervă
@@ -455,80 +463,75 @@ export default function PhotographerSite({ previewData = null }) {
         {activeTab === 'Despre' && (
           <div className="ps-despre-tab">
             <div className="ps-despre-inner">
-              <div className="ps-despre-photo-wrap">
+
+              {/* Portrait */}
+              <div className="ps-portrait-wrap">
                 {profilePhotoUrl
-                  ? <img src={profilePhotoUrl} alt={brandName} className="ps-despre-photo" />
-                  : <div className="ps-despre-photo-placeholder" />
+                  ? <img src={profilePhotoUrl} alt={brandName} className="ps-portrait" />
+                  : <div className="ps-portrait-placeholder" />
                 }
               </div>
+
+              {/* Text */}
               <div className="ps-despre-text">
-                <span className="ps-eyebrow">Despre mine</span>
-                <h2 className="ps-section-title">
-                  {siteData.aboutTitle || `Salut, sunt ${brandName}`}
-                </h2>
-                <p className="ps-about-bio">
-                  {bio || 'Completează secțiunea "Despre" din editor pentru a te prezenta clienților tăi.'}
+                <h2 className="ps-despre-name">{siteData.aboutTitle || brandName}</h2>
+                <p className="ps-despre-bio">
+                  {bio || 'Completează secțiunea "Despre" din editor.'}
                 </p>
 
                 {(siteData.yearsExp || siteData.sessionsCount || siteData.citiesCount) && (
-                  <div className="ps-about-stats">
+                  <div className="ps-stats-row">
                     {siteData.yearsExp && (
-                      <div>
-                        <span className="ps-about-stat-value">{siteData.yearsExp}+</span>
-                        <span className="ps-about-stat-label">Ani experiență</span>
+                      <div className="ps-stat">
+                        <span className="ps-stat-value">{siteData.yearsExp}</span>
+                        <span className="ps-stat-label">ani experiență</span>
                       </div>
                     )}
                     {siteData.sessionsCount && (
-                      <div>
-                        <span className="ps-about-stat-value">{siteData.sessionsCount}+</span>
-                        <span className="ps-about-stat-label">Ședințe foto</span>
+                      <div className="ps-stat">
+                        <span className="ps-stat-value">{siteData.sessionsCount}</span>
+                        <span className="ps-stat-label">ședințe foto</span>
                       </div>
                     )}
                     {siteData.citiesCount && (
-                      <div>
-                        <span className="ps-about-stat-value">{siteData.citiesCount}</span>
-                        <span className="ps-about-stat-label">Orașe</span>
+                      <div className="ps-stat">
+                        <span className="ps-stat-value">{siteData.citiesCount}</span>
+                        <span className="ps-stat-label">orașe</span>
                       </div>
                     )}
                   </div>
                 )}
 
-                {(instagram || facebook || website) && (
-                  <div className="ps-social-links">
-                    {instagram && (
-                      <a
-                        href={normalizeUrl(instagram)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ps-social-link"
-                      >
-                        <span className="ps-social-icon">📸</span> Instagram
-                      </a>
-                    )}
-                    {facebook && (
-                      <a
-                        href={normalizeUrl(facebook)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ps-social-link"
-                      >
-                        <span className="ps-social-icon">👥</span> Facebook
-                      </a>
-                    )}
-                    {website && (
-                      <a
-                        href={normalizeUrl(website)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ps-social-link"
-                      >
-                        <span className="ps-social-icon">🌐</span> Website
-                      </a>
-                    )}
-                  </div>
-                )}
+                <div className="ps-social-row">
+                  {instagram && (
+                    <a href={normalizeUrl(instagram)} target="_blank" rel="noopener noreferrer" className="ps-social-link">
+                      Instagram
+                    </a>
+                  )}
+                  {facebook && (
+                    <a href={normalizeUrl(facebook)} target="_blank" rel="noopener noreferrer" className="ps-social-link">
+                      Facebook
+                    </a>
+                  )}
+                  {website && (
+                    <a href={normalizeUrl(website)} target="_blank" rel="noopener noreferrer" className="ps-social-link">
+                      Website
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Horizontal photo strip */}
+            {stripPhotos.length > 0 && (
+              <div className="ps-photo-strip">
+                {stripPhotos.map((url, i) => (
+                  <div key={i} className="ps-strip-item">
+                    <img src={url} alt="" loading="lazy" className="ps-strip-img" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -536,64 +539,47 @@ export default function PhotographerSite({ previewData = null }) {
         {activeTab === 'Contact' && (
           <div className="ps-contact-tab">
             <div className="ps-contact-inner">
-              <div className="ps-contact-info">
-                <span className="ps-eyebrow">Hai să vorbim</span>
-                <h2 className="ps-section-title">
-                  {siteData.contactTitle || 'Rezervă acum'}
-                </h2>
-                <p className="ps-contact-sub">
-                  {siteData.contactSub || 'Completează formularul și te contactez în maxim 24 de ore.'}
-                </p>
+              <h2 className="ps-contact-title">
+                {siteData.contactTitle || 'Să vorbim'}
+              </h2>
+              <p className="ps-contact-sub">
+                {siteData.contactSub || 'Completează formularul și te contactez în maxim 24 de ore.'}
+              </p>
 
-                <div className="ps-contact-channels">
-                  {contactPhone && (
-                    <a
-                      href={`https://wa.me/${contactPhone.replace(/\D/g, '')}`}
-                      className="ps-contact-channel"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <div className="ps-contact-channel-icon" style={{ background: '#25D366' }}>💬</div>
-                      <div>
-                        <span className="ps-contact-channel-label">WhatsApp</span>
-                        <span className="ps-contact-channel-value">{contactPhone}</span>
-                      </div>
-                    </a>
-                  )}
-                  {contactEmail && (
-                    <a href={`mailto:${contactEmail}`} className="ps-contact-channel">
-                      <div className="ps-contact-channel-icon" style={{ background: accentColor }}>✉️</div>
-                      <div>
-                        <span className="ps-contact-channel-label">Email</span>
-                        <span className="ps-contact-channel-value">{contactEmail}</span>
-                      </div>
-                    </a>
-                  )}
-                  {instagram && (
-                    <a
-                      href={normalizeUrl(instagram)}
-                      className="ps-contact-channel"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <div className="ps-contact-channel-icon" style={{ background: '#E1306C' }}>📸</div>
-                      <div>
-                        <span className="ps-contact-channel-label">Instagram</span>
-                        <span className="ps-contact-channel-value">
-                          {instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, '@')}
-                        </span>
-                      </div>
-                    </a>
-                  )}
-                </div>
+              <div className="ps-contact-channels">
+                {contactPhone && (
+                  <a
+                    href={`https://wa.me/${contactPhone.replace(/\D/g, '')}`}
+                    className="ps-channel-link"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    WhatsApp · {contactPhone}
+                  </a>
+                )}
+                {contactEmail && (
+                  <a href={`mailto:${contactEmail}`} className="ps-channel-link">
+                    Email · {contactEmail}
+                  </a>
+                )}
+                {instagram && (
+                  <a
+                    href={normalizeUrl(instagram)}
+                    className="ps-channel-link"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Instagram · {instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, '@')}
+                  </a>
+                )}
               </div>
 
-              <ContactForm photographerUid={siteData.uid} accentColor={accentColor} />
+              <ContactForm photographerUid={siteData.uid} />
             </div>
           </div>
         )}
 
-      </div>
+      </main>
 
       {/* ── Footer ── */}
       <footer className="ps-footer">
@@ -605,14 +591,11 @@ export default function PhotographerSite({ previewData = null }) {
           {instagram && (
             <a href={normalizeUrl(instagram)} target="_blank" rel="noreferrer">Instagram</a>
           )}
-          <button
-            className="ps-footer-contact-btn"
-            onClick={() => setActiveTab('Contact')}
-          >
+          <button className="ps-footer-btn" onClick={() => setActiveTab('Contact')}>
             Contact
           </button>
         </div>
-        <span className="ps-footer-fotolio">
+        <span className="ps-footer-credit">
           Creat cu <a href="#" onClick={(e) => e.preventDefault()}>Mina</a>
         </span>
       </footer>
