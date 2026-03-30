@@ -1,9 +1,21 @@
-import { useState, useEffect } from 'react'
-import { Eye, Edit3, Globe, Copy, Check, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import {
+  Eye,
+  Edit3,
+  Globe,
+  Copy,
+  Check,
+  Plus,
+  Trash2,
+  Upload,
+  ExternalLink,
+  X,
+} from 'lucide-react'
 import PhotographerSite from './PhotographerSite'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import { auth } from '../firebase'
 
-const { sites: sitesService } = getAppServices()
+const { sites: sitesService, media: mediaService } = getAppServices()
 
 // ── Helpers ──────────────────────────────────
 const generateSlug = (brandName) =>
@@ -14,183 +26,282 @@ const generateSlug = (brandName) =>
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '') || null
 
-const EMPTY_SERVICE = { icon: '📷', name: '', description: '', price: '', priceLabel: 'lei' }
-const EMPTY_TESTIMONIAL = { name: '', event: '', text: '', stars: 5 }
+const uid = () => Math.random().toString(36).slice(2, 10)
 
-// ── Section collapse wrapper ──────────────────
-function EditorSection({ title, children, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen)
+const EDITOR_TABS = ['Acasă', 'Portofoliu', 'Prețuri', 'Despre']
+
+// ── Shared input styles ───────────────────────
+const S = {
+  input: {
+    width: '100%',
+    padding: '11px 14px',
+    border: '1px solid #e5e5e7',
+    borderRadius: '10px',
+    fontFamily: "'DM Sans', sans-serif",
+    fontSize: '14px',
+    fontWeight: 300,
+    color: '#1d1d1f',
+    background: '#fafafa',
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+  },
+  label: {
+    display: 'block',
+    marginBottom: '6px',
+    fontSize: '11px',
+    fontWeight: 500,
+    color: 'rgba(0,0,0,0.45)',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+}
+
+const focusStyle = (e) => {
+  e.target.style.borderColor = '#b8965a'
+  e.target.style.boxShadow = '0 0 0 3px rgba(184,150,90,0.1)'
+  e.target.style.background = '#fff'
+}
+const blurStyle = (e) => {
+  e.target.style.borderColor = '#e5e5e7'
+  e.target.style.boxShadow = 'none'
+  e.target.style.background = '#fafafa'
+}
+
+function Field({ label, children, hint }) {
   return (
-    <div style={{
-      border: '1px solid rgba(0,0,0,0.07)',
-      borderRadius: '16px',
-      overflow: 'hidden',
-      marginBottom: '12px',
-    }}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '18px 22px',
-          background: open ? '#fafafa' : '#fff',
-          border: 'none',
-          cursor: 'pointer',
-          fontFamily: "'DM Sans', sans-serif",
-          fontSize: '14px',
-          fontWeight: 500,
-          color: '#1d1d1f',
-          letterSpacing: '-0.01em',
-          transition: 'background 0.15s',
-          borderBottom: open ? '1px solid rgba(0,0,0,0.06)' : 'none',
-        }}
-      >
-        {title}
-        {open ? <ChevronUp size={16} color="#a1a1a6" /> : <ChevronDown size={16} color="#a1a1a6" />}
-      </button>
-      {open && (
-        <div style={{ padding: '24px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {children}
-        </div>
+    <div>
+      {label && <label style={S.label}>{label}</label>}
+      {children}
+      {hint && (
+        <p style={{ fontSize: '12px', color: '#a1a1a6', marginTop: '6px' }}>{hint}</p>
       )}
     </div>
   )
 }
 
-// ── Input helpers ─────────────────────────────
-const inputStyle = {
-  width: '100%',
-  padding: '11px 14px',
-  border: '1px solid #e5e5e7',
-  borderRadius: '10px',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '14px',
-  fontWeight: 300,
-  color: '#1d1d1f',
-  background: '#fafafa',
-  outline: 'none',
-  boxSizing: 'border-box',
-  transition: 'border-color 0.15s, box-shadow 0.15s',
-}
-
-const labelStyle = {
-  display: 'block',
-  marginBottom: '6px',
-  fontSize: '11px',
-  fontWeight: 500,
-  color: 'rgba(0,0,0,0.45)',
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-}
-
-const textareaStyle = { ...inputStyle, resize: 'vertical', minHeight: '90px' }
-
-function Field({ label, children }) {
+function Input({ label, value, onChange, placeholder, type = 'text', hint }) {
   return (
-    <div>
-      <label style={labelStyle}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function Input({ label, value, onChange, placeholder, type = 'text' }) {
-  return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <input
         type={type}
         value={value || ''}
-        onChange={e => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        style={inputStyle}
-        onFocus={e => { e.target.style.borderColor = '#b8965a'; e.target.style.boxShadow = '0 0 0 3px rgba(184,150,90,0.1)'; e.target.style.background = '#fff' }}
-        onBlur={e => { e.target.style.borderColor = '#e5e5e7'; e.target.style.boxShadow = 'none'; e.target.style.background = '#fafafa' }}
+        style={{ ...S.input }}
+        onFocus={focusStyle}
+        onBlur={blurStyle}
       />
     </Field>
   )
 }
 
-function Textarea({ label, value, onChange, placeholder, rows = 4 }) {
+function Textarea({ label, value, onChange, placeholder, rows = 4, hint }) {
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <textarea
         value={value || ''}
-        onChange={e => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={rows}
-        style={textareaStyle}
-        onFocus={e => { e.target.style.borderColor = '#b8965a'; e.target.style.boxShadow = '0 0 0 3px rgba(184,150,90,0.1)'; e.target.style.background = '#fff' }}
-        onBlur={e => { e.target.style.borderColor = '#e5e5e7'; e.target.style.boxShadow = 'none'; e.target.style.background = '#fafafa' }}
+        style={{ ...S.input, resize: 'vertical', minHeight: '90px' }}
+        onFocus={focusStyle}
+        onBlur={blurStyle}
       />
     </Field>
+  )
+}
+
+// ── Photo Upload Button ───────────────────────
+function PhotoUpload({ label, currentUrl, onUpload, uploading, hint }) {
+  const inputRef = useRef()
+
+  return (
+    <Field label={label} hint={hint}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {currentUrl && (
+          <div style={{ position: 'relative', width: 120, height: 120, borderRadius: 12, overflow: 'hidden', background: '#eaeaef' }}>
+            <img
+              src={currentUrl}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '9px 18px',
+            background: 'transparent',
+            border: '1px dashed #d1d1d6',
+            borderRadius: '10px',
+            cursor: uploading ? 'not-allowed' : 'pointer',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '13.5px',
+            color: uploading ? '#a1a1a6' : '#86868b',
+            width: 'fit-content',
+          }}
+        >
+          <Upload size={14} />
+          {uploading ? 'Se încarcă...' : currentUrl ? 'Schimbă fotografia' : 'Încarcă fotografie'}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onUpload(file)
+            e.target.value = ''
+          }}
+        />
+      </div>
+    </Field>
+  )
+}
+
+// ── Add-item button ───────────────────────────
+function AddBtn({ label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '10px 18px',
+        background: 'transparent',
+        border: '1px dashed #d1d1d6',
+        borderRadius: '10px',
+        cursor: 'pointer',
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: '13.5px',
+        color: '#86868b',
+        width: '100%',
+        justifyContent: 'center',
+        transition: 'border-color 0.15s, color 0.15s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#b8965a'; e.currentTarget.style.color = '#b8965a' }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#d1d1d6'; e.currentTarget.style.color = '#86868b' }}
+    >
+      <Plus size={15} /> {label}
+    </button>
   )
 }
 
 // ── Main SiteEditor ───────────────────────────
-export default function SiteEditor({ user, userGalleries = [] }) {
+export default function SiteEditor({ user }) {
   const [mode, setMode] = useState('edit') // 'edit' | 'preview'
+  const [activeTab, setActiveTab] = useState('Acasă')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [slug, setSlug] = useState(null)
   const [brandName, setBrandName] = useState('')
 
+  // Per-field upload state
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [uploadingProfile, setUploadingProfile] = useState(false)
+  const [uploadingCategory, setUploadingCategory] = useState(null) // categoryId
+
+  // Live preview URLs for uploaded photos
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState(null)
+  const [profilePreviewUrl, setProfilePreviewUrl] = useState(null)
+  const [categoryPhotoUrls, setCategoryPhotoUrls] = useState({}) // categoryId -> [{url, key}]
+
   const [form, setForm] = useState({
-    // Hero
+    // Hero / Acasă
     heroEyebrow: '',
     heroTitle: '',
-    heroBio: '',
-    // Portfolio
-    portfolioTitle: '',
-    portfolioSub: '',
-    portfolioGalleryIds: [],
-    // About
+    tagline: '',          // replaces heroBio
+    coverPhotoPath: '',   // replaces heroImagePath
+    contactEmail: '',
+    contactPhone: '',
+    contactTitle: '',
+    contactSub: '',
+    accentColor: '#b8965a',
+    // Portfolio (new structure)
+    portfolio: [],        // [{ id, name, photos: [{ key }] }]
+    // Pricing (new structure)
+    pricing: [],          // [{ id, eventType, packages: [{ id, name, price, description, inclusions }] }]
+    // Despre
     aboutTitle: '',
-    aboutBio: '',
+    bio: '',              // replaces aboutBio
+    profilePhotoPath: '', // replaces aboutImagePath
     yearsExp: '',
     sessionsCount: '',
     citiesCount: '',
-    // Services
-    servicesTitle: '',
-    servicesSub: '',
-    services: [],
-    // Testimonials
-    testimonialsTitle: '',
-    testimonialsSub: '',
-    testimonials: [],
-    // Contact
-    contactTitle: '',
-    contactSub: '',
-    contactEmail: '',
-    contactPhone: '',
+    socialLinks: { instagram: '', facebook: '', website: '' },
+    // Legacy fields kept for backward compat with existing site data
+    heroBio: '',
+    heroImagePath: '',
+    aboutBio: '',
+    aboutImagePath: '',
     instagram: '',
     websiteUrl: '',
-    // Meta
-    accentColor: '#b8965a',
+    // Existing fields that PhotographerSite still uses
+    services: [],
+    testimonials: [],
+    portfolioGalleryIds: [],
   })
 
-  const set = (key) => (val) => setForm(p => ({ ...p, [key]: val }))
+  const set = (key) => (val) => setForm((p) => ({ ...p, [key]: val }))
+  const setNested = (outerKey, innerKey) => (val) =>
+    setForm((p) => ({ ...p, [outerKey]: { ...(p[outerKey] || {}), [innerKey]: val } }))
 
   // ── Load data ──
   useEffect(() => {
     if (!user?.uid) return
     const load = async () => {
       try {
-        // Ia brandName din profiles
         const profileData = await sitesService.getProfile(user.uid)
         const bn = profileData?.brandName || ''
         setBrandName(bn)
-        const sl = generateSlug(bn)
-        setSlug(sl)
+        setSlug(generateSlug(bn))
 
-        // Ia datele de site
         const siteData = await sitesService.getSiteByOwnerUid(user.uid)
         if (siteData) {
-          const d = siteData
-          setForm(prev => ({ ...prev, ...d }))
+          setForm((prev) => ({ ...prev, ...siteData }))
+
+          // Load existing cover preview
+          const coverPath = siteData.coverPhotoPath || siteData.heroImagePath
+          if (coverPath) {
+            mediaService.getBrandingAsset(coverPath).then(setCoverPreviewUrl).catch(() => {})
+          }
+
+          // Load existing profile photo preview
+          const profilePath = siteData.profilePhotoPath || siteData.aboutImagePath
+          if (profilePath) {
+            mediaService.getBrandingAsset(profilePath).then(setProfilePreviewUrl).catch(() => {})
+          }
+
+          // Load portfolio category photo previews
+          const portfolio = siteData.portfolio || []
+          if (portfolio.length > 0) {
+            const loadCatPhotos = async () => {
+              const result = {}
+              for (const cat of portfolio) {
+                const photos = []
+                for (const photo of (cat.photos || [])) {
+                  if (!photo.key) continue
+                  try {
+                    const url = await mediaService.getBrandingAsset(photo.key)
+                    photos.push({ url, key: photo.key })
+                  } catch { /* skip */ }
+                }
+                result[cat.id] = photos
+              }
+              setCategoryPhotoUrls(result)
+            }
+            loadCatPhotos()
+          }
         }
       } catch (err) {
         console.error(err)
@@ -200,6 +311,236 @@ export default function SiteEditor({ user, userGalleries = [] }) {
     }
     load()
   }, [user?.uid])
+
+  // ── Upload helper ──
+  const getIdToken = async () => {
+    const token = await auth?.currentUser?.getIdToken()
+    if (!token) throw new Error('Nu ești autentificat.')
+    return token
+  }
+
+  // ── Upload cover photo ──
+  const handleCoverUpload = async (file) => {
+    setUploadingCover(true)
+    try {
+      const idToken = await getIdToken()
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `branding/${user.uid}/cover.${ext}`
+      await mediaService.uploadFileToPath(file, path, null, idToken)
+      const previewUrl = URL.createObjectURL(file)
+      setCoverPreviewUrl(previewUrl)
+      setForm((p) => ({ ...p, coverPhotoPath: path, heroImagePath: path }))
+    } catch (err) {
+      console.error(err)
+      alert('Eroare la încărcarea fotografiei de copertă.')
+    } finally {
+      setUploadingCover(false)
+    }
+  }
+
+  // ── Upload profile photo ──
+  const handleProfileUpload = async (file) => {
+    setUploadingProfile(true)
+    try {
+      const idToken = await getIdToken()
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `branding/${user.uid}/profile-photo.${ext}`
+      await mediaService.uploadFileToPath(file, path, null, idToken)
+      const previewUrl = URL.createObjectURL(file)
+      setProfilePreviewUrl(previewUrl)
+      setForm((p) => ({ ...p, profilePhotoPath: path, aboutImagePath: path }))
+    } catch (err) {
+      console.error(err)
+      alert('Eroare la încărcarea fotografiei de profil.')
+    } finally {
+      setUploadingProfile(false)
+    }
+  }
+
+  // ── Portfolio: add category ──
+  const addCategory = () => {
+    const newCat = { id: uid(), name: 'Categorie nouă', photos: [] }
+    setForm((p) => ({ ...p, portfolio: [...(p.portfolio || []), newCat] }))
+  }
+
+  const updateCategory = (catId, key, val) => {
+    setForm((p) => ({
+      ...p,
+      portfolio: (p.portfolio || []).map((c) => c.id === catId ? { ...c, [key]: val } : c),
+    }))
+  }
+
+  const removeCategory = (catId) => {
+    setForm((p) => ({ ...p, portfolio: (p.portfolio || []).filter((c) => c.id !== catId) }))
+    setCategoryPhotoUrls((p) => {
+      const next = { ...p }
+      delete next[catId]
+      return next
+    })
+  }
+
+  // ── Portfolio: upload photo to category ──
+  const handleCategoryPhotoUpload = async (file, catId) => {
+    setUploadingCategory(catId)
+    try {
+      const idToken = await getIdToken()
+      const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const path = `branding/${user.uid}/portfolio/${catId}/${safeName}`
+      await mediaService.uploadFileToPath(file, path, null, idToken)
+      const previewUrl = URL.createObjectURL(file)
+
+      // Add to form
+      setForm((p) => ({
+        ...p,
+        portfolio: (p.portfolio || []).map((c) =>
+          c.id === catId
+            ? { ...c, photos: [...(c.photos || []), { key: path }] }
+            : c
+        ),
+      }))
+
+      // Add preview URL
+      setCategoryPhotoUrls((p) => ({
+        ...p,
+        [catId]: [...(p[catId] || []), { url: previewUrl, key: path }],
+      }))
+    } catch (err) {
+      console.error(err)
+      alert('Eroare la încărcarea fotografiei.')
+    } finally {
+      setUploadingCategory(null)
+    }
+  }
+
+  const removeCategoryPhoto = (catId, photoKey) => {
+    setForm((p) => ({
+      ...p,
+      portfolio: (p.portfolio || []).map((c) =>
+        c.id === catId
+          ? { ...c, photos: (c.photos || []).filter((ph) => ph.key !== photoKey) }
+          : c
+      ),
+    }))
+    setCategoryPhotoUrls((p) => ({
+      ...p,
+      [catId]: (p[catId] || []).filter((ph) => ph.key !== photoKey),
+    }))
+  }
+
+  // ── Pricing: event types ──
+  const addEventType = () => {
+    setForm((p) => ({
+      ...p,
+      pricing: [...(p.pricing || []), { id: uid(), eventType: 'Tip eveniment', packages: [] }],
+    }))
+  }
+
+  const updateEventType = (evId, val) => {
+    setForm((p) => ({
+      ...p,
+      pricing: (p.pricing || []).map((ev) => ev.id === evId ? { ...ev, eventType: val } : ev),
+    }))
+  }
+
+  const removeEventType = (evId) => {
+    setForm((p) => ({ ...p, pricing: (p.pricing || []).filter((ev) => ev.id !== evId) }))
+  }
+
+  // ── Pricing: packages ──
+  const addPackage = (evId) => {
+    const pkg = { id: uid(), name: 'Pachet', price: '', description: '', inclusions: [] }
+    setForm((p) => ({
+      ...p,
+      pricing: (p.pricing || []).map((ev) =>
+        ev.id === evId ? { ...ev, packages: [...(ev.packages || []), pkg] } : ev
+      ),
+    }))
+  }
+
+  const updatePackage = (evId, pkgId, key, val) => {
+    setForm((p) => ({
+      ...p,
+      pricing: (p.pricing || []).map((ev) =>
+        ev.id === evId
+          ? {
+              ...ev,
+              packages: (ev.packages || []).map((pkg) =>
+                pkg.id === pkgId ? { ...pkg, [key]: val } : pkg
+              ),
+            }
+          : ev
+      ),
+    }))
+  }
+
+  const removePackage = (evId, pkgId) => {
+    setForm((p) => ({
+      ...p,
+      pricing: (p.pricing || []).map((ev) =>
+        ev.id === evId
+          ? { ...ev, packages: (ev.packages || []).filter((pkg) => pkg.id !== pkgId) }
+          : ev
+      ),
+    }))
+  }
+
+  // Inclusions CRUD
+  const addInclusion = (evId, pkgId) => {
+    setForm((p) => ({
+      ...p,
+      pricing: (p.pricing || []).map((ev) =>
+        ev.id === evId
+          ? {
+              ...ev,
+              packages: (ev.packages || []).map((pkg) =>
+                pkg.id === pkgId
+                  ? { ...pkg, inclusions: [...(pkg.inclusions || []), ''] }
+                  : pkg
+              ),
+            }
+          : ev
+      ),
+    }))
+  }
+
+  const updateInclusion = (evId, pkgId, idx, val) => {
+    setForm((p) => ({
+      ...p,
+      pricing: (p.pricing || []).map((ev) =>
+        ev.id === evId
+          ? {
+              ...ev,
+              packages: (ev.packages || []).map((pkg) =>
+                pkg.id === pkgId
+                  ? {
+                      ...pkg,
+                      inclusions: (pkg.inclusions || []).map((inc, i) => i === idx ? val : inc),
+                    }
+                  : pkg
+              ),
+            }
+          : ev
+      ),
+    }))
+  }
+
+  const removeInclusion = (evId, pkgId, idx) => {
+    setForm((p) => ({
+      ...p,
+      pricing: (p.pricing || []).map((ev) =>
+        ev.id === evId
+          ? {
+              ...ev,
+              packages: (ev.packages || []).map((pkg) =>
+                pkg.id === pkgId
+                  ? { ...pkg, inclusions: (pkg.inclusions || []).filter((_, i) => i !== idx) }
+                  : pkg
+              ),
+            }
+          : ev
+      ),
+    }))
+  }
 
   // ── Save ──
   const handleSave = async () => {
@@ -212,8 +553,15 @@ export default function SiteEditor({ user, userGalleries = [] }) {
         uid: user.uid,
         brandName,
         slug: sl,
+        // Sync legacy fields for backward compat
+        heroBio: form.tagline || form.heroBio,
+        heroImagePath: form.coverPhotoPath || form.heroImagePath,
+        aboutBio: form.bio || form.aboutBio,
+        aboutImagePath: form.profilePhotoPath || form.aboutImagePath,
+        instagram: form.socialLinks?.instagram || form.instagram,
+        websiteUrl: form.socialLinks?.website || form.websiteUrl,
         updatedAt: new Date(),
-      }, { merge: true })
+      })
       setSlug(sl)
     } catch (err) {
       console.error(err)
@@ -232,31 +580,6 @@ export default function SiteEditor({ user, userGalleries = [] }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // ── Services helpers ──
-  const addService = () => setForm(p => ({ ...p, services: [...p.services, { ...EMPTY_SERVICE }] }))
-  const removeService = (i) => setForm(p => ({ ...p, services: p.services.filter((_, idx) => idx !== i) }))
-  const updateService = (i, key, val) => setForm(p => ({
-    ...p,
-    services: p.services.map((s, idx) => idx === i ? { ...s, [key]: val } : s)
-  }))
-
-  // ── Testimonials helpers ──
-  const addTestimonial = () => setForm(p => ({ ...p, testimonials: [...p.testimonials, { ...EMPTY_TESTIMONIAL }] }))
-  const removeTestimonial = (i) => setForm(p => ({ ...p, testimonials: p.testimonials.filter((_, idx) => idx !== i) }))
-  const updateTestimonial = (i, key, val) => setForm(p => ({
-    ...p,
-    testimonials: p.testimonials.map((t, idx) => idx === i ? { ...t, [key]: val } : t)
-  }))
-
-  // ── Toggle gallery in portfolio ──
-  const toggleGallery = (id) => {
-    const ids = form.portfolioGalleryIds || []
-    setForm(p => ({
-      ...p,
-      portfolioGalleryIds: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
-    }))
-  }
-
   if (loading) {
     return (
       <div style={{ padding: '80px 40px', textAlign: 'center', fontFamily: "'DM Sans', sans-serif", color: '#a1a1a6', fontSize: '14px' }}>
@@ -272,10 +595,12 @@ export default function SiteEditor({ user, userGalleries = [] }) {
       uid: user?.uid,
       brandName,
       slug,
+      tagline: form.tagline || form.heroBio,
+      bio: form.bio || form.aboutBio,
+      socialLinks: form.socialLinks || {},
     }
     return (
       <div style={{ position: 'relative' }}>
-        {/* Preview bar */}
         <div style={{
           position: 'sticky',
           top: 52,
@@ -288,7 +613,7 @@ export default function SiteEditor({ user, userGalleries = [] }) {
           gap: 16,
         }}>
           <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '13px', color: 'rgba(255,255,255,0.55)' }}>
-            Previzualizare site · {siteUrl || 'Setează brandul în Setări pentru a genera linkul'}
+            Previzualizare · {siteUrl || 'Setează brandul în Setări'}
           </span>
           <button
             onClick={() => setMode('edit')}
@@ -316,45 +641,32 @@ export default function SiteEditor({ user, userGalleries = [] }) {
         position: 'sticky',
         top: 52,
         zIndex: 100,
-        background: 'rgba(255,255,255,0.92)',
+        background: 'rgba(255,255,255,0.94)',
         backdropFilter: 'blur(16px)',
         borderBottom: '1px solid rgba(0,0,0,0.07)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '14px 40px',
+        padding: '12px 40px',
         gap: 16,
       }}>
         <div>
-          <p style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f', margin: 0 }}>
-            Site-ul meu
-          </p>
-          {siteUrl ? (
-            <p style={{ fontSize: '12px', fontWeight: 300, color: '#86868b', margin: '2px 0 0' }}>
-              {siteUrl}
-            </p>
-          ) : (
-            <p style={{ fontSize: '12px', fontWeight: 300, color: '#c0c0c8', margin: '2px 0 0' }}>
-              Setează un nume de brand în Setări pentru a activa site-ul
-            </p>
-          )}
+          <p style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f', margin: 0 }}>Site-ul meu</p>
+          {siteUrl
+            ? <p style={{ fontSize: '12px', fontWeight: 300, color: '#86868b', margin: '2px 0 0' }}>{siteUrl}</p>
+            : <p style={{ fontSize: '12px', fontWeight: 300, color: '#c0c0c8', margin: '2px 0 0' }}>Setează un nume de brand în Setări</p>
+          }
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {siteUrl && (
             <button
               onClick={handleCopy}
               style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 18px',
-                background: 'transparent',
-                border: '1px solid rgba(0,0,0,0.1)',
-                borderRadius: '100px',
-                cursor: 'pointer',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '13px',
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+                background: 'transparent', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '100px',
+                cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '13px',
                 color: copied ? '#2e7d32' : '#3a3a3c',
-                transition: 'all 0.15s',
               }}
             >
               {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -367,15 +679,9 @@ export default function SiteEditor({ user, userGalleries = [] }) {
               target="_blank"
               rel="noreferrer"
               style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 18px',
-                background: 'transparent',
-                border: '1px solid rgba(0,0,0,0.1)',
-                borderRadius: '100px',
-                textDecoration: 'none',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '13px',
-                color: '#3a3a3c',
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+                background: 'transparent', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '100px',
+                textDecoration: 'none', fontFamily: "'DM Sans', sans-serif", fontSize: '13px', color: '#3a3a3c',
               }}
             >
               <Globe size={14} /> Deschide
@@ -384,15 +690,9 @@ export default function SiteEditor({ user, userGalleries = [] }) {
           <button
             onClick={() => setMode('preview')}
             style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '9px 18px',
-              background: 'transparent',
-              border: '1px solid rgba(0,0,0,0.1)',
-              borderRadius: '100px',
-              cursor: 'pointer',
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: '13px',
-              color: '#3a3a3c',
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+              background: 'transparent', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '100px',
+              cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '13px', color: '#3a3a3c',
             }}
           >
             <Eye size={14} /> Preview
@@ -401,16 +701,9 @@ export default function SiteEditor({ user, userGalleries = [] }) {
             onClick={handleSave}
             disabled={saving}
             style={{
-              padding: '9px 22px',
-              background: saving ? '#3a3a3c' : '#1d1d1f',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '100px',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: '13px',
-              fontWeight: 500,
-              transition: 'background 0.15s',
+              padding: '9px 22px', background: saving ? '#3a3a3c' : '#1d1d1f', color: '#fff',
+              border: 'none', borderRadius: '100px', cursor: saving ? 'not-allowed' : 'pointer',
+              fontFamily: "'DM Sans', sans-serif", fontSize: '13px', fontWeight: 500,
             }}
           >
             {saving ? 'Se salvează...' : 'Salvează'}
@@ -418,177 +711,329 @@ export default function SiteEditor({ user, userGalleries = [] }) {
         </div>
       </div>
 
-      {/* ── Editor content ── */}
-      <div style={{ padding: '32px 40px 80px', maxWidth: '720px' }}>
+      {/* ── Editor Tab Nav ── */}
+      <div style={{
+        position: 'sticky',
+        top: 101,
+        zIndex: 99,
+        background: '#fff',
+        borderBottom: '1px solid rgba(0,0,0,0.06)',
+        padding: '0 40px',
+        display: 'flex',
+        gap: 0,
+      }}>
+        {EDITOR_TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '14px 20px',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === tab ? '2px solid #1d1d1f' : '2px solid transparent',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '13.5px',
+              fontWeight: activeTab === tab ? 500 : 400,
+              color: activeTab === tab ? '#1d1d1f' : '#86868b',
+              cursor: 'pointer',
+              transition: 'color 0.15s',
+              marginBottom: '-1px',
+            }}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
-        {/* Hero */}
-        <EditorSection title="🌅 Hero — Prima impresie" defaultOpen={true}>
-          <Input label="Text mic deasupra titlului" value={form.heroEyebrow} onChange={set('heroEyebrow')} placeholder={brandName || 'Fotograf de nuntă'} />
-          <Input label="Titlu principal" value={form.heroTitle} onChange={set('heroTitle')} placeholder="Fotografii care spun povești" />
-          <Textarea label="Subtitlu / tagline" value={form.heroBio} onChange={set('heroBio')} placeholder="Surprind momentele care contează cu autenticitate și artă." rows={3} />
-          <p style={{ fontSize: '12px', color: '#a1a1a6', margin: 0 }}>
-            💡 Imaginea de fundal Hero se setează din Setări → Logo & Branding (în curând: upload direct)
-          </p>
-        </EditorSection>
+      {/* ── Tab Content ── */}
+      <div style={{ padding: '32px 40px 80px', maxWidth: '740px' }}>
 
-        {/* Portfolio */}
-        <EditorSection title="📸 Portofoliu — Galeriile afișate pe site">
-          <Input label="Titlu secțiune" value={form.portfolioTitle} onChange={set('portfolioTitle')} placeholder="Povești în imagini" />
-          <Input label="Subtitlu" value={form.portfolioSub} onChange={set('portfolioSub')} placeholder="Fiecare fotografie e o amintire care va dura o viață." />
+        {/* ── ACASĂ tab ── */}
+        {activeTab === 'Acasă' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <PhotoUpload
+              label="Fotografie copertă (Hero)"
+              currentUrl={coverPreviewUrl}
+              onUpload={handleCoverUpload}
+              uploading={uploadingCover}
+              hint="Aceasta va fi fotografia de fundal a paginii principale."
+            />
 
-          <Field label="Selectează galeriile vizibile pe site">
-            {userGalleries.filter(g => g.status !== 'trash' && g.status !== 'archived').length === 0 ? (
-              <p style={{ fontSize: '13px', color: '#a1a1a6' }}>Nu ai galerii active. Adaugă galerii din tab-ul Galerii.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {userGalleries
-                  .filter(g => g.status !== 'trash' && g.status !== 'archived')
-                  .map(g => (
-                    <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '10px 14px', background: (form.portfolioGalleryIds || []).includes(g.id) ? 'rgba(184,150,90,0.07)' : '#fafafa', border: `1px solid ${(form.portfolioGalleryIds || []).includes(g.id) ? 'rgba(184,150,90,0.4)' : '#e5e5e7'}`, borderRadius: '10px', transition: 'all 0.15s' }}>
-                      <input
-                        type="checkbox"
-                        checked={(form.portfolioGalleryIds || []).includes(g.id)}
-                        onChange={() => toggleGallery(g.id)}
-                        style={{ accentColor: '#b8965a', width: 15, height: 15 }}
-                      />
-                      <span style={{ fontSize: '14px', fontWeight: 400, color: '#1d1d1f' }}>{g.nume}</span>
-                      {g.categoria && <span style={{ fontSize: '12px', color: '#a1a1a6', marginLeft: 'auto' }}>{g.categoria}</span>}
-                    </label>
+            <div style={{ height: 1, background: 'rgba(0,0,0,0.06)' }} />
+
+            <Input label="Text mic deasupra titlului" value={form.heroEyebrow} onChange={set('heroEyebrow')} placeholder={brandName || 'Fotograf de eveniment'} />
+            <Input label="Titlu principal" value={form.heroTitle} onChange={set('heroTitle')} placeholder="Fotografii care spun povești" />
+            <Textarea label="Tagline / subtitlu" value={form.tagline} onChange={set('tagline')} placeholder="Surprind momentele care contează cu autenticitate și artă." rows={3} />
+
+            <div style={{ height: 1, background: 'rgba(0,0,0,0.06)' }} />
+
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'rgba(0,0,0,0.45)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>Contact</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input label="Email de contact" value={form.contactEmail} onChange={set('contactEmail')} placeholder="contact@studiofoto.ro" type="email" />
+              <Input label="Telefon / WhatsApp" value={form.contactPhone} onChange={set('contactPhone')} placeholder="+40 712 345 678" />
+            </div>
+            <Input label="Titlu secțiune Contact" value={form.contactTitle} onChange={set('contactTitle')} placeholder="Rezervă acum" />
+            <Textarea label="Subtitlu Contact" value={form.contactSub} onChange={set('contactSub')} placeholder="Completează formularul și te contactez în maxim 24 de ore." rows={2} />
+
+            <div style={{ height: 1, background: 'rgba(0,0,0,0.06)' }} />
+
+            <Field label="Culoare accent">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="color"
+                  value={form.accentColor || '#b8965a'}
+                  onChange={(e) => set('accentColor')(e.target.value)}
+                  style={{ width: 44, height: 36, border: '1px solid #e5e5e7', borderRadius: 8, cursor: 'pointer', padding: 2 }}
+                />
+                <input
+                  type="text"
+                  value={form.accentColor || '#b8965a'}
+                  onChange={(e) => set('accentColor')(e.target.value)}
+                  style={{ ...S.input, width: 120 }}
+                  onFocus={focusStyle}
+                  onBlur={blurStyle}
+                />
+              </div>
+            </Field>
+          </div>
+        )}
+
+        {/* ── PORTOFOLIU tab ── */}
+        {activeTab === 'Portofoliu' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <p style={{ fontSize: '13px', fontWeight: 300, color: '#6e6e73', margin: 0 }}>
+              Organizează fotografiile în categorii. Fiecare categorie va apărea ca un filtru pe site-ul tău public.
+            </p>
+
+            {(form.portfolio || []).map((cat) => (
+              <div key={cat.id} style={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, overflow: 'hidden' }}>
+                {/* Category header */}
+                <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 12, background: '#fafafa' }}>
+                  <input
+                    type="text"
+                    value={cat.name}
+                    onChange={(e) => updateCategory(cat.id, 'name', e.target.value)}
+                    style={{ ...S.input, flex: 1, background: '#fff' }}
+                    placeholder="Nume categorie (ex: Nunți)"
+                    onFocus={focusStyle}
+                    onBlur={blurStyle}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCategory(cat.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', padding: 6, flexShrink: 0 }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+
+                {/* Category photos */}
+                <div style={{ padding: '16px 20px' }}>
+                  {(categoryPhotoUrls[cat.id] || []).length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8, marginBottom: 12 }}>
+                      {(categoryPhotoUrls[cat.id] || []).map((photo) => (
+                        <div key={photo.key} style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: '#eaeaef' }}>
+                          <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          <button
+                            type="button"
+                            onClick={() => removeCategoryPhoto(cat.id, photo.key)}
+                            style={{
+                              position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.55)',
+                              border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
+                            }}
+                          >
+                            <X size={11} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <label style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+                    background: 'transparent', border: '1px dashed #d1d1d6', borderRadius: 10,
+                    cursor: uploadingCategory === cat.id ? 'wait' : 'pointer',
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '13px', color: '#86868b',
+                  }}>
+                    <Upload size={13} />
+                    {uploadingCategory === cat.id ? 'Se încarcă...' : 'Adaugă fotografii'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      style={{ display: 'none' }}
+                      disabled={uploadingCategory === cat.id}
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files || [])
+                        for (const file of files) {
+                          await handleCategoryPhotoUpload(file, cat.id)
+                        }
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+
+            <AddBtn label="Adaugă categorie" onClick={addCategory} />
+          </div>
+        )}
+
+        {/* ── PREȚURI tab ── */}
+        {activeTab === 'Prețuri' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <p style={{ fontSize: '13px', fontWeight: 300, color: '#6e6e73', margin: 0 }}>
+              Adaugă tipuri de evenimente și pachetele de prețuri asociate.
+            </p>
+
+            {(form.pricing || []).map((ev) => (
+              <div key={ev.id} style={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, overflow: 'hidden' }}>
+                {/* Event type header */}
+                <div style={{ padding: '16px 20px', background: '#fafafa', borderBottom: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <input
+                    type="text"
+                    value={ev.eventType}
+                    onChange={(e) => updateEventType(ev.id, e.target.value)}
+                    style={{ ...S.input, flex: 1, background: '#fff', fontWeight: 500 }}
+                    placeholder="Ex: Nuntă"
+                    onFocus={focusStyle}
+                    onBlur={blurStyle}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeEventType(ev.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', padding: 6, flexShrink: 0 }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+
+                {/* Packages */}
+                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {(ev.packages || []).map((pkg) => (
+                    <div key={pkg.id} style={{ border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: '16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 500, color: '#a1a1a6', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pachet</span>
+                        <button type="button" onClick={() => removePackage(ev.id, pkg.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', padding: 4 }}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div>
+                          <label style={S.label}>Nume pachet</label>
+                          <input value={pkg.name} onChange={(e) => updatePackage(ev.id, pkg.id, 'name', e.target.value)} style={S.input} placeholder="Esential" onFocus={focusStyle} onBlur={blurStyle} />
+                        </div>
+                        <div>
+                          <label style={S.label}>Preț (lei)</label>
+                          <input type="number" value={pkg.price} onChange={(e) => updatePackage(ev.id, pkg.id, 'price', e.target.value)} style={S.input} placeholder="1500" onFocus={focusStyle} onBlur={blurStyle} />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={S.label}>Descriere</label>
+                        <textarea
+                          value={pkg.description}
+                          onChange={(e) => updatePackage(ev.id, pkg.id, 'description', e.target.value)}
+                          rows={2}
+                          style={{ ...S.input, resize: 'vertical', minHeight: '60px' }}
+                          placeholder="Ce include pachetul..."
+                          onFocus={focusStyle}
+                          onBlur={blurStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={S.label}>Ce include (câte un item pe linie)</label>
+                        {(pkg.inclusions || []).map((inc, idx) => (
+                          <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                            <input
+                              value={inc}
+                              onChange={(e) => updateInclusion(ev.id, pkg.id, idx, e.target.value)}
+                              style={{ ...S.input, flex: 1 }}
+                              placeholder="Ex: 8 ore de fotografiat"
+                              onFocus={focusStyle}
+                              onBlur={blurStyle}
+                            />
+                            <button type="button" onClick={() => removeInclusion(ev.id, pkg.id, idx)} style={{ background: 'none', border: '1px solid #e5e5e7', borderRadius: 8, cursor: 'pointer', color: '#c0392b', padding: '0 10px', flexShrink: 0 }}>
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => addInclusion(ev.id, pkg.id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+                            background: 'transparent', border: '1px dashed #d1d1d6', borderRadius: 8,
+                            cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '12.5px', color: '#a1a1a6',
+                          }}
+                        >
+                          <Plus size={12} /> Adaugă item
+                        </button>
+                      </div>
+                    </div>
                   ))}
-              </div>
-            )}
-          </Field>
-        </EditorSection>
 
-        {/* About */}
-        <EditorSection title="👤 Despre mine">
-          <Input label="Titlu secțiune" value={form.aboutTitle} onChange={set('aboutTitle')} placeholder={`Salut, sunt ${brandName || 'fotograf'}`} />
-          <Textarea label="Bio / Descriere" value={form.aboutBio} onChange={set('aboutBio')} placeholder="Prezintă-te clienților tăi — cine ești, ce te pasionează, ce face munca ta specială." rows={5} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-            <Input label="Ani experiență" value={form.yearsExp} onChange={set('yearsExp')} placeholder="5" />
-            <Input label="Ședințe foto" value={form.sessionsCount} onChange={set('sessionsCount')} placeholder="200" />
-            <Input label="Orașe" value={form.citiesCount} onChange={set('citiesCount')} placeholder="12" />
-          </div>
-          <p style={{ fontSize: '12px', color: '#a1a1a6', margin: 0 }}>
-            💡 Lasă câmpurile goale dacă nu vrei să afișezi statistici.
-          </p>
-        </EditorSection>
-
-        {/* Services */}
-        <EditorSection title="💼 Servicii & Prețuri">
-          <Input label="Titlu secțiune" value={form.servicesTitle} onChange={set('servicesTitle')} placeholder="Pachete & Servicii" />
-          <Input label="Subtitlu" value={form.servicesSub} onChange={set('servicesSub')} placeholder="Fiecare pachet e personalizat pentru nevoile tale." />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {(form.services || []).map((s, i) => (
-              <div key={i} style={{ padding: '18px', background: '#fafafa', borderRadius: '12px', border: '1px solid #e5e5e7', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f' }}>Serviciu #{i + 1}</span>
-                  <button type="button" onClick={() => removeService(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', padding: '4px' }}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '56px 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={labelStyle}>Icon</label>
-                    <input value={s.icon || ''} onChange={e => updateService(i, 'icon', e.target.value)} style={{ ...inputStyle, textAlign: 'center', fontSize: '20px', padding: '8px' }} placeholder="📷" />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Nume serviciu</label>
-                    <input value={s.name || ''} onChange={e => updateService(i, 'name', e.target.value)} style={inputStyle} placeholder="Nuntă" />
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>Descriere scurtă</label>
-                  <textarea value={s.description || ''} onChange={e => updateService(i, 'description', e.target.value)} style={{ ...textareaStyle, minHeight: '60px' }} placeholder="Ce include pachetul..." rows={2} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={labelStyle}>Preț</label>
-                    <input value={s.price || ''} onChange={e => updateService(i, 'price', e.target.value)} style={inputStyle} placeholder="de la 1500" />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Label preț</label>
-                    <input value={s.priceLabel || ''} onChange={e => updateService(i, 'priceLabel', e.target.value)} style={inputStyle} placeholder="lei" />
-                  </div>
+                  <AddBtn label="Adaugă pachet" onClick={() => addPackage(ev.id)} />
                 </div>
               </div>
             ))}
+
+            <AddBtn label="Adaugă tip eveniment" onClick={addEventType} />
           </div>
+        )}
 
-          <button
-            type="button"
-            onClick={addService}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: 'transparent', border: '1px dashed #d1d1d6', borderRadius: '10px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '13.5px', color: '#86868b', width: '100%', justifyContent: 'center', transition: 'border-color 0.15s, color 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#b8965a'; e.currentTarget.style.color = '#b8965a' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d1d6'; e.currentTarget.style.color = '#86868b' }}
-          >
-            <Plus size={15} /> Adaugă serviciu
-          </button>
-        </EditorSection>
+        {/* ── DESPRE tab ── */}
+        {activeTab === 'Despre' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <PhotoUpload
+              label="Fotografie de profil"
+              currentUrl={profilePreviewUrl}
+              onUpload={handleProfileUpload}
+              uploading={uploadingProfile}
+              hint="Fotografia ta personală afișată în tab-ul 'Despre'."
+            />
 
-        {/* Testimonials */}
-        <EditorSection title="⭐ Testimoniale">
-          <Input label="Titlu secțiune" value={form.testimonialsTitle} onChange={set('testimonialsTitle')} placeholder="Povești adevărate" />
-          <Input label="Subtitlu" value={form.testimonialsSub} onChange={set('testimonialsSub')} placeholder="Fiecare cuvânt vine din suflet." />
+            <div style={{ height: 1, background: 'rgba(0,0,0,0.06)' }} />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {(form.testimonials || []).map((t, i) => (
-              <div key={i} style={{ padding: '18px', background: '#fafafa', borderRadius: '12px', border: '1px solid #e5e5e7', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f' }}>Review #{i + 1}</span>
-                  <button type="button" onClick={() => removeTestimonial(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', padding: '4px' }}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={labelStyle}>Numele clientului</label>
-                    <input value={t.name || ''} onChange={e => updateTestimonial(i, 'name', e.target.value)} style={inputStyle} placeholder="Maria & Ion" />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Eveniment</label>
-                    <input value={t.event || ''} onChange={e => updateTestimonial(i, 'event', e.target.value)} style={inputStyle} placeholder="Nuntă, Iulie 2024" />
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>Mesaj</label>
-                  <textarea value={t.text || ''} onChange={e => updateTestimonial(i, 'text', e.target.value)} style={{ ...textareaStyle, minHeight: '70px' }} placeholder="Ce au spus despre colaborarea cu tine..." rows={3} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Stele (1-5)</label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {[1,2,3,4,5].map(n => (
-                      <button key={n} type="button" onClick={() => updateTestimonial(i, 'stars', n)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', opacity: n <= (t.stars || 5) ? 1 : 0.25, transition: 'opacity 0.15s' }}>★</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
+            <Input label="Titlu secțiune" value={form.aboutTitle} onChange={set('aboutTitle')} placeholder={`Salut, sunt ${brandName || 'fotograf'}`} />
+            <Textarea
+              label="Bio / Descriere"
+              value={form.bio}
+              onChange={set('bio')}
+              placeholder="Prezintă-te clienților tăi — cine ești, ce te pasionează, ce face munca ta specială."
+              rows={5}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <Input label="Ani experiență" value={form.yearsExp} onChange={set('yearsExp')} placeholder="5" />
+              <Input label="Ședințe foto" value={form.sessionsCount} onChange={set('sessionsCount')} placeholder="200" />
+              <Input label="Orașe" value={form.citiesCount} onChange={set('citiesCount')} placeholder="12" />
+            </div>
+
+            <div style={{ height: 1, background: 'rgba(0,0,0,0.06)' }} />
+
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'rgba(0,0,0,0.45)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>Social & web</p>
+            <Input
+              label="Instagram"
+              value={form.socialLinks?.instagram}
+              onChange={setNested('socialLinks', 'instagram')}
+              placeholder="https://instagram.com/username"
+            />
+            <Input
+              label="Facebook"
+              value={form.socialLinks?.facebook}
+              onChange={setNested('socialLinks', 'facebook')}
+              placeholder="https://facebook.com/pagina"
+            />
+            <Input
+              label="Website"
+              value={form.socialLinks?.website}
+              onChange={setNested('socialLinks', 'website')}
+              placeholder="https://studiofoto.ro"
+            />
           </div>
-
-          <button
-            type="button"
-            onClick={addTestimonial}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: 'transparent', border: '1px dashed #d1d1d6', borderRadius: '10px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '13.5px', color: '#86868b', width: '100%', justifyContent: 'center', transition: 'border-color 0.15s, color 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#b8965a'; e.currentTarget.style.color = '#b8965a' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d1d6'; e.currentTarget.style.color = '#86868b' }}
-          >
-            <Plus size={15} /> Adaugă testimonial
-          </button>
-        </EditorSection>
-
-        {/* Contact */}
-        <EditorSection title="📬 Contact">
-          <Input label="Titlu secțiune" value={form.contactTitle} onChange={set('contactTitle')} placeholder="Rezervă acum" />
-          <Input label="Subtitlu" value={form.contactSub} onChange={set('contactSub')} placeholder="Completează formularul și te contactez în maxim 24 de ore." />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <Input label="Email de contact" value={form.contactEmail} onChange={set('contactEmail')} placeholder="contact@studiofoto.ro" type="email" />
-            <Input label="Telefon / WhatsApp" value={form.contactPhone} onChange={set('contactPhone')} placeholder="+40 712 345 678" />
-          </div>
-          <Input label="Instagram" value={form.instagram} onChange={set('instagram')} placeholder="https://instagram.com/username" />
-          <Input label="Website (dacă ai altul)" value={form.websiteUrl} onChange={set('websiteUrl')} placeholder="https://studiofoto.ro" />
-        </EditorSection>
+        )}
 
       </div>
     </div>

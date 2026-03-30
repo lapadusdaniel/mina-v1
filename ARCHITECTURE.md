@@ -1,5 +1,5 @@
 # ARCHITECTURE.md — Mina v1
-> Ultima actualizare: 2026-03-28
+> Ultima actualizare: 2026-03-30
 
 ## Pagini și Rute
 - `/` — LandingPage.jsx
@@ -44,6 +44,29 @@
 - Plus: 49lei/lună, 500GB — price_1TAzSx1ax2jGrLZH9zPBW4PW
 - Pro: 79lei/lună, 1TB — price_1T6a4F1ax2jGrLZH92vUsGzE
 - Studio: 129lei/lună, 2TB — price_1T6a501ax2jGrLZHgLBbkzT4
+
+## Site fotograf public (`/:slug`)
+
+**PhotographerSite.jsx** — navigare cu 5 tabs sticky (Acasă, Portofoliu, Prețuri, Despre, Contact):
+- Acasă: hero full-screen cu `coverPhotoPath` (fallback `heroImagePath`)
+- Portofoliu: filter categorii din `portfolio[]` + masonry + lightbox
+- Prețuri: secțiuni per `pricing[].eventType` cu carduri pachete
+- Despre: `profilePhotoPath` + bio + stats + `socialLinks`
+- Contact: formular → `contactMessages/{photographerUid}` în Firestore
+
+**SiteEditor.jsx** — editor cu 4 tabs (Acasă, Portofoliu, Prețuri, Despre):
+- Upload cover: `branding/{uid}/cover.{ext}`
+- Upload profil: `branding/{uid}/profile-photo.{ext}`
+- Upload portofoliu: `branding/{uid}/portfolio/{catId}/{ts}-{file}`
+- Salvare în `photographerSites/{uid}` cu sync câmpuri legacy
+
+**Câmpuri noi în `photographerSites/{uid}`:**
+```
+tagline, bio, coverPhotoPath, profilePhotoPath,
+socialLinks: { instagram, facebook, website },
+portfolio: [{ id, name, photos: [{ key }] }],
+pricing: [{ id, eventType, packages: [{ id, name, price, description, inclusions[] }] }]
+```
 
 ## Ce e implementat ✅
 - Auth complet (register/login/logout)

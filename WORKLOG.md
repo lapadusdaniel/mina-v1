@@ -1,3 +1,22 @@
+### 2026-03-30 — Redesign site fotograf cu tabs + editor portofoliu/prețuri
+
+- Redesign complet `PhotographerSite.jsx`: navigare cu tabs sticky (Acasă, Portofoliu, Prețuri, Despre, Contact) în loc de scroll lung
+  - Tab Acasă: hero full-screen cu cover photo + titlu + tagline + CTA
+  - Tab Portofoliu: butoane filter categorii + grid masonry (react-masonry-css) + lightbox (yet-another-react-lightbox)
+  - Tab Prețuri: secțiuni pe tip eveniment cu carduri de prețuri (nume, preț, descriere, incluziuni)
+  - Tab Despre: fotografie profil + bio + statistici + social links (Instagram, Facebook, Website)
+  - Tab Contact: formular salvat în Firestore + canale de contact
+  - Backward compat: citește câmpurile noi (`tagline`, `bio`, `portfolio`, `pricing`, `coverPhotoPath`, `profilePhotoPath`, `socialLinks`) cu fallback la câmpurile vechi
+- Redesign complet `SiteEditor.jsx`: editor cu tabs (Acasă, Portofoliu, Prețuri, Despre)
+  - Upload cover photo la `branding/{uid}/cover.{ext}` via Worker
+  - Upload profile photo la `branding/{uid}/profile-photo.{ext}` via Worker
+  - CRUD categorii portofoliu + upload multiple fotografii la `branding/{uid}/portfolio/{catId}/{ts}-{file}` via Worker, preview instantaneu
+  - CRUD tipuri eveniment + CRUD pachete de prețuri cu incluziuni
+  - Sync câmpuri legacy la salvare pentru backward compat
+- Actualizat `PhotographerSite.css` cu stiluri pentru tabs, masonry, carduri prețuri, tab Despre, tab Contact
+- Structură date în `photographerSites/{uid}`: câmpuri noi `portfolio`, `pricing`, `coverPhotoPath`, `profilePhotoPath`, `tagline`, `bio`, `socialLinks`
+- Rulate cu succes `npm run build` și `firebase deploy --only hosting`
+
 ### 2026-03-28 — Meniu contextual galerie păstrat în viewport pe mobil
 
 - Adăugat override mobil în `src/components/Dashboard.css` pentru dropdown-ul `⋯` din rândurile de galerie, cu `right: 0` și `left: auto`
