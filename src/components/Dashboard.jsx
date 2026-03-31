@@ -554,9 +554,9 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
       if (workerBaseUrl) {
         const presignFiles = uploadPlans.flatMap(({ file, origPath, mediumPath, thumbPath }) => ([
-          { key: origPath, contentType: file.type || 'image/jpeg' },
-          { key: mediumPath, contentType: 'image/webp' },
-          { key: thumbPath, contentType: 'image/webp' },
+          { key: origPath, contentType: file.type || 'image/jpeg', maxBytes: file.size },
+          { key: mediumPath, contentType: 'image/webp', maxBytes: file.size },
+          { key: thumbPath, contentType: 'image/webp', maxBytes: file.size },
         ]))
 
         try {
@@ -582,8 +582,8 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
             const payload = await response.json().catch(() => ({}))
             const urls = Array.isArray(payload?.urls) ? payload.urls : []
-            urls.forEach(({ key, url }) => {
-              if (key && url) presignedUrlByKey.set(key, url)
+            urls.forEach(({ key, url, contentType }) => {
+              if (key && url) presignedUrlByKey.set(key, { url, contentType: contentType || '' })
             })
           }
         } catch (error) {
@@ -616,14 +616,31 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             ]
 
             const uploadVariant = async (variantFile, targetPath, variantIndex) => {
-              const presignedUrl = presignedUrlByKey.get(targetPath)
-              if (presignedUrl) {
-                const response = await fetch(presignedUrl, {
+              const presignedEntry = presignedUrlByKey.get(targetPath)
+              if (presignedEntry) {
+                const { url: presignedUrl, contentType: presignedContentType } = typeof presignedEntry === 'object'
+                  ? presignedEntry
+                  : { url: presignedEntry, contentType: variantFile.type || 'application/octet-stream' }
+                const putResponse = await fetch(presignedUrl, {
                   method: 'PUT',
+                  headers: { 'Content-Type': presignedContentType || variantFile.type || 'application/octet-stream' },
                   body: variantFile,
                 })
-                if (!response.ok) {
-                  throw new Error(`Presigned upload failed (${response.status})`)
+                if (!putResponse.ok) {
+                  throw new Error(`Presigned upload failed (${putResponse.status})`)
+                }
+                // Confirm upload server-side: worker checks size and type, deletes if violation
+                try {
+                  const confirmResponse = await fetch(`${workerBaseUrl}/confirm-upload`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                    body: JSON.stringify({ key: targetPath, contentType: presignedContentType }),
+                  })
+                  if (!confirmResponse.ok) {
+                    throw new Error(`Confirm upload failed (${confirmResponse.status})`)
+                  }
+                } catch (confirmErr) {
+                  throw new Error(`Upload validation failed: ${confirmErr.message}`)
                 }
                 reportProgress(fileIndex, variantIndex, 100, variantSizes[variantIndex])
                 return targetPath

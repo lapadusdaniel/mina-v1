@@ -6,6 +6,8 @@ import { Zoom, Thumbnails } from 'yet-another-react-lightbox/plugins';
 import 'yet-another-react-lightbox/plugins/thumbnails.css';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
 import { increment } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 import Masonry from 'react-masonry-css';
 import { ChevronDown, ChevronUp, Share2, Download, Heart, Instagram, MessageCircle, Loader2 } from 'lucide-react';
 
@@ -644,7 +646,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const showShareButton = contactsSettings.showShareButton !== false;
   const showBusinessCardWidget = contactsSettings.showBusinessCardWidget !== false;
   const showNameWebsiteOnCover = contactsSettings.showNameWebsiteOnCover !== false;
-  const isPasswordProtected = privacySettings.passwordProtected === true && String(privacySettings.passwordHash || '').trim().length > 0;
+  const isPasswordProtected = privacySettings.passwordProtected === true;
   const watermarkLabel = (profile?.brandName || 'Mina').slice(0, 64);
 
   const selectionTitle = favoritesSettings.favoritesName || galerie?.numeSelectieClient || 'Selecție';
@@ -968,14 +970,21 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           }
         }
 
-        const needsPassword = normalizedGallery?.settings?.privacy?.passwordProtected === true
-          && String(normalizedGallery?.settings?.privacy?.passwordHash || '').trim().length > 0;
+        const needsPassword = normalizedGallery?.settings?.privacy?.passwordProtected === true;
 
         if (needsPassword) {
           let unlocked = false;
           try {
-            const savedHash = sessionStorage.getItem(getGalleryUnlockStorageKey(normalizedGallery.id)) || '';
-            unlocked = savedHash === String(normalizedGallery?.settings?.privacy?.passwordHash || '');
+            const savedToken = sessionStorage.getItem(getGalleryUnlockStorageKey(normalizedGallery.id)) || '';
+            if (savedToken) {
+              const checkFn = httpsCallable(functions, 'checkGalleryUnlockToken');
+              const result = await checkFn({ galleryId: normalizedGallery.id, token: savedToken });
+              unlocked = result?.data?.valid === true;
+              if (!unlocked) {
+                // Token expired or invalid — clear it
+                try { sessionStorage.removeItem(getGalleryUnlockStorageKey(normalizedGallery.id)); } catch (_) {}
+              }
+            }
           } catch (_) {
             unlocked = false;
           }
@@ -1446,15 +1455,16 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     }
 
     try {
-      const enteredHash = await sha256Hex(typedPassword);
-      const expectedHash = String(galerie?.settings?.privacy?.passwordHash || '');
-      if (!expectedHash || enteredHash !== expectedHash) {
+      const verifyFn = httpsCallable(functions, 'verifyGalleryPassword');
+      const result = await verifyFn({ galleryId: galerie.id, password: typedPassword });
+      const token = result?.data?.token;
+      if (!token) {
         setPrivacyError('Parolă incorectă.');
         return;
       }
 
       try {
-        sessionStorage.setItem(getGalleryUnlockStorageKey(galerie.id), expectedHash);
+        sessionStorage.setItem(getGalleryUnlockStorageKey(galerie.id), token);
       } catch (_) {
       }
 
@@ -1462,8 +1472,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       setPrivacyUnlocked(true);
       setLoading(true);
       await loadGalleryPhotos(galerie);
-    } catch (_) {
-      setPrivacyError('Nu am putut verifica parola. Încearcă din nou.');
+    } catch (err) {
+      const msg = err?.code === 'functions/permission-denied' ? 'Parolă incorectă.' : 'Nu am putut verifica parola. Încearcă din nou.';
+      setPrivacyError(msg);
     } finally {
       setLoading(false);
     }

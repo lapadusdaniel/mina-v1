@@ -24,6 +24,7 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 const B2_KEY_ID = defineSecret('B2_KEY_ID')
 const B2_APPLICATION_KEY = defineSecret('B2_APPLICATION_KEY')
 const B2_BUCKET_NAME = defineSecret('B2_BUCKET_NAME')
+const GALLERY_VERIFY_SECRET = defineSecret('GALLERY_VERIFY_SECRET')
 
 const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
@@ -1334,6 +1335,105 @@ async function handleChargeDisputeCreated(event) {
   }
 }
 
+
+// ── Gallery password verification (server-side) ────────────────────────────────
+
+const crypto = require('crypto')
+const GALLERY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+function buildGalleryUnlockToken(galleryId, secret) {
+  const expiry = Date.now() + GALLERY_TOKEN_TTL_MS
+  const payload = `${galleryId}:${expiry}`
+  const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex')
+  return Buffer.from(`${payload}:${sig}`).toString('base64url')
+}
+
+function verifyGalleryUnlockTokenInternal(galleryId, token, secret) {
+  try {
+    const decoded = Buffer.from(token, 'base64url').toString('utf8')
+    const parts = decoded.split(':')
+    if (parts.length !== 3) return false
+    const [tokenGalleryId, expiryStr, sig] = parts
+    if (tokenGalleryId !== galleryId) return false
+    const expiry = Number(expiryStr)
+    if (!Number.isFinite(expiry) || Date.now() > expiry) return false
+    const payload = `${tokenGalleryId}:${expiryStr}`
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex')
+    return crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))
+  } catch (_) {
+    return false
+  }
+}
+
+/**
+ * Verifies gallery password server-side.
+ * Reads passwordHash from gallerySecrets/{galleryId} (private collection).
+ * Returns a signed 24h unlock token on success.
+ */
+exports.verifyGalleryPassword = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 30,
+    secrets: [GALLERY_VERIFY_SECRET],
+  },
+  async (request) => {
+    const galleryId = String(request.data?.galleryId || '').trim()
+    const password = String(request.data?.password || '').trim()
+
+    if (!galleryId || galleryId.includes('/')) {
+      throw new HttpsError('invalid-argument', 'galleryId invalid.')
+    }
+    if (!password) {
+      throw new HttpsError('invalid-argument', 'Parola este obligatorie.')
+    }
+
+    const secretSnap = await db.collection('gallerySecrets').doc(galleryId).get()
+    if (!secretSnap.exists) {
+      // Gallery has no password set — deny to avoid enumeration
+      throw new HttpsError('permission-denied', 'Parolă incorectă.')
+    }
+
+    const storedHash = String(secretSnap.data()?.passwordHash || '').trim()
+    if (!storedHash) {
+      throw new HttpsError('permission-denied', 'Parolă incorectă.')
+    }
+
+    const enteredHash = crypto.createHash('sha256').update(password).digest('hex')
+    const match = crypto.timingSafeEqual(
+      Buffer.from(enteredHash, 'hex'),
+      Buffer.from(storedHash.toLowerCase(), 'hex'),
+    )
+    if (!match) {
+      throw new HttpsError('permission-denied', 'Parolă incorectă.')
+    }
+
+    const token = buildGalleryUnlockToken(galleryId, GALLERY_VERIFY_SECRET.value())
+    return { token }
+  }
+)
+
+/**
+ * Verifies a previously issued gallery unlock token.
+ * Stateless — verifies HMAC signature and expiry only (no Firestore lookup).
+ */
+exports.checkGalleryUnlockToken = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 30,
+    secrets: [GALLERY_VERIFY_SECRET],
+  },
+  async (request) => {
+    const galleryId = String(request.data?.galleryId || '').trim()
+    const token = String(request.data?.token || '').trim()
+
+    if (!galleryId || !token) {
+      return { valid: false }
+    }
+
+    const valid = verifyGalleryUnlockTokenInternal(galleryId, token, GALLERY_VERIFY_SECRET.value())
+    return { valid }
+  }
+)
 
 exports.sendContactNotification = onCall(
   {

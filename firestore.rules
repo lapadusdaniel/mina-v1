@@ -302,12 +302,14 @@ service cloud.firestore {
           isAdmin()
           || (
             isOwner(userId)
-            && !request.resource.data.diff(resource.data).changedKeys().hasAny([
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
               'plan',
               'status',
               'role',
               'isAdmin',
               'planOverride',
+              'storageUsedBytes',
+              'addonActive',
             ])
           )
         );
@@ -471,6 +473,12 @@ service cloud.firestore {
 
     match /{path=**}/subscriptions/{subscriptionId} {
       allow read: if isAdmin();
+    }
+
+    // Private gallery password hashes — only owner/admin may read, never client-writable
+    match /gallerySecrets/{galleryId} {
+      allow read: if isAdmin() || isGalleryOwnerById(galleryId);
+      allow write: if false;
     }
 
     // Default deny

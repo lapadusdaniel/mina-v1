@@ -291,20 +291,23 @@ async function createPresignedPutUrls({ files, env }) {
     const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/')
     const host = `${bucket}.${endpoint}`
 
+    // Include content-type in signed headers so the URL is bound to the specific
+    // content type and B2 will reject PUTs with a different Content-Type header.
     const queryParams = new URLSearchParams({
       'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
       'X-Amz-Credential': `${keyId}/${credentialScope}`,
       'X-Amz-Date': datetime,
       'X-Amz-Expires': '3600',
-      'X-Amz-SignedHeaders': 'host',
+      'X-Amz-SignedHeaders': 'content-type;host',
     })
 
+    // Canonical headers must be sorted alphabetically: content-type before host
     const canonicalRequest = [
       'PUT',
       `/${encodedKey}`,
       queryParams.toString(),
-      `host:${host}\n`,
-      'host',
+      `content-type:${contentType}\nhost:${host}\n`,
+      'content-type;host',
       'UNSIGNED-PAYLOAD',
     ].join('\n')
 
@@ -330,9 +333,45 @@ async function createPresignedPutUrls({ files, env }) {
     queryParams.set('X-Amz-Signature', signature)
 
     const url = `https://${host}/${encodedKey}?${queryParams.toString()}`
-    return { key, url }
+    return { key, url, contentType }
   }))
   return urls
+}
+
+async function b2HeadObject(key, env) {
+  const endpoint = String(env.B2_ENDPOINT || '').trim()
+  const bucket = String(env.B2_BUCKET_NAME || '').trim()
+  const keyId = String(env.B2_KEY_ID || '').trim()
+  const appKey = String(env.B2_APPLICATION_KEY || '').trim()
+  const region = endpoint.split('.')[1] || 'us-east-005'
+
+  const url = `https://${bucket}.${endpoint}/${encodeURIComponent(key).replace(/%2F/g, '/')}`
+  const datetime = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '').slice(0, 15) + 'Z'
+  const date = datetime.slice(0, 8)
+
+  const headers = await signRequest({
+    method: 'HEAD',
+    url,
+    headers: {
+      host: `${bucket}.${endpoint}`,
+      'x-amz-date': datetime,
+      'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    },
+    payload: '',
+    region,
+    service: 's3',
+    keyId,
+    appKey,
+    date,
+    datetime,
+  })
+
+  const res = await fetch(url, { method: 'HEAD', headers })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`B2 head failed: ${res.status}`)
+  const contentLength = Number(res.headers.get('content-length') || 0)
+  const contentType = res.headers.get('content-type') || ''
+  return { contentLength, contentType }
 }
 
 // ── HELPERS (identice cu originalul) ─────────────────────────────────────────
@@ -782,13 +821,32 @@ async function getGalleryOwnerUid({ galleryId, idToken, projectId }) {
 
 async function getGalleryPublicAccessConfig({ galleryId, env }) {
   if (!galleryId) return null
+  // Fail-closed: if Worker is misconfigured, deny rather than serve files
   if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_API_KEY) {
-    return { shareRequired: false, tokenHash: '', expiresAt: null }
+    throw new Error('Worker misconfiguration: FIREBASE_PROJECT_ID or FIREBASE_API_KEY missing')
   }
   const now = Date.now()
   const cached = galleryAccessCache.get(galleryId)
   if (cached && now - cached.ts < GALLERY_ACCESS_CACHE_TTL_MS) return cached.value
-  const docData = await fetchGalleryDoc({ galleryId, projectId: env.FIREBASE_PROJECT_ID, apiKey: env.FIREBASE_API_KEY }).catch(() => null)
+  // Fail-closed: let Firestore errors propagate — do NOT catch to null.
+  // A null return means 404 (gallery not found), which causes a 403 below.
+  const docData = await fetchGalleryDoc({ galleryId, projectId: env.FIREBASE_PROJECT_ID, apiKey: env.FIREBASE_API_KEY })
+  if (docData === null) {
+    // Gallery document not found — deny access
+    return { notFound: true }
+  }
+  // Check gallery is active and not expired
+  const statusActiv = firestoreBoolField(docData, 'statusActiv', true)
+  if (!statusActiv) {
+    return { inactive: true }
+  }
+  const dataExpirareStr = firestoreStringField(docData, 'dataExpirare')
+  if (dataExpirareStr) {
+    const expiry = parseIsoDate(dataExpirareStr)
+    if (expiry && expiry.getTime() < now) {
+      return { expired: true }
+    }
+  }
   const tokenHash = firestoreStringField(docData, 'publicShareTokenHash')
   const shareRequiredField = firestoreBoolField(docData, 'publicShareRequired', false)
   const expiresAt = parseIsoDate(firestoreStringField(docData, 'publicShareExpiresAt'))
@@ -799,8 +857,18 @@ async function getGalleryPublicAccessConfig({ galleryId, env }) {
 
 async function assertPublicGalleryAccess(galleryId, shareToken, env) {
   if (!galleryId) return { ok: false, status: 403, message: 'Forbidden' }
-  const config = await getGalleryPublicAccessConfig({ galleryId, env })
-  if (!config) return { ok: false, status: 404, message: 'Gallery not found' }
+  let config
+  try {
+    config = await getGalleryPublicAccessConfig({ galleryId, env })
+  } catch (err) {
+    // Fail-closed: any error fetching gallery metadata → deny access
+    console.error(`[assertPublicGalleryAccess] Firestore error for gallery ${galleryId}:`, err?.message || err)
+    return { ok: false, status: 403, message: 'Gallery access check failed' }
+  }
+  if (!config) return { ok: false, status: 403, message: 'Gallery not found' }
+  if (config.notFound) return { ok: false, status: 403, message: 'Gallery not found' }
+  if (config.inactive) return { ok: false, status: 403, message: 'Gallery is not active' }
+  if (config.expired) return { ok: false, status: 403, message: 'Gallery has expired' }
   if (!config.shareRequired) return { ok: true }
   if (config.expiresAt && config.expiresAt.getTime() < Date.now()) return { ok: false, status: 403, message: 'Share link expired' }
   const incomingToken = normalizeShareToken(shareToken)
@@ -961,6 +1029,34 @@ export default {
         if (ownerUid !== authContext.uid) return text('Forbidden', 403)
         const urls = await createPresignedPutUrls({ files, env })
         return json({ urls }, 200)
+      }
+
+      // ── POST /confirm-upload ──
+      const isConfirmRoute = url.pathname === '/confirm-upload' || url.pathname === '/confirm-upload/'
+      if (request.method === 'POST' && isConfirmRoute) {
+        const authContext = await requireAuthContext(request, env)
+        if (authContext.error) return authContext.error
+        const body = await request.json().catch(() => null)
+        const uploadKey = normalizePath(body?.key || '')
+        if (!uploadKey) return text('Missing key', 400)
+        const pathInfo = parsePathInfo(uploadKey)
+        const access = await assertWritablePathAccess(pathInfo, authContext, env)
+        if (!access.ok) return text(access.message, access.status)
+        const meta = await b2HeadObject(uploadKey, env).catch(() => null)
+        if (!meta) return text('Object not found after upload', 404)
+        if (meta.contentLength > MAX_UPLOAD_BYTES) {
+          // Object exceeds size limit — delete it immediately
+          await b2Delete(uploadKey, env).catch(() => {})
+          invalidateQuotaCache(authContext.uid)
+          return text(`Fișier prea mare (max ${MAX_UPLOAD_BYTES / 1024 / 1024} MB). Fișierul a fost șters.`, 413)
+        }
+        const reportedType = String(body?.contentType || '').trim().toLowerCase()
+        if (reportedType && meta.contentType && !meta.contentType.toLowerCase().startsWith(reportedType.split(';')[0].trim())) {
+          await b2Delete(uploadKey, env).catch(() => {})
+          invalidateQuotaCache(authContext.uid)
+          return text('Tip de fișier nepermis. Fișierul a fost șters.', 415)
+        }
+        return json({ ok: true, bytes: meta.contentLength }, 200)
       }
 
       // ── POST /share-token ──

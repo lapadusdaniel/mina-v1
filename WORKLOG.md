@@ -1,3 +1,34 @@
+### 2026-03-31 — Security fixes critice: parolă server-side, validare upload, Firestore rules, worker fail-closed
+
+- **FIX 1 — Parolă galerie server-side** (`functions/index.js`, `ClientGallery.jsx`, `firestore.rules`)
+  - Adăugat secret `GALLERY_VERIFY_SECRET` în Firebase Secret Manager (64-char hex aleatoriu)
+  - Adăugat callable `verifyGalleryPassword(galleryId, password)`: citește hash-ul din `gallerySecrets/{galleryId}` (colecție privată), verifică SHA-256 + `timingSafeEqual` server-side, returnează token HMAC-SHA256 valid 24h
+  - Adăugat callable `checkGalleryUnlockToken(galleryId, token)`: verifică semnătura HMAC + expirare, stateless, fără citire Firestore
+  - `ClientGallery.jsx`: înlocuit comparația hash client-side cu apeluri callable; sessionStorage stochează tokenul semnat nu hash-ul parolei
+  - `firestore.rules`: adăugat colecție `gallerySecrets/{galleryId}` — `allow write: if false` (doar Firebase Admin SDK poate scrie); read restricționat la owner/admin
+  - Scris `scripts/migrate-gallery-passwords.js`: migrare one-time `galerii/{id}.settings.privacy.passwordHash` → `gallerySecrets/{id}.passwordHash` + ștergere câmp din documentul public
+  - Anterior: hash-ul SHA-256 necodat era în documentul public Firestore, verificat în browser — vulnerabil la brute-force offline
+- **FIX 2 — Presigned URL: legare Content-Type + endpoint /confirm-upload** (`worker/r2-worker.js`, `Dashboard.jsx`)
+  - `createPresignedPutUrls`: adăugat `content-type` în `X-Amz-SignedHeaders` și canonical headers — URL-ul presigned este acum legat de un Content-Type specific; B2 respinge PUT-uri cu alt Content-Type
+  - Adăugat `b2HeadObject()`: HEAD request semnat SigV4 pentru a inspecta obiectul după upload
+  - Adăugat endpoint `POST /confirm-upload` în Worker: autentificare + ownership check, HEAD pe B2, dacă dimensiunea depășește `MAX_UPLOAD_BYTES` sau Content-Type nepermis → șterge obiectul imediat + răspunde 413/415
+  - `Dashboard.jsx`: după fiecare PUT presigned, apelează `/confirm-upload`; erorile de confirmare anulează upload-ul
+  - Anterior: URL-ul presigned putea fi reutilizat cu orice Content-Type; nu exista validare post-upload pentru dimensiune/tip
+- **FIX 3 — Firestore rules: blochează câmpuri operaționale** (`firestore.rules`)
+  - Adăugat în regula de update pentru `users/{userId}` (owner path): `affectedKeys().hasAny(['storageUsedBytes', 'addonActive'])` → deny
+  - Clienții nu mai pot modifica direct `storageUsedBytes` sau `addonActive`; doar Firebase Admin SDK (prin funcții server-side) poate scrie aceste câmpuri
+  - Anterior: un client autentificat putea crește artificial `storageUsedBytes` la 0 sau modifica `addonActive`
+- **FIX 4 — Worker fail-closed** (`worker/r2-worker.js`)
+  - `getGalleryPublicAccessConfig`: eliminat fallback fail-open pentru env vars lipsă (acum aruncă eroare → 403)
+  - Eliminat `.catch(() => null)` pe `fetchGalleryDoc` — erorile Firestore propagă în loc să fie înghițite
+  - Dacă doc Firestore lipsește (404) → `{ notFound: true }` → 403
+  - Adăugat verificare `statusActiv === false` → 403
+  - Adăugat verificare `dataExpirare` < now → 403
+  - `assertPublicGalleryAccess`: try/catch cu logging explicit; orice eroare → 403 cu mesaj clar (nu serveste fișiere)
+  - Anterior: dacă Firestore era inaccesibil sau env vars lipseau, galeria era tratată ca publică și fișierele erau servite
+- Deployed: `firestore:rules`, `functions`, `worker/r2-worker.js`, `hosting`
+- Secret nou setat: `GALLERY_VERIFY_SECRET` în Firebase Secret Manager
+
 ### 2026-03-30 — Redesign premium UI site fotograf + editor two-panel
 
 - Redesign complet `PhotographerSite.jsx` și `PhotographerSite.css` cu identitate vizuală premium:

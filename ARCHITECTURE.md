@@ -27,6 +27,8 @@
 - `sendWelcomeEmail` — email bun venit la înregistrare
 - `onSelectionSaved` — email automat către fotograf când clientul salvează favorite
 - `sendGalleryLink` — trimite link-ul galeriei către client prin email
+- `verifyGalleryPassword` — verificare parolă galerie server-side, returnează token HMAC semnat 24h
+- `checkGalleryUnlockToken` — verifică token de deblocare galerie (stateless, fără Firestore)
 - Stripe webhooks: checkout.session.completed, subscription.deleted, payment_failed, dispute.created
 
 ## Variabile de mediu Worker (Cloudflare)
@@ -37,6 +39,7 @@
 - B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME
 - STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 - RESEND_API_KEY, SMARTBILL_*
+- GALLERY_VERIFY_SECRET — secret HMAC pentru tokenuri de deblocare galerie protejată cu parolă
 
 ## Planuri Stripe Live
 - Free: 0 lei, 15GB
@@ -44,6 +47,32 @@
 - Plus: 49lei/lună, 500GB — price_1TAzSx1ax2jGrLZH9zPBW4PW
 - Pro: 79lei/lună, 1TB — price_1T6a4F1ax2jGrLZH92vUsGzE
 - Studio: 129lei/lună, 2TB — price_1T6a501ax2jGrLZHgLBbkzT4
+
+## Securitate
+
+### Parolă galerie (server-side, 2026-03-31)
+- `gallerySecrets/{galleryId}` — colecție privată Firestore (write: `if false`, read: owner/admin only)
+  - Stochează `passwordHash` (SHA-256 hex al parolei)
+- Callable `verifyGalleryPassword(galleryId, password)`: verificare server-side + returnare token HMAC-SHA256 (24h)
+- Callable `checkGalleryUnlockToken(galleryId, token)`: verificare stateless semnătură + expirare
+- `ClientGallery.jsx`: apelează callable, stochează token semnat în sessionStorage (nu hash-ul)
+- Migration: `scripts/migrate-gallery-passwords.js` — migrare one-time hash din documentul public în `gallerySecrets/`
+
+### Presigned URL upload (2026-03-31)
+- Presigned PUT URL-urile sunt legate de un Content-Type specific prin `X-Amz-SignedHeaders: content-type;host`
+- Endpoint `POST /confirm-upload` pe Worker: HEAD pe B2 după upload, șterge dacă depășește `MAX_UPLOAD_BYTES` sau Content-Type incorect
+- `Dashboard.jsx` apelează `/confirm-upload` după fiecare presigned PUT
+
+### Firestore rules (2026-03-31)
+- `users/{userId}` update: `affectedKeys()` blochează și `storageUsedBytes` și `addonActive` de la modificare client-side
+- Doar Firebase Admin SDK (funcții server-side) poate scrie câmpurile operaționale
+
+### Worker fail-closed (2026-03-31)
+- Orice eroare la citirea metadatelor galeriei din Firestore → 403 (nu servește fișiere)
+- Env vars lipsă → aruncă eroare → 403
+- Gallery doc lipsă (404) → 403
+- `statusActiv === false` → 403
+- `dataExpirare` < now → 403
 
 ## Site fotograf public (`/:slug`)
 
