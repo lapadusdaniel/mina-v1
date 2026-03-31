@@ -40,7 +40,6 @@ export const DEFAULT_GALLERY_SETTINGS = {
   },
   privacy: {
     passwordProtected: false,
-    passwordHash: '',
   },
 }
 
@@ -81,7 +80,11 @@ export function toDateInputValue(value) {
 }
 
 export function normalizeGallerySettings(rawSettings = {}) {
-  return deepMerge(cloneDefaults(), rawSettings || {})
+  const normalized = deepMerge(cloneDefaults(), rawSettings || {})
+  if (normalized?.privacy && 'passwordHash' in normalized.privacy) {
+    delete normalized.privacy.passwordHash
+  }
+  return normalized
 }
 
 export function slugifyGalleryName(name) {
@@ -146,12 +149,6 @@ export function buildGalleryFormState(gallery = null) {
   }
 }
 
-async function sha256Hex(value) {
-  const raw = new TextEncoder().encode(String(value || ''))
-  const digest = await crypto.subtle.digest('SHA-256', raw)
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
 export async function buildGalleryPayload({
   formState,
   mode,
@@ -161,20 +158,10 @@ export async function buildGalleryPayload({
 }) {
   const settings = normalizeGallerySettings(formState?.settings || {})
   const privacyPassword = String(formState?.privacyPassword || '').trim()
-  const previousHash = existingGallery?.settings?.privacy?.passwordHash || ''
-
-  let privacyPasswordHash = previousHash
-  if (settings.privacy.passwordProtected) {
-    if (privacyPassword) {
-      privacyPasswordHash = await sha256Hex(privacyPassword)
-    } else if (!privacyPasswordHash && mode === 'create') {
-      throw new Error('Introdu o parolă pentru galeria protejată.')
-    }
-  } else {
-    privacyPasswordHash = ''
+  const wasPasswordProtected = existingGallery?.settings?.privacy?.passwordProtected === true
+  if (settings.privacy.passwordProtected && !privacyPassword && (mode === 'create' || !wasPasswordProtected)) {
+    throw new Error('Introdu o parolă pentru galeria protejată.')
   }
-
-  settings.privacy.passwordHash = privacyPasswordHash
 
   const limitEnabled = !!settings.favorites.limitSelectedPhotos
   const maxSelected = Math.max(0, Number(settings.favorites.maxSelectedPhotos || 0))
@@ -191,6 +178,7 @@ export async function buildGalleryPayload({
     categoria: formState.category || 'Nunți',
     dataEveniment: formState.shootDate ? new Date(formState.shootDate).toISOString() : null,
     dataExpirare: expiryIso,
+    dataExpirareTs: expiryIso ? new Date(expiryIso) : null,
     storageDuration: formState.storageMode === 'lifetime' ? String(formState.storageDuration || '1year') : null,
     settings,
     gridLayout: formState.gridLayout || '4col',
@@ -213,5 +201,8 @@ export async function buildGalleryPayload({
     payload.statusActiv = true
   }
 
-  return payload
+  return {
+    payload,
+    privacyPassword,
+  }
 }

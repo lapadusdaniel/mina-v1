@@ -23,10 +23,17 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    function isGalleryNotExpired(data) {
+      return !('dataExpirareTs' in data)
+        || data.dataExpirareTs == null
+        || data.dataExpirareTs > request.time;
+    }
+
     function isGalleryPublic(data) {
       return data.status != 'trash'
         && data.status != 'archived'
-        && (!('statusActiv' in data) || data.statusActiv == true);
+        && (!('statusActiv' in data) || data.statusActiv == true)
+        && isGalleryNotExpired(data);
     }
 
     function galleryExists(galleryId) {

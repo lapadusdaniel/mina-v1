@@ -55,7 +55,11 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
         statusActiv: true
       }
       if (dataEveniment) docData.dataEveniment = new Date(dataEveniment).toISOString()
-      if (dataExpirare) docData.dataExpirare = new Date(dataExpirare).toISOString()
+      if (dataExpirare) {
+        const expiry = new Date(dataExpirare).toISOString()
+        docData.dataExpirare = expiry
+        docData.dataExpirareTs = new Date(expiry)
+      }
 
       const created = await galleriesService.createGallery(docData)
       const newGalerieId = created.id
@@ -82,7 +86,6 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
             const origPath = `galerii/${newGalerieId}/originals/${baseName}`
             const mediumPath = `galerii/${newGalerieId}/medium/${baseNameNoExt}.webp`
             const thumbPath = `galerii/${newGalerieId}/thumbnails/${baseNameNoExt}.webp`
-            uploadedBytes += Number(file.size || 0)
             if (!firstOriginalKey) firstOriginalKey = origPath
 
             const [mediumFile, thumbFile] = await Promise.all([
@@ -105,6 +108,14 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
               mediaService.uploadPhoto(mediumFile, newGalerieId, user.uid, (p) => reportProgress(i * 3 + 1, p), mediumPath, idToken),
               mediaService.uploadPhoto(thumbFile, newGalerieId, user.uid, (p) => reportProgress(i * 3 + 2, p), thumbPath, idToken),
             ])
+            const totalVariantBytes = Number(file.size || 0) + Number(mediumFile?.size || 0) + Number(thumbFile?.size || 0)
+            uploadedBytes += totalVariantBytes
+            await galleriesService.upsertPhotoMetadata(newGalerieId, origPath, {
+              folderId: null,
+              size: totalVariantBytes,
+              lastModified: file.lastModified ? new Date(file.lastModified) : null,
+              createdAt: new Date(),
+            })
             completedSteps += 3
             setFormUploadProgress(Math.round((completedSteps / totalSteps) * 100))
           }
@@ -113,7 +124,6 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
             coverKey: firstOriginalKey || '',
             storageBytes: uploadedBytes,
           })
-          await galleriesService.adjustUserStorageUsed(user.uid, uploadedBytes)
         } catch (uploadErr) {
           console.error('Error uploading:', uploadErr)
           alert('Galerie creată, dar a apărut o eroare la încărcarea fotografiilor.')

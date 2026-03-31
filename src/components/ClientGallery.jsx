@@ -143,12 +143,6 @@ function normalizeSelectionLists(lists = [], fallbackKeys = []) {
   }];
 }
 
-async function sha256Hex(value) {
-  const raw = new TextEncoder().encode(String(value || ''));
-  const digest = await crypto.subtle.digest('SHA-256', raw);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
   useEffect(() => {

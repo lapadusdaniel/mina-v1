@@ -139,7 +139,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const cardLogoInputRef = useRef(null)
   const fileInputRef = useRef(null)
   const metadataBackfillQueueRef = useRef(new Set())
-  const lastSyncedStorageBytesRef = useRef(null)
   const suppressAutoReopenRef = useRef(false)
   const cancelUploadRef = useRef(false)
   const uploadSessionRef = useRef(0)
@@ -196,10 +195,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           try {
             await mediaService.deleteGalleryAssets(g.id, idToken, g.userId || user.uid)
             await galleriesService.deleteGallery(g.id)
-            const removedBytes = Math.max(0, Number(g?.storageBytes || 0))
-            if (removedBytes > 0) {
-              await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
-            }
           } catch (e) {
             console.warn('Trash cleanup failed for gallery', g.id, e)
           }
@@ -210,18 +205,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     }
     run()
   }, [user?.uid])
-
-  // Keep a pre-calculated per-user storage counter in Firestore for fast quota checks in Worker.
-  useEffect(() => {
-    if (!user?.uid) return
-    const totalBytes = galerii.reduce((sum, g) => sum + Math.max(0, Number(g?.storageBytes || 0)), 0)
-    if (lastSyncedStorageBytesRef.current === totalBytes) return
-    lastSyncedStorageBytesRef.current = totalBytes
-
-    galleriesService.setUserStorageUsed(user.uid, totalBytes).catch(() => {
-      lastSyncedStorageBytesRef.current = null
-    })
-  }, [galerii, user?.uid])
 
   // Real-time listener pentru galerii
   useEffect(() => {
@@ -372,19 +355,23 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       const photoMetaByKey = new Map(
         (photoMetadata || [])
           .filter((meta) => meta?.key)
-          .map((meta) => [meta.key, validFolderIds.has(meta.folderId) ? meta.folderId : null])
+          .map((meta) => [meta.key, {
+            folderId: validFolderIds.has(meta.folderId) ? meta.folderId : null,
+            size: Number(meta?.size || 0),
+          }])
       )
 
       const normalizedPhotos = poze
         .map((poza) => {
           const key = poza.key || poza.name || poza.Key
           if (!key) return null
+          const metadata = photoMetaByKey.get(key) || null
           return {
             key,
             url: null,
-            size: poza.size ?? poza.Size,
+            size: metadata?.size > 0 ? metadata.size : (poza.size ?? poza.Size),
             lastModified: poza.lastModified ?? poza.uploaded ?? poza.LastModified,
-            folderId: photoMetaByKey.get(key) || null,
+            folderId: metadata?.folderId || null,
           }
         })
         .filter(Boolean)
@@ -665,7 +652,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
             await galleriesService.upsertPhotoMetadata(galerieActiva.id, origPath, {
               folderId: uploadFolderId,
-              size: Number(file.size || 0),
+              size: variantSizes.reduce((sum, value) => sum + Number(value || 0), 0),
               lastModified: file.lastModified ? new Date(file.lastModified) : null,
               createdAt: new Date(),
             })
@@ -695,7 +682,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         storageBytes: currentBytes + uploadedStorageBytes,
         coverKey: galerieActiva?.coverKey || firstUploadedOriginal || '',
       })
-      await galleriesService.adjustUserStorageUsed(user.uid, uploadedStorageBytes)
       await handleDeschideGalerie(galerieActiva)
       if (uploadFolderId) {
         setActiveFolderId(uploadFolderId)
@@ -752,9 +738,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
           storageBytes: Math.max(0, currentBytes - removedBytes),
           coverKey: nextCoverKey,
         })
-        if (removedBytes > 0) {
-          await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
-        }
       }
     } catch (error) {
       console.error('Error:', error)
@@ -793,9 +776,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
             storageBytes: Math.max(0, currentBytes - removedBytes),
             coverKey: nextCoverKey,
           })
-          if (removedBytes > 0) {
-            await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
-          }
         }
       } catch (error) {
         console.error('Error deleting photo:', pozaKey, error)
@@ -936,9 +916,6 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         storageBytes: Math.max(0, currentBytes - removedBytes),
         coverKey: nextCoverKey,
       })
-      if (removedBytes > 0) {
-        await galleriesService.adjustUserStorageUsed(user.uid, -removedBytes)
-      }
     } catch (error) {
       console.error('Error deleting folder:', error)
       alert('Nu am putut șterge folderul. Încearcă din nou.')

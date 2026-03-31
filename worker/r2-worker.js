@@ -562,6 +562,10 @@ function pickMaxPlan(currentPlan, candidatePlan) {
 }
 
 function firestoreStringField(data, fieldName) { return data?.fields?.[fieldName]?.stringValue || '' }
+function firestoreDateField(data, fieldName) {
+  const field = data?.fields?.[fieldName]
+  return field?.timestampValue || field?.stringValue || ''
+}
 function firestoreBoolField(data, fieldName, fallback = false) {
   const value = data?.fields?.[fieldName]?.booleanValue
   return typeof value === 'boolean' ? value : fallback
@@ -650,6 +654,16 @@ function readCachedQuota(uid) {
   return cached.value
 }
 function writeCachedQuota(uid, value) { if (!uid || !value) return; quotaCache.set(uid, { ts: Date.now(), value }) }
+function applyQuotaCacheDelta(uid, deltaBytes) {
+  const delta = Math.trunc(Number(deltaBytes || 0))
+  if (!uid || !Number.isFinite(delta) || delta === 0) return
+  const cached = readCachedQuota(uid)
+  if (!cached) return
+  writeCachedQuota(uid, {
+    ...cached,
+    usedBytes: Math.max(0, cached.usedBytes + delta),
+  })
+}
 
 async function sha256Hex(value) {
   let data
@@ -778,6 +792,44 @@ async function resolveUserPlan({ uid, idToken, env }) {
   return 'Free'
 }
 
+async function syncStorageUsedDelta({ galleryId, deltaBytes, idToken, env }) {
+  const normalizedGalleryId = String(galleryId || '').trim()
+  const delta = Math.trunc(Number(deltaBytes || 0))
+  if (!normalizedGalleryId || !Number.isFinite(delta) || delta === 0) return { ok: true, skipped: true }
+  if (!idToken || !env?.FIREBASE_PROJECT_ID) {
+    throw new Error('Storage sync misconfiguration')
+  }
+
+  const endpoint = `https://us-central1-${env.FIREBASE_PROJECT_ID}.cloudfunctions.net/updateStorageUsed`
+  let lastError = null
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        galleryId: normalizedGalleryId,
+        deltaBytes: delta,
+      }),
+    }).catch((error) => {
+      lastError = error
+      return null
+    })
+
+    if (res?.ok) {
+      return res.json().catch(() => ({ ok: true }))
+    }
+
+    const textBody = res ? await res.text().catch(() => '') : ''
+    lastError = new Error(`updateStorageUsed failed (${res?.status || 'network'}): ${textBody.slice(0, 200)}`)
+  }
+
+  throw lastError || new Error('updateStorageUsed failed')
+}
+
 async function readUserStorageState({ uid, idToken, env }) {
   if (!uid || !idToken || !env?.FIREBASE_PROJECT_ID) return { usedBytes: 0, addonActive: false }
   const userDoc = await fetchFirestoreDocByPath({ projectId: env.FIREBASE_PROJECT_ID, docPath: `users/${uid}`, idToken, apiKey: env.FIREBASE_API_KEY }).catch(() => null)
@@ -840,7 +892,7 @@ async function getGalleryPublicAccessConfig({ galleryId, env }) {
   if (!statusActiv) {
     return { inactive: true }
   }
-  const dataExpirareStr = firestoreStringField(docData, 'dataExpirare')
+  const dataExpirareStr = firestoreDateField(docData, 'dataExpirareTs') || firestoreDateField(docData, 'dataExpirare')
   if (dataExpirareStr) {
     const expiry = parseIsoDate(dataExpirareStr)
     if (expiry && expiry.getTime() < now) {
@@ -849,7 +901,7 @@ async function getGalleryPublicAccessConfig({ galleryId, env }) {
   }
   const tokenHash = firestoreStringField(docData, 'publicShareTokenHash')
   const shareRequiredField = firestoreBoolField(docData, 'publicShareRequired', false)
-  const expiresAt = parseIsoDate(firestoreStringField(docData, 'publicShareExpiresAt'))
+  const expiresAt = parseIsoDate(firestoreDateField(docData, 'publicShareExpiresAt'))
   const value = { shareRequired: shareRequiredField || !!tokenHash, tokenHash, expiresAt }
   galleryAccessCache.set(galleryId, { ts: now, value })
   return value
@@ -1056,6 +1108,24 @@ export default {
           invalidateQuotaCache(authContext.uid)
           return text('Tip de fișier nepermis. Fișierul a fost șters.', 415)
         }
+        const quota = await assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadBytes: meta.contentLength, env })
+        if (!quota.ok) {
+          await b2Delete(uploadKey, env).catch(() => {})
+          invalidateQuotaCache(authContext.uid)
+          return text(quota.message, quota.status)
+        }
+        try {
+          await syncStorageUsedDelta({
+            galleryId: pathInfo.galleryId,
+            deltaBytes: meta.contentLength,
+            idToken: authContext.idToken,
+            env,
+          })
+        } catch (syncError) {
+          await b2Delete(uploadKey, env).catch(() => {})
+          invalidateQuotaCache(authContext.uid)
+          return text(`Storage sync failed: ${syncError.message || 'unknown error'}`, 500)
+        }
         return json({ ok: true, bytes: meta.contentLength }, 200)
       }
 
@@ -1132,6 +1202,20 @@ export default {
         const quota = await assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadBytes, env })
         if (!quota.ok) return text(quota.message, quota.status)
         await b2Put(pathInfo.key, bodyBuffer, contentType, env)
+        if (pathInfo.kind === 'gallery-file') {
+          try {
+            await syncStorageUsedDelta({
+              galleryId: pathInfo.galleryId,
+              deltaBytes: uploadBytes,
+              idToken: authContext.idToken,
+              env,
+            })
+          } catch (syncError) {
+            await b2Delete(pathInfo.key, env).catch(() => {})
+            invalidateQuotaCache(authContext.uid)
+            return text(`Storage sync failed: ${syncError.message || 'unknown error'}`, 500)
+          }
+        }
         return text('OK', 200)
       }
 
@@ -1143,20 +1227,47 @@ export default {
           const prefixInfo = parsePrefixInfo(prefix)
           const access = await assertWritablePrefixAccess(prefixInfo, authContext, env)
           if (!access.ok) return text(access.message, access.status)
-          const keys = await b2ListAllKeys(prefixInfo.prefix, env)
+          const listed = await b2List(prefixInfo.prefix, env)
+          if (listed.error) return text(listed.error, 500)
+          const objects = Array.isArray(listed.objects) ? listed.objects : []
+          const keys = objects.map((item) => item.key).filter(Boolean)
+          const deletedBytes = objects.reduce((sum, item) => sum + Math.max(0, Number(item?.size || 0)), 0)
           for (let i = 0; i < keys.length; i += 50) {
             const batch = keys.slice(i, i + 50)
             await Promise.all(batch.map((k) => b2Delete(k, env)))
           }
-          invalidateQuotaCache(authContext.uid)
+          if (prefixInfo.kind === 'gallery-manage-prefix' && deletedBytes > 0) {
+            await syncStorageUsedDelta({
+              galleryId: prefixInfo.galleryId,
+              deltaBytes: -deletedBytes,
+              idToken: authContext.idToken,
+              env,
+            })
+            applyQuotaCacheDelta(authContext.uid, -deletedBytes)
+          } else {
+            invalidateQuotaCache(authContext.uid)
+          }
           return json({ deleted: keys.length }, 200)
         }
         if (!key) return text('Missing key', 400)
         const pathInfo = parsePathInfo(key)
         const access = await assertWritablePathAccess(pathInfo, authContext, env)
         if (!access.ok) return text(access.message, access.status)
+        const existingMeta = pathInfo.kind === 'gallery-file'
+          ? await b2HeadObject(pathInfo.key, env).catch(() => null)
+          : null
         await b2Delete(pathInfo.key, env)
-        invalidateQuotaCache(authContext.uid)
+        if (pathInfo.kind === 'gallery-file' && existingMeta?.contentLength > 0) {
+          await syncStorageUsedDelta({
+            galleryId: pathInfo.galleryId,
+            deltaBytes: -existingMeta.contentLength,
+            idToken: authContext.idToken,
+            env,
+          })
+          applyQuotaCacheDelta(authContext.uid, -existingMeta.contentLength)
+        } else {
+          invalidateQuotaCache(authContext.uid)
+        }
         return text('Deleted', 200)
       }
 

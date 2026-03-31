@@ -1,5 +1,5 @@
 # ARCHITECTURE.md — Mina v1
-> Ultima actualizare: 2026-03-30
+> Ultima actualizare: 2026-03-31
 
 ## Pagini și Rute
 - `/` — LandingPage.jsx
@@ -23,12 +23,14 @@
 
 ## Firebase Functions
 - `deleteGalleryAssets` — șterge toate fișierele unei galerii din B2 + Firestore
+- `updateStorageUsed` — actualizează `users/{uid}.storageUsedBytes` prin Admin SDK după validarea ownership-ului galeriei
 - `sendContactNotification` — email notificare contact
 - `sendWelcomeEmail` — email bun venit la înregistrare
 - `onSelectionSaved` — email automat către fotograf când clientul salvează favorite
 - `sendGalleryLink` — trimite link-ul galeriei către client prin email
 - `verifyGalleryPassword` — verificare parolă galerie server-side, returnează token HMAC semnat 24h
 - `checkGalleryUnlockToken` — verifică token de deblocare galerie (stateless, fără Firestore)
+- `saveGalleryPassword` — salvează sau șterge parola galeriei în `gallerySecrets/{galleryId}`
 - Stripe webhooks: checkout.session.completed, subscription.deleted, payment_failed, dispute.created
 
 ## Variabile de mediu Worker (Cloudflare)
@@ -55,17 +57,23 @@
   - Stochează `passwordHash` (SHA-256 hex al parolei)
 - Callable `verifyGalleryPassword(galleryId, password)`: verificare server-side + returnare token HMAC-SHA256 (24h)
 - Callable `checkGalleryUnlockToken(galleryId, token)`: verificare stateless semnătură + expirare
+- Callable `saveGalleryPassword(galleryId, password)`: verifică owner-ul și scrie hash-ul exclusiv în `gallerySecrets/{galleryId}`; documentul public `galerii/{id}` nu mai persistă `settings.privacy.passwordHash`
 - `ClientGallery.jsx`: apelează callable, stochează token semnat în sessionStorage (nu hash-ul)
 - Migration: `scripts/migrate-gallery-passwords.js` — migrare one-time hash din documentul public în `gallerySecrets/`
 
-### Presigned URL upload (2026-03-31)
+### Presigned URL upload + storage sync server-side (2026-03-31)
 - Presigned PUT URL-urile sunt legate de un Content-Type specific prin `X-Amz-SignedHeaders: content-type;host`
 - Endpoint `POST /confirm-upload` pe Worker: HEAD pe B2 după upload, șterge dacă depășește `MAX_UPLOAD_BYTES` sau Content-Type incorect
+- `POST /confirm-upload` verifică și cota storage înainte de confirmarea finală
 - `Dashboard.jsx` apelează `/confirm-upload` după fiecare presigned PUT
+- Worker-ul sincronizează `storageUsedBytes` prin Function-ul `updateStorageUsed` după upload confirmat și după delete pe fișier sau prefix galerie, folosind bytes reali din B2
+- Scrierile client-side către `users/{uid}.storageUsedBytes` au fost eliminate
 
 ### Firestore rules (2026-03-31)
 - `users/{userId}` update: `affectedKeys()` blochează și `storageUsedBytes` și `addonActive` de la modificare client-side
 - Doar Firebase Admin SDK (funcții server-side) poate scrie câmpurile operaționale
+- Galeriile publice trebuie acum să fie active și neexpirate: `dataExpirareTs == null || dataExpirareTs > request.time`
+- `dataExpirare` rămâne string pentru compatibilitate UI, iar `dataExpirareTs` este timestamp-ul folosit în rules
 
 ### Worker fail-closed (2026-03-31)
 - Orice eroare la citirea metadatelor galeriei din Firestore → 403 (nu servește fișiere)

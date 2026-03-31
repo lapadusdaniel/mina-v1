@@ -1,3 +1,28 @@
+### 2026-03-31 — Security pass 2: eliminare regresie parolă, storage server-side, rules aliniate la expirare
+
+- **FIX 1 — Eliminare regresie `passwordHash` public** (`src/utils/gallerySettings.js`, `src/modules/galleries/galleries.service.js`, `src/components/GallerySettingsModal.jsx`, `functions/index.js`, `src/components/GalleryDetailView.jsx`)
+  - Eliminat generarea și persistarea `settings.privacy.passwordHash` din payload-urile publice de galerie
+  - `normalizeGallerySettings()` șterge explicit orice `passwordHash` legacy din settings înainte de resalvare
+  - Adăugat callable `saveGalleryPassword(galleryId, password)` în Firebase Functions: verifică owner-ul și scrie hash-ul exclusiv în `gallerySecrets/{galleryId}` via Admin SDK; parola goală șterge secretul existent
+  - `GallerySettingsModal.jsx` salvează parola doar prin callable după create/edit; documentul public `galerii/{id}` păstrează doar `passwordProtected: true/false`
+  - `sendGalleryLink` și `GalleryDetailView.jsx` nu mai depind de `settings.privacy.passwordHash` din documentul public
+- **FIX 2 — `storageUsedBytes` actualizat exclusiv server-side** (`worker/r2-worker.js`, `functions/index.js`, `src/components/Dashboard.jsx`, `src/components/AdminGalleryForm.jsx`)
+  - Adăugat endpoint `updateStorageUsed` în Firebase Functions (HTTP, Admin SDK): validează tokenul Firebase, verifică owner-ul galeriei și actualizează `users/{uid}.storageUsedBytes` în tranzacție
+  - Worker-ul apelează `updateStorageUsed` după upload validat (`PUT` și `POST /confirm-upload`) și după ștergere (`DELETE` pe fișier sau prefix galerie), folosind bytes reali din B2
+  - `POST /confirm-upload` verifică acum și cota înainte de confirmarea finală; dacă depășește limita, obiectul este șters imediat
+  - Eliminate toate scrierile client-side către `storageUsedBytes` din `Dashboard.jsx`, `AdminGalleryForm.jsx` și `galleries.service.js`
+  - `Dashboard.jsx` și `AdminGalleryForm.jsx` scriu în metadata foto `size` = total bytes (original + medium + thumb), astfel încât UI-ul și backfill-ul de `storageBytes` rămân coerente
+- **FIX 3 — Firestore rules aliniate la expirare** (`firestore.rules`, `src/utils/gallerySettings.js`, `src/modules/galleries/galleries.service.js`, `src/components/AdminGalleryForm.jsx`)
+  - Adăugat câmpul `dataExpirareTs` (timestamp) la create/edit pentru galerii, păstrând `dataExpirare` string pentru compatibilitate UI
+  - `firestore.rules`: `isGalleryPublic()` cere acum și `dataExpirareTs == null || dataExpirareTs > request.time`
+  - Worker-ul citește `dataExpirareTs` cu fallback la `dataExpirare`, astfel încât regulile Firestore și Worker-ul folosesc aceeași semnificație pentru expirare
+- Deploy complet executat cu succes:
+  - `npm run build`
+  - `firebase deploy --only firestore:rules --project mina-v1-aea51`
+  - `firebase deploy --only functions --project mina-v1-aea51 --force`
+  - `npx wrangler deploy worker/r2-worker.js --name mina-v1-r2-worker --compatibility-date 2024-01-01`
+  - `FIREBASE_PROJECT_ID="mina-v1-aea51" npm run deploy:hosting`
+
 ### 2026-03-31 — Security fixes critice: parolă server-side, validare upload, Firestore rules, worker fail-closed
 
 - **FIX 1 — Parolă galerie server-side** (`functions/index.js`, `ClientGallery.jsx`, `firestore.rules`)

@@ -373,7 +373,7 @@ export default function GallerySettingsModal({
 
     setSaving(true)
     try {
-      const payload = await buildGalleryPayload({
+      const { payload, privacyPassword } = await buildGalleryPayload({
         formState,
         mode: isCreate ? 'create' : 'edit',
         existingGallery: galerie,
@@ -384,6 +384,9 @@ export default function GallerySettingsModal({
       if (isCreate) {
         const created = await galleriesService.createGallery(payload)
         const createdGalleryId = created.id
+        if (payload.settings?.privacy?.passwordProtected && privacyPassword) {
+          await galleriesService.saveGalleryPassword(createdGalleryId, privacyPassword)
+        }
 
         onCreated?.({
           id: createdGalleryId,
@@ -404,6 +407,14 @@ export default function GallerySettingsModal({
           coverUrl,
           coverFocalPoint: normalizeFocalPoint(coverFocalPoint),
         })
+
+        if (payload.settings?.privacy?.passwordProtected) {
+          if (privacyPassword) {
+            await galleriesService.saveGalleryPassword(galerie.id, privacyPassword)
+          }
+        } else {
+          await galleriesService.saveGalleryPassword(galerie.id, '')
+        }
       }
 
       onSaved?.()

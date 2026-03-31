@@ -506,7 +506,6 @@ export default function GalleryDetailView({
   const hasExplicitFolders = galleryFolders.length > 0
   const defaultFolderName = String(galerie?.defaultFolderName || '').trim() || DEFAULT_FOLDER_NAME
   const isPasswordProtected = galerie?.settings?.privacy?.passwordProtected === true
-    && String(galerie?.settings?.privacy?.passwordHash || '').trim().length > 0
   const galleryShareUrl = useMemo(() => getGalleryPublicUrl(galerie), [galerie])
   const defaultPhotosCount = hasExplicitFolders
     ? allPozeGalerie.filter((photo) => getEffectiveFolderId(photo?.folderId) === DEFAULT_FOLDER_ID).length

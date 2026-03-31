@@ -4,7 +4,6 @@ import {
   deleteField,
   deleteDoc,
   doc,
-  increment,
   getDoc,
   getDocs,
   onSnapshot,
@@ -15,6 +14,8 @@ import {
   where,
   limit as limitQuery,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../../firebase'
 import {
   extractLegacySelection,
   normalizeClientName,
@@ -174,35 +175,6 @@ export function createGalleriesModule({ db }) {
     ...foldersService,
     db,
 
-    async adjustUserStorageUsed(uid, deltaBytes) {
-      if (!uid) return
-      const delta = Math.trunc(Number(deltaBytes || 0))
-      if (!Number.isFinite(delta) || delta === 0) return
-
-      const userRef = doc(db, 'users', uid)
-      await setDoc(
-        userRef,
-        {
-          storageUsedBytes: increment(delta),
-          updatedAt: new Date(),
-        },
-        { merge: true }
-      )
-    },
-
-    async setUserStorageUsed(uid, totalBytes) {
-      if (!uid) return
-      const value = Math.max(0, Math.trunc(Number(totalBytes || 0)))
-      await setDoc(
-        doc(db, 'users', uid),
-        {
-          storageUsedBytes: value,
-          updatedAt: new Date(),
-        },
-        { merge: true }
-      )
-    },
-
     watchOwnerGalleries(ownerUid, onChange) {
       const q = query(collection(db, 'galerii'), where('userId', '==', ownerUid))
       return onSnapshot(q, async (snapshot) => {
@@ -279,6 +251,16 @@ export function createGalleriesModule({ db }) {
       await updateDoc(doc(db, 'galerii', galleryId), data)
     },
 
+    async saveGalleryPassword(galleryId, password = '') {
+      if (!galleryId) throw new Error('saveGalleryPassword: galleryId este obligatoriu')
+      const callable = httpsCallable(functions, 'saveGalleryPassword')
+      const response = await callable({
+        galleryId,
+        password: String(password || ''),
+      })
+      return response?.data || { ok: true }
+    },
+
     async moveToTrash(galleryId, deletedAt = new Date()) {
       await updateDoc(doc(db, 'galerii', galleryId), { status: 'trash', deletedAt })
     },
@@ -294,6 +276,7 @@ export function createGalleriesModule({ db }) {
     async setGalleryExpiry(galleryId, expiryIsoStringOrNull) {
       await updateDoc(doc(db, 'galerii', galleryId), {
         dataExpirare: expiryIsoStringOrNull || deleteField(),
+        dataExpirareTs: expiryIsoStringOrNull ? new Date(expiryIsoStringOrNull) : deleteField(),
       })
     },
 

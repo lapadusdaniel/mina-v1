@@ -1341,6 +1341,106 @@ async function handleChargeDisputeCreated(event) {
 const crypto = require('crypto')
 const GALLERY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
+function normalizeGalleryId(value) {
+  const galleryId = String(value || '').trim()
+  if (!galleryId || galleryId.includes('/')) return ''
+  return galleryId
+}
+
+async function getOwnedGalleryOrThrow(uid, galleryId) {
+  const normalizedUid = String(uid || '').trim()
+  const normalizedGalleryId = normalizeGalleryId(galleryId)
+  if (!normalizedGalleryId) {
+    throw new HttpsError('invalid-argument', 'galleryId invalid.')
+  }
+
+  const galleryRef = db.collection('galerii').doc(normalizedGalleryId)
+  const gallerySnap = await galleryRef.get()
+  if (!gallerySnap.exists) {
+    throw new HttpsError('not-found', 'Galeria nu există.')
+  }
+
+  const galleryData = gallerySnap.data() || {}
+  const ownerUid = String(galleryData.userId || '').trim()
+  if (!ownerUid || ownerUid !== normalizedUid) {
+    throw new HttpsError('permission-denied', 'Nu ai permisiunea pentru această galerie.')
+  }
+
+  return {
+    galleryId: normalizedGalleryId,
+    galleryRef,
+    galleryData,
+    ownerUid,
+  }
+}
+
+async function getGalleryPasswordHash(galleryId) {
+  const normalizedGalleryId = normalizeGalleryId(galleryId)
+  if (!normalizedGalleryId) return ''
+  const secretSnap = await db.collection('gallerySecrets').doc(normalizedGalleryId).get()
+  return String(secretSnap.data()?.passwordHash || '').trim().toLowerCase()
+}
+
+async function saveGalleryPasswordHash(galleryId, password = '') {
+  const normalizedGalleryId = normalizeGalleryId(galleryId)
+  if (!normalizedGalleryId) {
+    throw new HttpsError('invalid-argument', 'galleryId invalid.')
+  }
+
+  const secretRef = db.collection('gallerySecrets').doc(normalizedGalleryId)
+  const normalizedPassword = String(password || '').trim()
+  if (!normalizedPassword) {
+    await secretRef.delete().catch(() => {})
+    return { cleared: true }
+  }
+
+  const passwordHash = crypto.createHash('sha256').update(normalizedPassword).digest('hex')
+  await secretRef.set(
+    {
+      passwordHash,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  )
+
+  return { cleared: false, passwordHash }
+}
+
+async function applyUserStorageDelta(uid, deltaBytes) {
+  const normalizedUid = String(uid || '').trim()
+  const delta = Math.trunc(Number(deltaBytes || 0))
+  if (!normalizedUid || !Number.isFinite(delta)) {
+    throw new HttpsError('invalid-argument', 'Delta storage invalid.')
+  }
+
+  const userRef = db.collection('users').doc(normalizedUid)
+  return db.runTransaction(async (transaction) => {
+    const userSnap = await transaction.get(userRef)
+    const userData = userSnap.exists ? (userSnap.data() || {}) : {}
+    const candidates = [userData.storageUsedBytes, userData.storageBytesUsed]
+    let currentBytes = 0
+    for (const candidate of candidates) {
+      const parsed = Number(candidate)
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        currentBytes = Math.trunc(parsed)
+        break
+      }
+    }
+
+    const nextBytes = Math.max(0, currentBytes + delta)
+    transaction.set(
+      userRef,
+      {
+        storageUsedBytes: nextBytes,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+
+    return nextBytes
+  })
+}
+
 function buildGalleryUnlockToken(galleryId, secret) {
   const expiry = Date.now() + GALLERY_TOKEN_TTL_MS
   const payload = `${galleryId}:${expiry}`
@@ -1380,20 +1480,14 @@ exports.verifyGalleryPassword = onCall(
     const galleryId = String(request.data?.galleryId || '').trim()
     const password = String(request.data?.password || '').trim()
 
-    if (!galleryId || galleryId.includes('/')) {
+    if (!normalizeGalleryId(galleryId)) {
       throw new HttpsError('invalid-argument', 'galleryId invalid.')
     }
     if (!password) {
       throw new HttpsError('invalid-argument', 'Parola este obligatorie.')
     }
 
-    const secretSnap = await db.collection('gallerySecrets').doc(galleryId).get()
-    if (!secretSnap.exists) {
-      // Gallery has no password set — deny to avoid enumeration
-      throw new HttpsError('permission-denied', 'Parolă incorectă.')
-    }
-
-    const storedHash = String(secretSnap.data()?.passwordHash || '').trim()
+    const storedHash = await getGalleryPasswordHash(galleryId)
     if (!storedHash) {
       throw new HttpsError('permission-denied', 'Parolă incorectă.')
     }
@@ -1432,6 +1526,33 @@ exports.checkGalleryUnlockToken = onCall(
 
     const valid = verifyGalleryUnlockTokenInternal(galleryId, token, GALLERY_VERIFY_SECRET.value())
     return { valid }
+  }
+)
+
+exports.saveGalleryPassword = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 30,
+  },
+  async (request) => {
+    const uid = String(request.auth?.uid || '').trim()
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat.')
+    }
+
+    const galleryId = String(request.data?.galleryId || '').trim()
+    const password = String(request.data?.password || '').trim()
+    await getOwnedGalleryOrThrow(uid, galleryId)
+
+    if (password.length > 120) {
+      throw new HttpsError('invalid-argument', 'Parola este prea lungă.')
+    }
+
+    const result = await saveGalleryPasswordHash(galleryId, password)
+    return {
+      ok: true,
+      cleared: result.cleared === true,
+    }
   }
 )
 
@@ -1659,19 +1780,10 @@ exports.sendGalleryLink = onCall(
       throw new HttpsError('invalid-argument', 'Numele clientului este obligatoriu.')
     }
 
-    const gallerySnap = await db.collection('galerii').doc(galleryId).get()
-    if (!gallerySnap.exists) {
-      throw new HttpsError('not-found', 'Galeria nu există.')
-    }
-
-    const galleryData = gallerySnap.data() || {}
-    const ownerUid = String(galleryData.userId || '').trim()
-    if (!ownerUid || ownerUid !== uid) {
-      throw new HttpsError('permission-denied', 'Nu ai permisiunea să trimiți această galerie.')
-    }
-
+    const { galleryData } = await getOwnedGalleryOrThrow(uid, galleryId)
+    const storedHash = await getGalleryPasswordHash(galleryId)
     const isPasswordProtected = galleryData?.settings?.privacy?.passwordProtected === true
-      && String(galleryData?.settings?.privacy?.passwordHash || '').trim().length > 0
+      && storedHash.length > 0
     if (isPasswordProtected && !galleryPassword) {
       throw new HttpsError('invalid-argument', 'Introdu parola galeriei pentru email.')
     }
@@ -1703,6 +1815,66 @@ exports.sendGalleryLink = onCall(
     }
   }
 )
+
+exports.updateStorageUsed = functionsV1
+  .region('us-central1')
+  .runWith({ maxInstances: 40 })
+  .https.onRequest(async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method Not Allowed' })
+      return
+    }
+
+    let uid = ''
+
+    try {
+      uid = await verifyRequestAuth(req)
+    } catch (authError) {
+      const code = authError instanceof HttpsError ? authError.code : 'unauthenticated'
+      const message = authError?.message || 'Neautorizat.'
+      res.status(code === 'permission-denied' ? 403 : 401).json({ error: message })
+      return
+    }
+
+    try {
+      const payload = parseJsonRequestBody(req)
+      const galleryId = String(payload?.galleryId || '').trim()
+      const deltaBytes = Math.trunc(Number(payload?.deltaBytes || 0))
+      if (!Number.isFinite(deltaBytes) || deltaBytes === 0) {
+        res.status(400).json({ error: 'deltaBytes invalid.' })
+        return
+      }
+
+      await getOwnedGalleryOrThrow(uid, galleryId)
+      const nextBytes = await applyUserStorageDelta(uid, deltaBytes)
+
+      res.status(200).json({
+        ok: true,
+        storageUsedBytes: nextBytes,
+      })
+    } catch (error) {
+      const code = error instanceof HttpsError ? error.code : 'internal'
+      const message = error?.message || 'Actualizarea storage-ului a eșuat.'
+      if (code === 'invalid-argument') {
+        res.status(400).json({ error: message })
+        return
+      }
+      if (code === 'permission-denied') {
+        res.status(403).json({ error: message })
+        return
+      }
+      if (code === 'not-found') {
+        res.status(404).json({ error: message })
+        return
+      }
+
+      logger.error('updateStorageUsed failed', {
+        uid,
+        error: message,
+      })
+      res.status(500).json({ error: 'Actualizarea storage-ului a eșuat.' })
+    }
+  })
 
 exports.createCheckoutSession = onCall(
   {
@@ -1940,18 +2112,11 @@ exports.deleteGalleryAssets = onRequest(
       }
       batch.delete(galleryRef)
 
-      if (removedBytes > 0) {
-        batch.set(
-          db.collection('users').doc(ownerUid),
-          {
-            storageUsedBytes: admin.firestore.FieldValue.increment(-removedBytes),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        )
-      }
-
       await batch.commit()
+
+      if (removedBytes > 0) {
+        await applyUserStorageDelta(ownerUid, -removedBytes)
+      }
 
       res.status(200).json({
         ok: true,
