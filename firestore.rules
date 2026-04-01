@@ -33,6 +33,8 @@ service cloud.firestore {
       return data.status != 'trash'
         && data.status != 'archived'
         && (!('statusActiv' in data) || data.statusActiv == true)
+        && ('publicShareRequired' in data)
+        && data.publicShareRequired == false
         && isGalleryNotExpired(data);
     }
 
@@ -392,7 +394,7 @@ service cloud.firestore {
       allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
     }
 
-    // Galleries: owner/admin full control, public read for active galleries.
+    // Galleries: owner/admin full control, public read only when explicitly public and not expired.
     match /galerii/{galerieId} {
       allow read: if isAdmin()
         || isOwner(resource.data.userId)
@@ -403,7 +405,7 @@ service cloud.firestore {
       allow delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
-    // Gallery folders: owner/admin write, public read only for active/public galleries.
+    // Gallery folders: owner/admin write, public read only when gallery is explicitly public and not expired.
     match /galerii/{galerieId}/folders/{folderId} {
       allow read: if isAdmin() || isGalleryOwnerById(galerieId) || isGalleryPublicById(galerieId);
       allow create, update, delete: if isAdmin() || isGalleryOwnerById(galerieId);
@@ -482,10 +484,9 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
-    // Private gallery password hashes — only owner/admin may read, never client-writable
+    // Private gallery password hashes — owner only
     match /gallerySecrets/{galleryId} {
-      allow read: if isAdmin() || isGalleryOwnerById(galleryId);
-      allow write: if false;
+      allow read, write: if isGalleryOwnerById(galleryId);
     }
 
     // Default deny

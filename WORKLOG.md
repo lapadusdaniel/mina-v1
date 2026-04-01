@@ -1,3 +1,26 @@
+### 2026-04-01 — Security pass 3: password regression closed, quota server-side, Firestore rules tightened
+
+- **FIX 1 — Închidere finală regresie `passwordHash` public** (`functions/index.js`, `src/modules/galleries/galleries.service.js`)
+  - `sendGalleryLink` deduce protecția prin parolă exclusiv din `gallerySecrets/{galleryId}`, nu din flag-uri publice
+  - `saveGalleryPasswordHash()` șterge explicit `settings.privacy.passwordHash` din documentul public `galerii/{galleryId}` la setare/clear
+  - `galleries.service.js` sanitizează orice payload create/update și elimină orice `settings.privacy.passwordHash` legacy înainte de scriere
+  - Pentru update-uri parțiale fără `settings`, `galleries.service.js` șterge explicit câmpul legacy din documentul public
+- **FIX 2 — Quota storage actualizată doar Worker → Function** (`functions/index.js`, `worker/r2-worker.js`)
+  - `updateStorageUsed` nu mai acceptă autentificare client Firebase; acceptă doar apel intern cu header `X-Worker-Secret`
+  - Worker-ul trimite `uid + deltaBytes` după `PUT`, `POST /confirm-upload` și `DELETE`
+  - Verificarea secretului se face constant-time în Function, iar update-ul folosește în continuare Admin SDK + contor server-side
+  - Reconfirmat că nu au rămas scrieri client-side către `users/{uid}.storageUsedBytes`
+- **FIX 3 — Firestore metadata public-read doar pentru galerii explicit publice** (`firestore.rules`)
+  - `isGalleryPublic()` cere acum explicit `publicShareRequired == false`
+  - `galerii/{galleryId}`, `folders` și `photos` nu mai sunt public-readable implicit doar pentru că galeria este activă
+  - `gallerySecrets/{galleryId}` a devenit owner-only în rules
+- Deploy complet executat cu succes:
+  - `npm run build`
+  - `firebase deploy --only firestore:rules --project mina-v1-aea51`
+  - `firebase deploy --only functions --project mina-v1-aea51 --force`
+  - `npx wrangler deploy worker/r2-worker.js --name mina-v1-r2-worker`
+  - `FIREBASE_PROJECT_ID="mina-v1-aea51" npm run deploy:hosting`
+
 ### 2026-03-31 — Security pass 2: eliminare regresie parolă, storage server-side, rules aliniate la expirare
 
 - **FIX 1 — Eliminare regresie `passwordHash` public** (`src/utils/gallerySettings.js`, `src/modules/galleries/galleries.service.js`, `src/components/GallerySettingsModal.jsx`, `functions/index.js`, `src/components/GalleryDetailView.jsx`)

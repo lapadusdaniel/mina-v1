@@ -792,11 +792,12 @@ async function resolveUserPlan({ uid, idToken, env }) {
   return 'Free'
 }
 
-async function syncStorageUsedDelta({ galleryId, deltaBytes, idToken, env }) {
-  const normalizedGalleryId = String(galleryId || '').trim()
+async function syncStorageUsedDelta({ uid, deltaBytes, env }) {
+  const normalizedUid = String(uid || '').trim()
   const delta = Math.trunc(Number(deltaBytes || 0))
-  if (!normalizedGalleryId || !Number.isFinite(delta) || delta === 0) return { ok: true, skipped: true }
-  if (!idToken || !env?.FIREBASE_PROJECT_ID) {
+  if (!normalizedUid || !Number.isFinite(delta) || delta === 0) return { ok: true, skipped: true }
+  const workerSecret = String(env?.B2_APPLICATION_KEY || '').trim()
+  if (!workerSecret || !env?.FIREBASE_PROJECT_ID) {
     throw new Error('Storage sync misconfiguration')
   }
 
@@ -807,11 +808,11 @@ async function syncStorageUsedDelta({ galleryId, deltaBytes, idToken, env }) {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${idToken}`,
         'Content-Type': 'application/json',
+        'X-Worker-Secret': workerSecret,
       },
       body: JSON.stringify({
-        galleryId: normalizedGalleryId,
+        uid: normalizedUid,
         deltaBytes: delta,
       }),
     }).catch((error) => {
@@ -1116,9 +1117,8 @@ export default {
         }
         try {
           await syncStorageUsedDelta({
-            galleryId: pathInfo.galleryId,
+            uid: authContext.uid,
             deltaBytes: meta.contentLength,
-            idToken: authContext.idToken,
             env,
           })
         } catch (syncError) {
@@ -1205,9 +1205,8 @@ export default {
         if (pathInfo.kind === 'gallery-file') {
           try {
             await syncStorageUsedDelta({
-              galleryId: pathInfo.galleryId,
+              uid: authContext.uid,
               deltaBytes: uploadBytes,
-              idToken: authContext.idToken,
               env,
             })
           } catch (syncError) {
@@ -1238,9 +1237,8 @@ export default {
           }
           if (prefixInfo.kind === 'gallery-manage-prefix' && deletedBytes > 0) {
             await syncStorageUsedDelta({
-              galleryId: prefixInfo.galleryId,
+              uid: authContext.uid,
               deltaBytes: -deletedBytes,
-              idToken: authContext.idToken,
               env,
             })
             applyQuotaCacheDelta(authContext.uid, -deletedBytes)
@@ -1259,9 +1257,8 @@ export default {
         await b2Delete(pathInfo.key, env)
         if (pathInfo.kind === 'gallery-file' && existingMeta?.contentLength > 0) {
           await syncStorageUsedDelta({
-            galleryId: pathInfo.galleryId,
+            uid: authContext.uid,
             deltaBytes: -existingMeta.contentLength,
-            idToken: authContext.idToken,
             env,
           })
           applyQuotaCacheDelta(authContext.uid, -existingMeta.contentLength)

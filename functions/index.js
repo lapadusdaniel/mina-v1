@@ -169,6 +169,16 @@ function parseJsonRequestBody(req) {
   }
 }
 
+function constantTimeSecretEquals(left, right) {
+  const leftValue = String(left || '')
+  const rightValue = String(right || '')
+  if (!leftValue || !rightValue) return false
+
+  const leftHash = crypto.createHash('sha256').update(leftValue).digest()
+  const rightHash = crypto.createHash('sha256').update(rightValue).digest()
+  return crypto.timingSafeEqual(leftHash, rightHash)
+}
+
 async function verifyRequestAuth(req) {
   const authHeader = readBearerAuthHeader(req)
   const token = authHeader.slice('Bearer '.length).trim()
@@ -1388,20 +1398,31 @@ async function saveGalleryPasswordHash(galleryId, password = '') {
   }
 
   const secretRef = db.collection('gallerySecrets').doc(normalizedGalleryId)
+  const galleryRef = db.collection('galerii').doc(normalizedGalleryId)
   const normalizedPassword = String(password || '').trim()
   if (!normalizedPassword) {
-    await secretRef.delete().catch(() => {})
+    await Promise.all([
+      secretRef.delete().catch(() => {}),
+      galleryRef.update({
+        'settings.privacy.passwordHash': admin.firestore.FieldValue.delete(),
+      }).catch(() => {}),
+    ])
     return { cleared: true }
   }
 
   const passwordHash = crypto.createHash('sha256').update(normalizedPassword).digest('hex')
-  await secretRef.set(
-    {
-      passwordHash,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  )
+  await Promise.all([
+    secretRef.set(
+      {
+        passwordHash,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    ),
+    galleryRef.update({
+      'settings.privacy.passwordHash': admin.firestore.FieldValue.delete(),
+    }).catch(() => {}),
+  ])
 
   return { cleared: false, passwordHash }
 }
@@ -1782,8 +1803,7 @@ exports.sendGalleryLink = onCall(
 
     const { galleryData } = await getOwnedGalleryOrThrow(uid, galleryId)
     const storedHash = await getGalleryPasswordHash(galleryId)
-    const isPasswordProtected = galleryData?.settings?.privacy?.passwordProtected === true
-      && storedHash.length > 0
+    const isPasswordProtected = storedHash.length > 0
     if (isPasswordProtected && !galleryPassword) {
       throw new HttpsError('invalid-argument', 'Introdu parola galeriei pentru email.')
     }
@@ -1818,34 +1838,35 @@ exports.sendGalleryLink = onCall(
 
 exports.updateStorageUsed = functionsV1
   .region('us-central1')
-  .runWith({ maxInstances: 40 })
+  .runWith({ maxInstances: 40, secrets: ['B2_APPLICATION_KEY'] })
   .https.onRequest(async (req, res) => {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method Not Allowed' })
       return
     }
 
-    let uid = ''
-
-    try {
-      uid = await verifyRequestAuth(req)
-    } catch (authError) {
-      const code = authError instanceof HttpsError ? authError.code : 'unauthenticated'
-      const message = authError?.message || 'Neautorizat.'
-      res.status(code === 'permission-denied' ? 403 : 401).json({ error: message })
+    const workerSecret = String(req.get('X-Worker-Secret') || '').trim()
+    const expectedSecret = String(B2_APPLICATION_KEY.value() || '').trim()
+    if (!constantTimeSecretEquals(workerSecret, expectedSecret)) {
+      res.status(403).json({ error: 'Forbidden' })
       return
     }
 
+    let uid = ''
+
     try {
       const payload = parseJsonRequestBody(req)
-      const galleryId = String(payload?.galleryId || '').trim()
+      uid = String(payload?.uid || '').trim()
       const deltaBytes = Math.trunc(Number(payload?.deltaBytes || 0))
+      if (!uid || uid.includes('/')) {
+        res.status(400).json({ error: 'uid invalid.' })
+        return
+      }
       if (!Number.isFinite(deltaBytes) || deltaBytes === 0) {
         res.status(400).json({ error: 'deltaBytes invalid.' })
         return
       }
 
-      await getOwnedGalleryOrThrow(uid, galleryId)
       const nextBytes = await applyUserStorageDelta(uid, deltaBytes)
 
       res.status(200).json({

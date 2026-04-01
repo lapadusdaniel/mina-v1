@@ -108,6 +108,24 @@ function sanitizeSelectionLists(lists = [], fallbackKeys = []) {
   }]
 }
 
+function stripLegacyGalleryPasswordHash(data = {}) {
+  const next = { ...(data || {}) }
+  const settings = next.settings && typeof next.settings === 'object'
+    ? { ...next.settings }
+    : null
+  const privacy = settings?.privacy && typeof settings.privacy === 'object'
+    ? { ...settings.privacy }
+    : null
+
+  if (privacy && Object.prototype.hasOwnProperty.call(privacy, 'passwordHash')) {
+    delete privacy.passwordHash
+    settings.privacy = privacy
+    next.settings = settings
+  }
+
+  return next
+}
+
 async function syncSelectionAggregates(db, galleryId) {
   const allSnap = await getDocs(collection(db, 'gallerySelections', galleryId, 'clients'))
   let clientsCount = 0
@@ -228,7 +246,8 @@ export function createGalleriesModule({ db }) {
 
     async createGallery(data) {
       const normalizedSlug = String(data?.slug || '').trim().toLowerCase()
-      const payload = normalizedSlug ? { ...data, slug: normalizedSlug } : { ...data }
+      const sanitizedData = stripLegacyGalleryPasswordHash(data)
+      const payload = normalizedSlug ? { ...sanitizedData, slug: normalizedSlug } : { ...sanitizedData }
 
       const docRef = await addDoc(collection(db, 'galerii'), payload)
 
@@ -248,7 +267,16 @@ export function createGalleriesModule({ db }) {
     },
 
     async updateGallery(galleryId, data) {
-      await updateDoc(doc(db, 'galerii', galleryId), data)
+      const sanitizedData = stripLegacyGalleryPasswordHash(data)
+      if (Object.prototype.hasOwnProperty.call(sanitizedData, 'settings')) {
+        await updateDoc(doc(db, 'galerii', galleryId), sanitizedData)
+        return
+      }
+
+      await updateDoc(doc(db, 'galerii', galleryId), {
+        ...sanitizedData,
+        'settings.privacy.passwordHash': deleteField(),
+      })
     },
 
     async saveGalleryPassword(galleryId, password = '') {
