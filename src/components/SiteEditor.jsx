@@ -74,7 +74,14 @@ const optimizePortfolioImage = async (file, maxDimension = 2400, quality = 0.86)
   }
 }
 
-const EDITOR_TABS = ['Acasă', 'Portofoliu', 'Prețuri', 'Despre']
+const EDITOR_TABS = ['Copertă', 'Portofoliu', 'Colecții', 'Despre', 'Design']
+
+const COLOR_PALETTES = [
+  { name: 'Nisip', value: '#9b765c' },
+  { name: 'Măsliniu', value: '#6f7257' },
+  { name: 'Burgundy', value: '#784b4b' },
+  { name: 'Grafit', value: '#343434' },
+]
 
 // ── Shared styles ─────────────────────────────
 const S = {
@@ -229,11 +236,31 @@ const Divider = () => (
   <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '20px 0' }} />
 )
 
+function ToggleField({ label, hint, checked, onChange }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, padding: '11px 0', cursor: 'pointer' }}>
+      <span>
+        <strong style={{ display: 'block', marginBottom: 3, fontSize: 13, fontWeight: 500, color: '#343438' }}>{label}</strong>
+        {hint && <small style={{ display: 'block', color: '#9999a0', fontSize: 11, lineHeight: 1.45 }}>{hint}</small>}
+      </span>
+      <span style={{ position: 'relative', flexShrink: 0, width: 36, height: 20, borderRadius: 999, background: checked ? '#1a1a1f' : '#d9d9dd', transition: 'background 0.15s' }}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+        />
+        <i style={{ position: 'absolute', top: 3, left: checked ? 19 : 3, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.15s' }} />
+      </span>
+    </label>
+  )
+}
+
 // ═══════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
 export default function SiteEditor({ user, userPlan = 'Free', planLoading = false }) {
-  const [activeTab, setActiveTab] = useState('Acasă')
+  const [activeTab, setActiveTab] = useState('Copertă')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -252,16 +279,23 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
   const [categoryPhotoUrls, setCategoryPhotoUrls] = useState({})
 
   const [form, setForm] = useState({
-    // Acasă
+    templateVersion: 2,
+    siteTemplate: 'editorial',
+    // Copertă
     heroEyebrow: '',
     heroTitle: '',
     tagline: '',
     coverPhotoPath: '',
+    portfolioIntro: '',
+    pricingIntro: '',
     contactEmail: '',
     contactPhone: '',
     contactTitle: '',
     contactSub: '',
-    accentColor: '#1a1a1f',
+    accentColor: '#9b765c',
+    showPortfolio: true,
+    showPricing: true,
+    showAbout: true,
     // Portfolio
     portfolio: [],
     // Pricing
@@ -711,7 +745,7 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
           flexDirection: 'column',
         }}>
 
-          {/* Tab nav inside left panel */}
+          {/* Section navigation */}
           <div style={{
             display: 'flex',
             borderBottom: '1px solid rgba(0,0,0,0.07)',
@@ -732,7 +766,7 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
                   border: 'none',
                   borderBottom: activeTab === tab ? '2px solid #1a1a1f' : '2px solid transparent',
                   fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: activeTab === tab ? 500 : 400,
                   color: activeTab === tab ? '#1a1a1f' : '#888',
                   cursor: 'pointer',
@@ -749,15 +783,15 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
           {/* Tab content */}
           <div style={{ padding: '20px 20px 40px', overflowY: 'auto', flex: 1 }}>
 
-            {/* ── ACASĂ ── */}
-            {activeTab === 'Acasă' && (
+            {/* ── COPERTĂ ── */}
+            {activeTab === 'Copertă' && (
               <>
                 <PhotoField
                   label="Fotografie copertă"
                   currentUrl={coverPreviewUrl}
                   onUpload={handleCoverUpload}
                   uploading={uploadingCover}
-                  hint="Imaginea hero de pe pagina principală."
+                  hint="Imagine verticală sau landscape, cu subiectul cât mai aproape de centru."
                 />
                 <Divider />
                 <FInput label="Titlu principal" value={form.heroTitle} onChange={set('heroTitle')} placeholder="Fotografii care spun povești" />
@@ -776,8 +810,17 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
             {activeTab === 'Portofoliu' && (
               <>
                 <p style={{ fontSize: '12px', fontWeight: 300, color: '#888', marginBottom: 16, lineHeight: 1.6 }}>
-                  Organizează fotografiile în categorii. Fiecare categorie apare ca filtru pe site.
+                  Fiecare categorie devine o poveste vizuală pe pagina principală.
                 </p>
+
+                <FTextarea
+                  label="Introducere portofoliu"
+                  value={form.portfolioIntro}
+                  onChange={set('portfolioIntro')}
+                  placeholder="Momente autentice, observate discret și păstrate cu grijă."
+                  rows={3}
+                />
+                <Divider />
 
                 {(form.portfolio || []).map((cat) => (
                   <div key={cat.id} style={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
@@ -853,12 +896,21 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
               </>
             )}
 
-            {/* ── PREȚURI ── */}
-            {activeTab === 'Prețuri' && (
+            {/* ── COLECȚII ── */}
+            {activeTab === 'Colecții' && (
               <>
                 <p style={{ fontSize: '12px', fontWeight: 300, color: '#888', marginBottom: 16, lineHeight: 1.6 }}>
-                  Adaugă tipuri de evenimente și pachete de prețuri.
+                  Prezintă serviciile ca experiențe, nu ca o simplă listă de prețuri.
                 </p>
+
+                <FTextarea
+                  label="Introducere colecții"
+                  value={form.pricingIntro}
+                  onChange={set('pricingIntro')}
+                  placeholder="Alege punctul de pornire. Detaliile finale le stabilim împreună."
+                  rows={3}
+                />
+                <Divider />
 
                 {(form.pricing || []).map((ev) => (
                   <div key={ev.id} style={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, marginBottom: 16, overflow: 'hidden' }}>
@@ -948,7 +1000,7 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
                               onChange={(e) => updatePackage(ev.id, pkg.id, 'featured', e.target.checked)}
                               style={{ accentColor: '#1a1a1f', width: 14, height: 14 }}
                             />
-                            <span style={{ fontSize: '12px', fontWeight: 400, color: '#555' }}>Marcat ca „Recomandat"</span>
+                            <span style={{ fontSize: '12px', fontWeight: 400, color: '#555' }}>Marcat ca „Preferată"</span>
                           </label>
                         </div>
                       ))}
@@ -969,7 +1021,7 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
                   currentUrl={profilePreviewUrl}
                   onUpload={handleProfileUpload}
                   uploading={uploadingProfile}
-                  hint="Afișată în tab-ul Despre. Format pătrat recomandat."
+                  hint="Afișată într-o secțiune amplă. O fotografie verticală funcționează cel mai bine."
                 />
                 <Divider />
                 <FInput label="Titlu / Nume" value={form.aboutTitle} onChange={set('aboutTitle')} placeholder={brandName} />
@@ -990,6 +1042,70 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
                 <FInput label="Instagram" value={form.socialLinks?.instagram} onChange={setNested('socialLinks', 'instagram')} placeholder="https://instagram.com/username" />
                 <FInput label="Facebook" value={form.socialLinks?.facebook} onChange={setNested('socialLinks', 'facebook')} placeholder="https://facebook.com/pagina" />
                 <FInput label="Website" value={form.socialLinks?.website} onChange={setNested('socialLinks', 'website')} placeholder="https://studiofoto.ro" />
+              </>
+            )}
+
+            {/* ── DESIGN ── */}
+            {activeTab === 'Design' && (
+              <>
+                <p style={sectionHeadStyle}>Stil vizual</p>
+                <div style={{ padding: 14, marginBottom: 18, border: '1px solid #dedbd5', borderRadius: 10, background: '#f7f4ee' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <strong style={{ display: 'block', fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 21, fontWeight: 400 }}>Editorial</strong>
+                      <span style={{ color: '#85817a', fontSize: 11 }}>Elegant, cinematografic, orientat spre fotografie</span>
+                    </div>
+                    <Check size={16} color="#6d7258" />
+                  </div>
+                </div>
+
+                <Field label="Culoare de accent" hint="Folosită discret pentru etichete și detalii.">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    {COLOR_PALETTES.map((palette) => {
+                      const selected = form.accentColor === palette.value
+                      return (
+                        <button
+                          key={palette.value}
+                          type="button"
+                          title={palette.name}
+                          aria-label={palette.name}
+                          onClick={() => set('accentColor')(palette.value)}
+                          style={{
+                            height: 42,
+                            padding: 4,
+                            border: selected ? '2px solid #1a1a1f' : '1px solid #dedee2',
+                            borderRadius: 8,
+                            background: '#fff',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: 4, background: palette.value }} />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </Field>
+
+                <Divider />
+                <p style={sectionHeadStyle}>Secțiuni vizibile</p>
+                <ToggleField
+                  label="Portofoliu"
+                  hint="Poveștile și galeria completă"
+                  checked={form.showPortfolio !== false}
+                  onChange={set('showPortfolio')}
+                />
+                <ToggleField
+                  label="Colecții"
+                  hint="Pachetele și prețurile configurate"
+                  checked={form.showPricing !== false}
+                  onChange={set('showPricing')}
+                />
+                <ToggleField
+                  label="Despre"
+                  hint="Fotografia, biografia și experiența"
+                  checked={form.showAbout !== false}
+                  onChange={set('showAbout')}
+                />
               </>
             )}
 

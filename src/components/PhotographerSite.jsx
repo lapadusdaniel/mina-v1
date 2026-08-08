@@ -9,8 +9,8 @@ const { sites: sitesService, media: mediaService } = getAppServices()
 
 const normalizeUrl = (url) => {
   if (!url || typeof url !== 'string') return '#'
-  const t = url.trim()
-  return /^https?:\/\//i.test(t) ? t : `https://${t}`
+  const value = url.trim()
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`
 }
 
 const normalizeSocialUrl = (url, network) => {
@@ -47,16 +47,15 @@ const whatsappNumber = (value) => {
   return digits
 }
 
-// ── Contact Form ──────────────────────────────
 function ContactForm({ photographerUid }) {
   const [form, setForm] = useState({ name: '', email: '', phone: '', message: '', websiteConfirm: '' })
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }))
+  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     if (!form.name || !form.email) return
     setSending(true)
     setSubmitError('')
@@ -64,20 +63,16 @@ function ContactForm({ photographerUid }) {
       await sitesService.submitContactMessage({ ...form, photographerUid })
       setSent(true)
       setForm({ name: '', email: '', phone: '', message: '', websiteConfirm: '' })
-    } catch (err) {
-      console.error(err)
-      setSubmitError('Mesajul nu a putut fi trimis. Încearcă din nou sau folosește datele de contact de mai sus.')
+    } catch (error) {
+      console.error(error)
+      setSubmitError('Mesajul nu a putut fi trimis. Încearcă din nou sau folosește datele de contact.')
     } finally {
       setSending(false)
     }
   }
 
   if (sent) {
-    return (
-      <div className="ps-form-success">
-        Mesaj trimis. Te voi contacta în curând.
-      </div>
-    )
+    return <div className="ps-form-success">Mesaj trimis. Te voi contacta în curând.</div>
   }
 
   return (
@@ -94,8 +89,9 @@ function ContactForm({ photographerUid }) {
       />
       <div className="ps-form-row">
         <div className="ps-form-field">
-          <label className="ps-form-label">Nume</label>
+          <label className="ps-form-label" htmlFor="ps-contact-name">Nume</label>
           <input
+            id="ps-contact-name"
             className="ps-form-input"
             type="text"
             placeholder="Prenume Nume"
@@ -105,8 +101,9 @@ function ContactForm({ photographerUid }) {
           />
         </div>
         <div className="ps-form-field">
-          <label className="ps-form-label">Email</label>
+          <label className="ps-form-label" htmlFor="ps-contact-email">Email</label>
           <input
+            id="ps-contact-email"
             className="ps-form-input"
             type="email"
             placeholder="email@exemplu.ro"
@@ -117,8 +114,9 @@ function ContactForm({ photographerUid }) {
         </div>
       </div>
       <div className="ps-form-field">
-        <label className="ps-form-label">Telefon</label>
+        <label className="ps-form-label" htmlFor="ps-contact-phone">Telefon</label>
         <input
+          id="ps-contact-phone"
           className="ps-form-input"
           type="tel"
           placeholder="+40 712 345 678"
@@ -127,8 +125,9 @@ function ContactForm({ photographerUid }) {
         />
       </div>
       <div className="ps-form-field">
-        <label className="ps-form-label">Mesaj</label>
+        <label className="ps-form-label" htmlFor="ps-contact-message">Mesaj</label>
         <textarea
+          id="ps-contact-message"
           className="ps-form-textarea"
           rows={5}
           placeholder="Spune-mi despre evenimentul tău — dată, locație, detalii..."
@@ -136,11 +135,7 @@ function ContactForm({ photographerUid }) {
           onChange={set('message')}
         />
       </div>
-      <button
-        type="submit"
-        className="ps-form-submit"
-        disabled={sending}
-      >
+      <button type="submit" className="ps-form-submit" disabled={sending}>
         {sending ? 'Se trimite...' : 'Trimite mesaj'}
       </button>
       {submitError && <p className="ps-form-error" role="alert">{submitError}</p>}
@@ -148,43 +143,35 @@ function ContactForm({ photographerUid }) {
   )
 }
 
-// ── Main Component ────────────────────────────
 export default function PhotographerSite({ previewData = null }) {
-  const [activeTab, setActiveTab] = useState('Acasă')
   const [siteData, setSiteData] = useState(previewData)
   const [profile, setProfile] = useState(null)
   const [logoUrl, setLogoUrl] = useState(null)
   const [coverUrl, setCoverUrl] = useState(null)
   const [profilePhotoUrl, setProfilePhotoUrl] = useState(null)
-  const [loading, setLoading] = useState(!previewData)
-  const [error, setError] = useState(null)
-
-  // Portfolio state
+  const [projectCovers, setProjectCovers] = useState({})
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [categoryPhotos, setCategoryPhotos] = useState({})
   const [loadingPhotos, setLoadingPhotos] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [loading, setLoading] = useState(!previewData)
+  const [error, setError] = useState(null)
   const [lightbox, setLightbox] = useState({ open: false, index: 0, slides: [] })
   const loadingCategoryIds = useRef(new Set())
 
-  // Despre: horizontal strip photos
-  const [stripPhotos, setStripPhotos] = useState([])
+  const slug = previewData ? null : window.location.pathname.replace(/^\//, '').split('/')[0]
 
-  const slug = previewData
-    ? null
-    : window.location.pathname.replace(/^\//, '').split('/')[0]
+  const scrollToSection = useCallback((sectionId) => {
+    setMobileNavOpen(false)
+    const target = document.getElementById(sectionId)
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
 
-  const changeTab = useCallback((tab) => {
-    setActiveTab(tab)
-    if (!previewData) {
-      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
-    }
-  }, [previewData])
-
-  // ── Load site data ──
   useEffect(() => {
     if (previewData) {
       setSiteData(previewData)
-      return () => { document.documentElement.removeAttribute('data-theme') }
+      setLoading(false)
+      return
     }
     if (!slug) {
       setError('Pagină negăsită.')
@@ -192,84 +179,89 @@ export default function PhotographerSite({ previewData = null }) {
       return
     }
 
+    let cancelled = false
     const load = async () => {
       try {
         const data = await sitesService.getSiteBySlug(slug)
         if (!data) {
-          setError('Pagina nu a fost găsită.')
-          setLoading(false)
+          if (!cancelled) setError('Pagina nu a fost găsită.')
           return
         }
+        if (cancelled) return
         setSiteData(data)
-
         const profileData = await sitesService.getProfile(data.uid)
         if (profileData) {
           setProfile(profileData)
-          if (profileData.theme === 'minimal') {
-            document.documentElement.setAttribute('data-theme', 'minimal')
-          }
         } else {
           const legacy = await sitesService.getLegacySettings(data.uid)
-          if (legacy) {
-            setProfile((p) => ({
-              ...(p || {}),
+          if (legacy && !cancelled) {
+            setProfile({
               brandName: legacy.numeBrand || '',
               instagramUrl: legacy.instagram || '',
               websiteUrl: legacy.website || '',
-            }))
+            })
           }
         }
-      } catch (err) {
-        console.error(err)
-        setError('Eroare la încărcare.')
+      } catch (loadError) {
+        console.error(loadError)
+        if (!cancelled) setError('Eroare la încărcare.')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
-
-    return () => { document.documentElement.removeAttribute('data-theme') }
+    return () => { cancelled = true }
   }, [slug, previewData])
 
-  // ── Load static images ──
   useEffect(() => {
     if (!siteData) return
+    let cancelled = false
 
-    if (siteData.logoPath) {
-      mediaService.getBrandingAsset(siteData.logoPath).then(setLogoUrl).catch(() => {})
-    }
-
-    const coverPath = siteData.coverPhotoPath || siteData.heroImagePath
-    if (coverPath) {
-      mediaService.getBrandingAsset(coverPath).then(setCoverUrl).catch(() => {
-        mediaService.getPhotoUrl(coverPath, 'original').then(setCoverUrl).catch(() => {})
-      })
-    } else {
-      const fallbackPhoto = (siteData.portfolio || [])
-        .flatMap((category) => category.photos || [])
-        .find((photo) => photo?.key)
-      if (fallbackPhoto?.key) {
-        mediaService.getBrandingAsset(fallbackPhoto.key).then(setCoverUrl).catch(() => {})
+    const resolveAsset = async (path) => {
+      if (!path) return null
+      try {
+        return await mediaService.getBrandingAsset(path)
+      } catch {
+        try {
+          return await mediaService.getPhotoUrl(path, 'original')
+        } catch {
+          return null
+        }
       }
     }
 
+    if (siteData.logoPath) resolveAsset(siteData.logoPath).then((url) => !cancelled && setLogoUrl(url))
+
+    const fallbackPhoto = (siteData.portfolio || [])
+      .flatMap((category) => category.photos || [])
+      .find((photo) => photo?.key)
+    const coverPath = siteData.coverPhotoPath || siteData.heroImagePath || fallbackPhoto?.key
+    resolveAsset(coverPath).then((url) => !cancelled && setCoverUrl(url))
+
     const profilePath = siteData.profilePhotoPath || siteData.aboutImagePath
-    if (profilePath) {
-      mediaService.getBrandingAsset(profilePath).then(setProfilePhotoUrl).catch(() => {
-        mediaService.getPhotoUrl(profilePath, 'original').then(setProfilePhotoUrl).catch(() => {})
-      })
+    resolveAsset(profilePath).then((url) => !cancelled && setProfilePhotoUrl(url))
+
+    const loadProjectCovers = async () => {
+      const entries = await Promise.all(
+        (siteData.portfolio || []).map(async (category, index) => {
+          const firstPhoto = (category.photos || []).find((photo) => photo?.key)
+          if (!firstPhoto) return null
+          const url = await resolveAsset(firstPhoto.key)
+          return url ? [category.id || `category-${index}`, url] : null
+        })
+      )
+      if (!cancelled) setProjectCovers(Object.fromEntries(entries.filter(Boolean)))
     }
+    loadProjectCovers()
+
+    return () => { cancelled = true }
   }, [siteData])
 
-  // Keep the browser title and description relevant to the photographer,
-  // instead of showing Mina's generic landing-page metadata.
   useEffect(() => {
     if (previewData || !siteData) return
-
     const metadataBrand = siteData.siteName || siteData.brandName || profile?.brandName || 'Fotograf'
     const metadataDescription = (
-      siteData.tagline || siteData.heroBio ||
-      `Portofoliul foto și datele de contact pentru ${metadataBrand}.`
+      siteData.tagline || siteData.heroBio || `Portofoliul foto și datele de contact pentru ${metadataBrand}.`
     ).trim()
     const previousTitle = document.title
     let descriptionMeta = document.querySelector('meta[name="description"]')
@@ -281,8 +273,7 @@ export default function PhotographerSite({ previewData = null }) {
       descriptionMeta.setAttribute('name', 'description')
       document.head.appendChild(descriptionMeta)
     }
-
-    document.title = `${metadataBrand} — Portofoliu foto`
+    document.title = `${metadataBrand} — Fotograf`
     descriptionMeta.setAttribute('content', metadataDescription.slice(0, 160))
 
     return () => {
@@ -292,80 +283,52 @@ export default function PhotographerSite({ previewData = null }) {
     }
   }, [siteData, profile, previewData])
 
-  // ── Init portfolio selected category ──
-  useEffect(() => {
-    if (activeTab !== 'Portofoliu' || !siteData) return
-    const portfolio = siteData.portfolio || []
-    if (portfolio.length > 0 && !selectedCategory) {
-      setSelectedCategory(portfolio[0].id)
+  const loadCategoryPhotos = useCallback(async (categoryId) => {
+    if (!siteData || categoryPhotos[categoryId] !== undefined || loadingCategoryIds.current.has(categoryId)) return
+    const category = (siteData.portfolio || []).find((item, index) => (item.id || `category-${index}`) === categoryId)
+    if (!category?.photos?.length) {
+      setCategoryPhotos((current) => ({ ...current, [categoryId]: [] }))
+      return
     }
-  }, [activeTab, siteData, selectedCategory])
 
-  // ── Load photos for a category ──
-  const loadCategoryPhotos = useCallback(
-    async (categoryId) => {
-      if (!siteData || categoryPhotos[categoryId] !== undefined || loadingCategoryIds.current.has(categoryId)) return
-      const portfolio = siteData.portfolio || []
-      const cat = portfolio.find((c) => c.id === categoryId)
+    loadingCategoryIds.current.add(categoryId)
+    setLoadingPhotos(true)
+    setCategoryPhotos((current) => ({ ...current, [categoryId]: [] }))
+    const photos = category.photos.filter((photo) => photo?.key)
+    const resolved = []
 
-      if (!cat?.photos?.length) {
-        setCategoryPhotos((p) => ({ ...p, [categoryId]: [] }))
-        return
+    try {
+      for (let start = 0; start < photos.length; start += 6) {
+        const batch = await Promise.all(
+          photos.slice(start, start + 6).map(async (photo) => {
+            try {
+              return { url: await mediaService.getBrandingAsset(photo.key), key: photo.key }
+            } catch {
+              return null
+            }
+          })
+        )
+        resolved.push(...batch.filter(Boolean))
+        setCategoryPhotos((current) => ({ ...current, [categoryId]: [...resolved] }))
       }
+    } finally {
+      loadingCategoryIds.current.delete(categoryId)
+      setLoadingPhotos(false)
+    }
+  }, [siteData, categoryPhotos])
 
-      loadingCategoryIds.current.add(categoryId)
-      setLoadingPhotos(true)
-      setCategoryPhotos((p) => ({ ...p, [categoryId]: [] }))
-      const photos = cat.photos.filter((photo) => photo?.key)
-      const urls = []
-
-      try {
-        for (let start = 0; start < photos.length; start += 6) {
-          const batch = await Promise.all(
-            photos.slice(start, start + 6).map(async (photo) => {
-              try {
-                return { url: await mediaService.getBrandingAsset(photo.key), key: photo.key }
-              } catch {
-                return null
-              }
-            })
-          )
-          urls.push(...batch.filter(Boolean))
-          setCategoryPhotos((p) => ({ ...p, [categoryId]: [...urls] }))
-        }
-      } finally {
-        loadingCategoryIds.current.delete(categoryId)
-        setLoadingPhotos(false)
-      }
-    },
-    [siteData, categoryPhotos]
-  )
+  useEffect(() => {
+    if (!siteData || selectedCategory) return
+    const firstCategoryIndex = (siteData.portfolio || []).findIndex((category) => category.photos?.some((photo) => photo?.key))
+    if (firstCategoryIndex >= 0) {
+      const category = siteData.portfolio[firstCategoryIndex]
+      setSelectedCategory(category.id || `category-${firstCategoryIndex}`)
+    }
+  }, [siteData, selectedCategory])
 
   useEffect(() => {
     if (selectedCategory) loadCategoryPhotos(selectedCategory)
   }, [selectedCategory, loadCategoryPhotos])
-
-  // ── Load strip photos for Despre tab ──
-  useEffect(() => {
-    if (activeTab !== 'Despre' || !siteData || stripPhotos.length > 0) return
-    const portfolio = siteData.portfolio || []
-    if (!portfolio.length) return
-
-    let cancelled = false
-    const loadStrip = async () => {
-      const photos = []
-      for (const cat of portfolio.slice(0, 6)) {
-        if (!cat.photos?.length) continue
-        try {
-          const url = await mediaService.getBrandingAsset(cat.photos[0].key)
-          photos.push(url)
-        } catch { /* skip */ }
-      }
-      if (!cancelled) setStripPhotos(photos)
-    }
-    loadStrip()
-    return () => { cancelled = true }
-  }, [activeTab, siteData, stripPhotos.length])
 
   if (loading) {
     return (
@@ -388,360 +351,261 @@ export default function PhotographerSite({ previewData = null }) {
 
   if (!siteData) return null
 
-  // ── Derived values ──
   const brandName = siteData.siteName || siteData.brandName || profile?.brandName || 'Fotograf'
   const tagline = siteData.tagline || siteData.heroBio || ''
   const heroTitle = siteData.heroTitle || brandName
-  const heroLabel = siteData.heroEyebrow || ''
+  const heroLabel = siteData.heroEyebrow || 'Fotografie cu sens'
   const bio = siteData.bio || siteData.aboutBio || ''
-  const portfolio = siteData.portfolio || []
-  const pricing = siteData.pricing || []
+  const portfolio = (siteData.portfolio || [])
+    .map((category, index) => ({ ...category, resolvedId: category.id || `category-${index}` }))
+    .filter((category) => category.photos?.some((photo) => photo?.key))
+  const pricing = (siteData.pricing || []).filter((eventType) => eventType.packages?.length > 0)
   const socialLinks = siteData.socialLinks || {}
   const instagram = socialLinks.instagram || siteData.instagram || profile?.instagramUrl || ''
   const facebook = socialLinks.facebook || ''
   const website = socialLinks.website || siteData.websiteUrl || profile?.websiteUrl || ''
   const contactEmail = siteData.contactEmail || ''
   const contactPhone = siteData.contactPhone || profile?.whatsappNumber || ''
-
+  const currentCategory = portfolio.find((category) => category.resolvedId === selectedCategory)
   const currentCategoryPhotos = selectedCategory ? (categoryPhotos[selectedCategory] || []) : []
-  const hasPortfolio = portfolio.some((category) => category.photos?.some((photo) => photo?.key))
-  const hasPricing = pricing.some((eventType) => eventType.packages?.length > 0)
-  const hasAbout = Boolean(
+  const hasPortfolio = portfolio.length > 0 && siteData.showPortfolio !== false
+  const hasPricing = pricing.length > 0 && siteData.showPricing !== false
+  const hasAbout = siteData.showAbout !== false && Boolean(
     bio || siteData.profilePhotoPath || siteData.aboutImagePath ||
     siteData.yearsExp || siteData.sessionsCount || siteData.citiesCount
   )
-  const visibleTabs = [
-    'Acasă',
-    ...(hasPortfolio ? ['Portofoliu'] : []),
-    ...(hasPricing ? ['Prețuri'] : []),
-    ...(hasAbout ? ['Despre'] : []),
-    'Contact',
-  ]
+  const themeStyle = {
+    '--ps-accent': siteData.accentColor || '#9b765c',
+  }
+
+  const openProject = (categoryId) => {
+    setSelectedCategory(categoryId)
+    window.requestAnimationFrame(() => scrollToSection('portfolio-gallery'))
+  }
 
   return (
-    <div className="ps-root">
-
-      {/* ── Nav ── */}
-      <nav className="ps-nav">
-        <div className="ps-nav-left">
+    <div className="ps-root ps-root--editorial" style={themeStyle}>
+      <nav className="ps-nav" aria-label="Navigare principală">
+        <button className="ps-nav-identity" onClick={() => scrollToSection('home')} aria-label="Acasă">
           {logoUrl
             ? <img src={logoUrl} alt={brandName} className="ps-nav-logo" />
             : <span className="ps-nav-brand">{brandName}</span>
           }
-        </div>
-        <div className="ps-nav-tabs" role="tablist">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab}
-              role="tab"
-              aria-selected={activeTab === tab}
-              className={`ps-nav-tab${activeTab === tab ? ' ps-nav-tab--active' : ''}`}
-              onClick={() => changeTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
+        </button>
+        <button
+          className={`ps-menu-toggle${mobileNavOpen ? ' is-open' : ''}`}
+          onClick={() => setMobileNavOpen((open) => !open)}
+          aria-label={mobileNavOpen ? 'Închide meniul' : 'Deschide meniul'}
+          aria-expanded={mobileNavOpen}
+        >
+          <span />
+          <span />
+        </button>
+        <div className={`ps-nav-links${mobileNavOpen ? ' is-open' : ''}`}>
+          {hasPortfolio && <button onClick={() => scrollToSection('work')}>Portofoliu</button>}
+          {hasAbout && <button onClick={() => scrollToSection('about')}>Despre</button>}
+          {hasPricing && <button onClick={() => scrollToSection('collections')}>Colecții</button>}
+          <button className="ps-nav-contact" onClick={() => scrollToSection('contact')}>Contact</button>
         </div>
       </nav>
 
-      {/* ── Tab Content ── */}
-      <main className="ps-main">
-
-        {/* ── ACASĂ ── */}
-        {activeTab === 'Acasă' && (
-          <div className="ps-hero">
-            <div className="ps-hero-bg">
-              {coverUrl && <img src={coverUrl} alt="" className="ps-hero-img" />}
+      <main>
+        <section id="home" className={`ps-hero${coverUrl ? '' : ' ps-hero--empty'}`}>
+          {coverUrl && <img src={coverUrl} alt="" className="ps-hero-img" />}
+          <div className="ps-hero-overlay" />
+          <div className="ps-hero-content">
+            <span className="ps-kicker ps-kicker--light">{heroLabel}</span>
+            <h1 className="ps-hero-title">{heroTitle}</h1>
+            {tagline && <p className="ps-hero-tagline">{tagline}</p>}
+            <div className="ps-hero-actions">
+              {hasPortfolio && <button onClick={() => scrollToSection('work')}>Descoperă poveștile</button>}
+              <button className="ps-text-button ps-text-button--light" onClick={() => scrollToSection('contact')}>Verifică disponibilitatea</button>
             </div>
-            <div className="ps-hero-overlay" />
-            <div className="ps-hero-content">
-              {heroLabel && (
-                <span className="ps-hero-label">{heroLabel}</span>
-              )}
-              <h1 className="ps-hero-title">{heroTitle}</h1>
-              {tagline && <p className="ps-hero-tagline">{tagline}</p>}
-              <div className="ps-hero-actions">
-                {hasPortfolio && (
-                  <button className="ps-hero-button ps-hero-button--primary" onClick={() => changeTab('Portofoliu')}>
-                    Vezi portofoliul
-                  </button>
-                )}
-                <button className="ps-hero-button ps-hero-button--ghost" onClick={() => changeTab('Contact')}>
-                  Contact
+          </div>
+          <button className="ps-scroll-cue" onClick={() => scrollToSection(hasPortfolio ? 'work' : 'contact')} aria-label="Continuă">
+            <span>Scroll</span>
+            <i />
+          </button>
+        </section>
+
+        {hasPortfolio && (
+          <section id="work" className="ps-section ps-work-section">
+            <header className="ps-section-heading ps-section-heading--split">
+              <div>
+                <span className="ps-kicker">Portofoliu selectat</span>
+                <h2>Povești care rămân.</h2>
+              </div>
+              <p>{siteData.portfolioIntro || tagline || 'Momente autentice, observate discret și păstrate cu grijă.'}</p>
+            </header>
+
+            <div className={`ps-project-grid ps-project-grid--${Math.min(portfolio.length, 4)}`}>
+              {portfolio.map((category, index) => (
+                <button
+                  key={category.resolvedId}
+                  className="ps-project-card"
+                  onClick={() => openProject(category.resolvedId)}
+                >
+                  <span className="ps-project-media">
+                    {projectCovers[category.resolvedId]
+                      ? <img src={projectCovers[category.resolvedId]} alt="" loading="lazy" />
+                      : <span className="ps-project-placeholder" />
+                    }
+                    <span className="ps-project-shade" />
+                  </span>
+                  <span className="ps-project-meta">
+                    <small>{String(index + 1).padStart(2, '0')}</small>
+                    <strong>{category.name}</strong>
+                    <em>Vezi povestea</em>
+                  </span>
                 </button>
-              </div>
+              ))}
             </div>
-            <button
-              className="ps-hero-scroll-indicator"
-              onClick={() => changeTab(hasPortfolio ? 'Portofoliu' : 'Contact')}
-              aria-label={hasPortfolio ? 'Vezi portofoliul' : 'Vezi datele de contact'}
-            >
-              <div className="ps-scroll-dot" />
-            </button>
-          </div>
+          </section>
         )}
 
-        {/* ── PORTOFOLIU ── */}
-        {activeTab === 'Portofoliu' && (
-          <div className="ps-portfolio-tab">
-            {portfolio.length === 0 ? (
-              <div className="ps-empty-state">
-                <p>Portofoliul nu a fost configurat încă.</p>
+        {hasPortfolio && (
+          <section id="portfolio-gallery" className="ps-section ps-gallery-section">
+            <div className="ps-gallery-heading">
+              <div>
+                <span className="ps-kicker">Galerie</span>
+                <h2>{currentCategory?.name || portfolio[0]?.name}</h2>
               </div>
-            ) : (
-              <>
-                <div className="ps-pills-row">
-                  {portfolio.map((cat) => (
-                    <button
-                      key={cat.id}
-                      className={`ps-pill${selectedCategory === cat.id ? ' ps-pill--active' : ''}`}
-                      onClick={() => setSelectedCategory(cat.id)}
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
-                </div>
-
-                {loadingPhotos && currentCategoryPhotos.length === 0 ? (
-                  <div className="ps-photos-loading">Se încarcă...</div>
-                ) : currentCategoryPhotos.length === 0 ? (
-                  <div className="ps-empty-state">
-                    <p>Nicio fotografie în această categorie.</p>
-                  </div>
-                ) : (
-                  <div className="ps-masonry-wrap">
-                    <Masonry
-                      breakpointCols={{ default: 3, 1024: 3, 768: 2, 480: 1 }}
-                      className="ps-masonry-grid"
-                      columnClassName="ps-masonry-col"
-                    >
-                      {currentCategoryPhotos.map((photo, i) => (
-                        <div
-                          key={photo.key}
-                          className="ps-masonry-item"
-                          onClick={() =>
-                            setLightbox({
-                              open: true,
-                              index: i,
-                              slides: currentCategoryPhotos.map((p) => ({ src: p.url })),
-                            })
-                          }
-                        >
-                          <img
-                            src={photo.url}
-                            alt={`${portfolio.find((category) => category.id === selectedCategory)?.name || 'Portofoliu'} — fotografia ${i + 1}`}
-                            loading="lazy"
-                            className="ps-masonry-img"
-                          />
-                        </div>
-                      ))}
-                    </Masonry>
-                    {loadingPhotos && <div className="ps-photos-loading ps-photos-loading--more">Se încarcă mai multe fotografii...</div>}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── PREȚURI ── */}
-        {activeTab === 'Prețuri' && (
-          <div className="ps-pricing-tab">
-            {pricing.length === 0 ? (
-              <div className="ps-empty-state">
-                <p>Pachetele de prețuri nu au fost configurate încă.</p>
-              </div>
-            ) : (
-              pricing.map((eventType) => (
-                <div key={eventType.id} className="ps-pricing-section">
-                  <h2 className="ps-pricing-event-title">{eventType.eventType}</h2>
-                  <div className="ps-pricing-cards">
-                    {(eventType.packages || []).map((pkg) => (
-                      <div
-                        key={pkg.id}
-                        className={`ps-pricing-card${pkg.featured ? ' ps-pricing-card--featured' : ''}`}
-                      >
-                        {pkg.featured && (
-                          <span className="ps-pricing-badge">Recomandat</span>
-                        )}
-                        <h3 className="ps-pricing-card-name">{pkg.name}</h3>
-                        <div className="ps-pricing-card-price">
-                          {pkg.price}
-                          <span className="ps-pricing-card-currency"> lei</span>
-                        </div>
-                        {pkg.description && (
-                          <p className="ps-pricing-card-desc">{pkg.description}</p>
-                        )}
-                        {pkg.inclusions?.length > 0 && (
-                          <ul className="ps-pricing-inclusions">
-                            {pkg.inclusions.map((item, i) => (
-                              <li key={i}>
-                                <span className="ps-inclusion-check">—</span>
-                                {item}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        <button
-                          className="ps-pricing-cta"
-                          onClick={() => changeTab('Contact')}
-                        >
-                          Rezervă
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* ── DESPRE ── */}
-        {activeTab === 'Despre' && (
-          <div className="ps-despre-tab">
-            <div className="ps-despre-inner">
-
-              {/* Portrait */}
-              <div className="ps-portrait-wrap">
-                {profilePhotoUrl
-                  ? <img src={profilePhotoUrl} alt={brandName} className="ps-portrait" />
-                  : <div className="ps-portrait-placeholder" />
-                }
-              </div>
-
-              {/* Text */}
-              <div className="ps-despre-text">
-                <h2 className="ps-despre-name">{siteData.aboutTitle || brandName}</h2>
-                <p className="ps-despre-bio">
-                  {bio || 'Completează secțiunea "Despre" din editor.'}
-                </p>
-
-                {(siteData.yearsExp || siteData.sessionsCount || siteData.citiesCount) && (
-                  <div className="ps-stats-row">
-                    {siteData.yearsExp && (
-                      <div className="ps-stat">
-                        <span className="ps-stat-value">{siteData.yearsExp}</span>
-                        <span className="ps-stat-label">ani experiență</span>
-                      </div>
-                    )}
-                    {siteData.sessionsCount && (
-                      <div className="ps-stat">
-                        <span className="ps-stat-value">{siteData.sessionsCount}</span>
-                        <span className="ps-stat-label">ședințe foto</span>
-                      </div>
-                    )}
-                    {siteData.citiesCount && (
-                      <div className="ps-stat">
-                        <span className="ps-stat-value">{siteData.citiesCount}</span>
-                        <span className="ps-stat-label">orașe</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="ps-social-row">
-                  {instagram && (
-                    <a href={normalizeSocialUrl(instagram, 'instagram')} target="_blank" rel="noopener noreferrer" className="ps-social-link">
-                      Instagram
-                    </a>
-                  )}
-                  {facebook && (
-                    <a href={normalizeUrl(facebook)} target="_blank" rel="noopener noreferrer" className="ps-social-link">
-                      Facebook
-                    </a>
-                  )}
-                  {website && (
-                    <a href={normalizeUrl(website)} target="_blank" rel="noopener noreferrer" className="ps-social-link">
-                      Website
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Horizontal photo strip */}
-            {stripPhotos.length > 0 && (
-              <div className="ps-photo-strip">
-                {stripPhotos.map((url, i) => (
-                  <div key={i} className="ps-strip-item">
-                    <img src={url} alt="" loading="lazy" className="ps-strip-img" />
-                  </div>
+              <div className="ps-category-switcher" aria-label="Alege proiectul">
+                {portfolio.map((category) => (
+                  <button
+                    key={category.resolvedId}
+                    className={selectedCategory === category.resolvedId ? 'is-active' : ''}
+                    onClick={() => setSelectedCategory(category.resolvedId)}
+                  >
+                    {category.name}
+                  </button>
                 ))}
               </div>
+            </div>
+
+            {loadingPhotos && currentCategoryPhotos.length === 0 ? (
+              <div className="ps-photos-loading">Se pregătește povestea...</div>
+            ) : currentCategoryPhotos.length === 0 ? (
+              <div className="ps-empty-state">Nicio fotografie în această categorie.</div>
+            ) : (
+              <div className="ps-masonry-wrap">
+                <Masonry
+                  breakpointCols={{ default: 3, 1024: 3, 760: 2, 480: 1 }}
+                  className="ps-masonry-grid"
+                  columnClassName="ps-masonry-col"
+                >
+                  {currentCategoryPhotos.map((photo, index) => (
+                    <button
+                      key={photo.key}
+                      className="ps-masonry-item"
+                      onClick={() => setLightbox({
+                        open: true,
+                        index,
+                        slides: currentCategoryPhotos.map((item) => ({ src: item.url })),
+                      })}
+                    >
+                      <img
+                        src={photo.url}
+                        alt={`${currentCategory?.name || 'Portofoliu'} — fotografia ${index + 1}`}
+                        loading="lazy"
+                        className="ps-masonry-img"
+                      />
+                    </button>
+                  ))}
+                </Masonry>
+                {loadingPhotos && <div className="ps-photos-loading ps-photos-loading--more">Se încarcă mai multe fotografii...</div>}
+              </div>
             )}
-          </div>
+          </section>
         )}
 
-        {/* ── CONTACT ── */}
-        {activeTab === 'Contact' && (
-          <div className="ps-contact-tab">
-            <div className="ps-contact-inner">
-              <h2 className="ps-contact-title">
-                {siteData.contactTitle || 'Să vorbim'}
-              </h2>
-              <p className="ps-contact-sub">
-                {siteData.contactSub || 'Completează formularul și te contactez în maxim 24 de ore.'}
-              </p>
-
-              <div className="ps-contact-channels">
-                {contactPhone && (
-                  <a
-                    href={`https://wa.me/${whatsappNumber(contactPhone)}`}
-                    className="ps-channel-link"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    WhatsApp · {contactPhone}
-                  </a>
-                )}
-                {contactEmail && (
-                  <a href={`mailto:${contactEmail}`} className="ps-channel-link">
-                    Email · {contactEmail}
-                  </a>
-                )}
-                {instagram && (
-                  <a
-                    href={normalizeSocialUrl(instagram, 'instagram')}
-                    className="ps-channel-link"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Instagram · {instagramLabel(instagram)}
-                  </a>
-                )}
+        {hasAbout && (
+          <section id="about" className="ps-about-section">
+            <div className="ps-about-media">
+              {profilePhotoUrl
+                ? <img src={profilePhotoUrl} alt={siteData.aboutTitle || brandName} loading="lazy" />
+                : projectCovers[portfolio[0]?.resolvedId]
+                  ? <img src={projectCovers[portfolio[0]?.resolvedId]} alt="" loading="lazy" />
+                  : <span className="ps-about-placeholder" />
+              }
+            </div>
+            <div className="ps-about-copy">
+              <span className="ps-kicker">În spatele camerei</span>
+              <h2>{siteData.aboutTitle || brandName}</h2>
+              {bio && <p>{bio}</p>}
+              {(siteData.yearsExp || siteData.sessionsCount || siteData.citiesCount) && (
+                <div className="ps-stats-row">
+                  {siteData.yearsExp && <div><strong>{siteData.yearsExp}</strong><span>ani experiență</span></div>}
+                  {siteData.sessionsCount && <div><strong>{siteData.sessionsCount}</strong><span>povești fotografiate</span></div>}
+                  {siteData.citiesCount && <div><strong>{siteData.citiesCount}</strong><span>orașe</span></div>}
+                </div>
+              )}
+              <div className="ps-social-row">
+                {instagram && <a href={normalizeSocialUrl(instagram, 'instagram')} target="_blank" rel="noreferrer">Instagram</a>}
+                {facebook && <a href={normalizeUrl(facebook)} target="_blank" rel="noreferrer">Facebook</a>}
+                {website && <a href={normalizeUrl(website)} target="_blank" rel="noreferrer">Website</a>}
               </div>
+            </div>
+          </section>
+        )}
 
-              <ContactForm photographerUid={siteData.uid} />
+        {hasPricing && (
+          <section id="collections" className="ps-section ps-collections-section">
+            <header className="ps-section-heading ps-section-heading--center">
+              <span className="ps-kicker">Experiența</span>
+              <h2>Colecții construite în jurul vostru.</h2>
+              <p>{siteData.pricingIntro || 'Alege punctul de pornire. Detaliile finale le stabilim împreună.'}</p>
+            </header>
+            {pricing.map((eventType) => (
+              <div key={eventType.id} className="ps-pricing-group">
+                <h3>{eventType.eventType}</h3>
+                <div className="ps-pricing-cards">
+                  {eventType.packages.map((pkg) => (
+                    <article key={pkg.id} className={`ps-pricing-card${pkg.featured ? ' is-featured' : ''}`}>
+                      <div className="ps-pricing-card-top">
+                        <h4>{pkg.name}</h4>
+                        {pkg.featured && <span>Preferată</span>}
+                      </div>
+                      <div className="ps-pricing-price">{pkg.price}<small> lei</small></div>
+                      {pkg.description && <p>{pkg.description}</p>}
+                      {pkg.inclusions?.length > 0 && (
+                        <ul>{pkg.inclusions.map((item, index) => <li key={index}>{item}</li>)}</ul>
+                      )}
+                      <button onClick={() => scrollToSection('contact')}>Solicită oferta</button>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <section id="contact" className="ps-contact-section">
+          <div className="ps-contact-intro">
+            <span className="ps-kicker ps-kicker--light">Spune-mi povestea voastră</span>
+            <h2>{siteData.contactTitle || 'Să creăm ceva memorabil.'}</h2>
+            <p>{siteData.contactSub || 'Scrie-mi câteva detalii despre eveniment și revin cu disponibilitatea.'}</p>
+            <div className="ps-contact-channels">
+              {contactPhone && <a href={`https://wa.me/${whatsappNumber(contactPhone)}`} target="_blank" rel="noreferrer">WhatsApp · {contactPhone}</a>}
+              {contactEmail && <a href={`mailto:${contactEmail}`}>{contactEmail}</a>}
+              {instagram && <a href={normalizeSocialUrl(instagram, 'instagram')} target="_blank" rel="noreferrer">Instagram · {instagramLabel(instagram)}</a>}
             </div>
           </div>
-        )}
-
+          <div className="ps-contact-form-wrap">
+            <ContactForm photographerUid={siteData.uid} />
+          </div>
+        </section>
       </main>
 
-      {/* ── Footer ── */}
       <footer className="ps-footer">
         <span className="ps-footer-brand">{brandName}</span>
-        <div className="ps-footer-links">
-          {website && (
-            <a href={normalizeUrl(website)} target="_blank" rel="noreferrer">Website</a>
-          )}
-          {instagram && (
-            <a href={normalizeSocialUrl(instagram, 'instagram')} target="_blank" rel="noreferrer">Instagram</a>
-          )}
-          <button className="ps-footer-btn" onClick={() => changeTab('Contact')}>
-            Contact
-          </button>
-        </div>
-        <span className="ps-footer-credit">
-          Creat cu <a href="#" onClick={(e) => e.preventDefault()}>Mina</a>
-        </span>
+        <span className="ps-footer-copy">© {new Date().getFullYear()} · Toate drepturile rezervate</span>
+        <span className="ps-footer-credit">Creat cu <a href="https://cloudbymina.com" target="_blank" rel="noreferrer">Mina</a></span>
       </footer>
 
-      {/* ── Lightbox ── */}
       <Lightbox
         open={lightbox.open}
-        close={() => setLightbox((p) => ({ ...p, open: false }))}
+        close={() => setLightbox((current) => ({ ...current, open: false }))}
         index={lightbox.index}
         slides={lightbox.slides}
       />
