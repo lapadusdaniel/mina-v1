@@ -8,7 +8,7 @@ import { createAdminModule } from '../../modules/admin'
 
 export function createAppServices() {
   return {
-    auth: createAuthModule({ auth, db }),
+    auth: createAuthModule({ auth, db, functions }),
     galleries: createGalleriesModule({ db }),
     media: createMediaModule(),
     billing: createBillingModule({ db, functions }),

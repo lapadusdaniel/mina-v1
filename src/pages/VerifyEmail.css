@@ -1,0 +1,171 @@
+.verify-email-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(184, 150, 90, 0.1), transparent 32%),
+    radial-gradient(circle at 85% 90%, rgba(184, 150, 90, 0.08), transparent 30%),
+    #f5f5f7;
+  color: #1d1d1f;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  box-sizing: border-box;
+}
+
+.verify-email-page * {
+  box-sizing: border-box;
+}
+
+.verify-email-shell {
+  width: min(100%, 520px);
+  text-align: center;
+}
+
+.verify-email-logo {
+  display: inline-block;
+  margin-bottom: 28px;
+  color: #1d1d1f;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2.15rem;
+  font-weight: 300;
+  letter-spacing: 0.15em;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.verify-email-card {
+  overflow: hidden;
+  border: 1px solid rgba(29, 29, 31, 0.07);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 18px 60px rgba(29, 29, 31, 0.08);
+}
+
+.verify-email-accent {
+  height: 4px;
+  background: linear-gradient(90deg, #a98248, #d4af6a, #a98248);
+}
+
+.verify-email-content {
+  padding: 48px 44px 44px;
+}
+
+.verify-email-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 22px;
+  border-radius: 50%;
+  background: #f7f2e9;
+  color: #9a743c;
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.verify-email-card--success .verify-email-icon {
+  background: #ecf8ef;
+  color: #258143;
+}
+
+.verify-email-card--error .verify-email-icon {
+  background: #fff0f0;
+  color: #b33b32;
+}
+
+.verify-email-spinner {
+  width: 23px;
+  height: 23px;
+  border: 2px solid rgba(154, 116, 60, 0.24);
+  border-top-color: #9a743c;
+  border-radius: 50%;
+  animation: verify-email-spin 0.8s linear infinite;
+}
+
+.verify-email-eyebrow {
+  margin: 0 0 9px;
+  color: #a98248;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.verify-email-content h1 {
+  margin: 0;
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: clamp(2rem, 8vw, 2.6rem);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+}
+
+.verify-email-message {
+  max-width: 390px;
+  margin: 18px auto 0;
+  color: #68686d;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.verify-email-button {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 190px;
+  margin-top: 30px;
+  padding: 13px 22px;
+  border-radius: 10px;
+  background: #1d1d1f;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.verify-email-button:hover {
+  background: #333336;
+  transform: translateY(-1px);
+}
+
+.verify-email-button:focus-visible,
+.verify-email-logo:focus-visible,
+.verify-email-help a:focus-visible {
+  outline: 3px solid rgba(184, 150, 90, 0.38);
+  outline-offset: 3px;
+}
+
+.verify-email-help {
+  margin: 23px 0 0;
+  color: #8a8a8f;
+  font-size: 13px;
+}
+
+.verify-email-help a {
+  color: #6b5738;
+}
+
+@keyframes verify-email-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 540px) {
+  .verify-email-page {
+    align-items: start;
+    padding-top: 54px;
+  }
+
+  .verify-email-content {
+    padding: 40px 25px 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verify-email-spinner {
+    animation-duration: 1.8s;
+  }
+
+  .verify-email-button {
+    transition: none;
+  }
+}

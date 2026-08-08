@@ -9,7 +9,7 @@ import { increment } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import Masonry from 'react-masonry-css';
-import { ChevronDown, ChevronUp, Share2, Download, Heart, Instagram, MessageCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Download, Heart, Instagram, Loader2, LockKeyhole, MessageCircle, Send, Share2 } from 'lucide-react';
 
 const VALID_THEMES = ['minimal'];
 const BATCH_SIZE = 24;
@@ -282,14 +282,14 @@ function LazyGalleryImage({
             {watermarkLabel}
           </div>
         )}
-        <div className="cg-item-overlay">
+        <div className={`cg-item-overlay ${isFav ? 'cg-item-overlay--selected' : ''} ${favoritePicker?.isOpen ? 'cg-item-overlay--open' : ''}`}>
           <div className="cg-item-actions">
             {allowPhotoSelection && (
               <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onFavoriteClick(pozaKey, 'grid'); }}
                 className={`cg-action-btn cg-action-btn--favorite ${isFav ? 'cg-action-btn--active' : ''}`}
-                aria-label="Favorite"
+                aria-label={isFav ? 'Elimină din selecție' : 'Adaugă la selecție'}
                 style={{ color: isFav ? (accentColor || '#b8965a') : 'rgba(255,255,255,0.9)' }}
               >
                 <Heart size={20} fill={isFav ? (accentColor || '#b8965a') : 'none'} strokeWidth={1.5} />
@@ -511,7 +511,6 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const [coverThumbUrl, setCoverThumbUrl] = useState(null);
   const [coverMediumUrl, setCoverMediumUrl] = useState(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
-  const [lightboxOriginalUrls, setLightboxOriginalUrls] = useState({});
   const [lightboxMediumUrls, setLightboxMediumUrls] = useState({});
   const [loading, setLoading] = useState(true);
   const [eroare, setEroare] = useState(null);
@@ -528,6 +527,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const [selectionTitleInputValue, setSelectionTitleInputValue] = useState('');
   const [pendingFavAction, setPendingFavAction] = useState(null);
   const [selectionLists, setSelectionLists] = useState(() => normalizeSelectionLists());
+  const [selectionStatus, setSelectionStatus] = useState('draft');
+  const [selectionFinalizedAt, setSelectionFinalizedAt] = useState(null);
+  const [showFinalizeSelectionModal, setShowFinalizeSelectionModal] = useState(false);
+  const [selectionFinalizing, setSelectionFinalizing] = useState(false);
+  const [selectionFinalizeError, setSelectionFinalizeError] = useState('');
   const [activeSelectionListId, setActiveSelectionListId] = useState(DEFAULT_SELECTION_LIST_ID);
   const [favoriteMenuState, setFavoriteMenuState] = useState(null);
   const [creatingFavoriteList, setCreatingFavoriteList] = useState(false);
@@ -654,6 +658,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const limit = settingsLimitEnabled && settingsMaxSelected > 0
     ? settingsMaxSelected
     : (galerie?.limitSelectie ?? galerie?.maxSelectie ?? null);
+  const selectionLocked = selectionStatus === 'finalized';
+  const canEditSelection = allowPhotoSelection && !selectionLocked;
   const applySelectionListsLocally = useCallback((lists, options = {}) => {
     const normalizedLists = normalizeSelectionLists(lists);
     const aggregatedKeys = aggregateSelectionKeys(normalizedLists);
@@ -710,7 +716,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   }, [resetNewFavoriteListFlow]);
 
   const openFavoriteMenu = useCallback((pozaKey, source = 'grid') => {
-    if (!allowPhotoSelection || !pozaKey) return;
+    if (!canEditSelection || !pozaKey) return;
     setFavoriteListMenuId(null);
     setEditingFavoriteListId(null);
     setEditingFavoriteListName('');
@@ -720,7 +726,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         ? null
         : { photoKey: pozaKey, source }
     ));
-  }, [allowPhotoSelection, resetNewFavoriteListFlow]);
+  }, [canEditSelection, resetNewFavoriteListFlow]);
 
   const closeLightbox = useCallback(() => {
     setSelectedImage(null);
@@ -772,12 +778,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     return (
       lightboxMediumUrls[key]
       || getCachedUrl(`medium:${key}`)
-      || lightboxOriginalUrls[key]
       || getCachedUrl(`original:${key}`)
       || getCachedUrl(`thumb:${key}`)
       || ''
     );
-  }, [isMobile, lightboxMediumUrls, lightboxOriginalUrls]);
+  }, [isMobile, lightboxMediumUrls]);
 
   const loadGalleryPhotos = useCallback(async (galleryData) => {
     if (!galleryData?.id) {
@@ -1010,6 +1015,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
     if (!numeSelectie) {
       applySelectionListsLocally(normalizeSelectionLists([], []), { activeListId: DEFAULT_SELECTION_LIST_ID });
+      setSelectionStatus('draft');
+      setSelectionFinalizedAt(null);
       setEmailInputValue('');
       setPhoneInputValue('');
       setAdditionalInfoInputValue('');
@@ -1021,7 +1028,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
     const loadClientSelection = async () => {
       try {
-        const selection = await galleriesService.getClientSelection(galerie.id, numeSelectie);
+        const directSelection = await galleriesService.getClientSelection(galerie.id, numeSelectie).catch(() => null);
+        const selection = directSelection || await galleriesService.getClientSelectionAccess(galerie.id, numeSelectie).catch(() => null);
         if (cancelled) return;
 
         const fallbackLegacy = Array.isArray(galerie?.selectii?.[numeSelectie]) ? galerie.selectii[numeSelectie] : [];
@@ -1034,6 +1042,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         setPhoneInputValue(String(selection?.clientPhone || ''));
         setAdditionalInfoInputValue(String(selection?.clientAdditionalInfo || ''));
         setCommentInputValue(String(selection?.clientComment || ''));
+        setSelectionStatus(selection?.status === 'finalized' ? 'finalized' : 'draft');
+        setSelectionFinalizedAt(selection?.finalizedAt || null);
       } catch (_) {
       }
     };
@@ -1204,7 +1214,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   };
 
   const handleFavoriteClick = (pozaKey, source = 'grid') => {
-    if (!allowPhotoSelection) return;
+    if (!canEditSelection) return;
     if (!numeSelectie) {
       setPendingFavAction({ photoKey: pozaKey, source });
       setShowNameModal(true);
@@ -1246,12 +1256,42 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     clearStoredSelectionName();
     setNumeSelectie('');
     setNameInputValue('');
+    setSelectionStatus('draft');
+    setSelectionFinalizedAt(null);
     applySelectionListsLocally(normalizeSelectionLists([], []), { activeListId: DEFAULT_SELECTION_LIST_ID });
     closeFavoriteMenus();
   };
 
+  const handleOpenFinalizeSelection = () => {
+    if (!numeSelectie || favCount <= 0 || selectionLocked) return;
+    setSelectionFinalizeError('');
+    setShowFinalizeSelectionModal(true);
+  };
+
+  const handleFinalizeSelection = async () => {
+    if (!galerie?.id || !numeSelectie || favCount <= 0 || selectionLocked || selectionFinalizing) return;
+
+    setSelectionFinalizing(true);
+    setSelectionFinalizeError('');
+    try {
+      const result = await galleriesService.finalizeClientSelection(galerie.id, numeSelectie);
+      setSelectionStatus('finalized');
+      setSelectionFinalizedAt(result?.finalizedAt || new Date().toISOString());
+      setShowFinalizeSelectionModal(false);
+      closeFavoriteMenus();
+    } catch (error) {
+      console.error(error);
+      const message = String(error?.message || 'Selecția nu a putut fi trimisă. Încearcă din nou.')
+        .replace(/^Firebase:\s*/i, '')
+        .replace(/^functions\/[a-z-]+:\s*/i, '');
+      setSelectionFinalizeError(message);
+    } finally {
+      setSelectionFinalizing(false);
+    }
+  };
+
   const executeFavoriteToggle = async (pozaKey, numeClient, metaOverride = null, listId = activeSelectionListId) => {
-    if (!allowPhotoSelection || !galerie?.id || !numeClient) return;
+    if (!canEditSelection || !galerie?.id || !numeClient) return;
     const latestSelection = await galleriesService.getClientSelection(galerie.id, numeClient).catch(() => null);
     const currentLists = normalizeSelectionLists(latestSelection?.lists || normalizedSelectionLists, latestSelection?.keys || allFavoriteKeys);
     const currentFav = aggregateSelectionKeys(currentLists);
@@ -1304,6 +1344,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   };
 
   const handleCreateFavoriteList = async (photoKey = favoriteMenuState?.photoKey || null, explicitName = '') => {
+    if (!canEditSelection) return;
     const rawName = String(explicitName || getCurrentNewFavoriteListName() || '').trim();
     if (!rawName) {
       resetNewFavoriteListFlow();
@@ -1341,10 +1382,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   };
 
   const handleStartFavoriteListCreation = useCallback(() => {
+    if (!canEditSelection) return;
     newFavoriteListHandledRef.current = false;
     setCreatingFavoriteList(true);
     setNewFavoriteListName('');
-  }, []);
+  }, [canEditSelection]);
 
   const handleCancelFavoriteListCreation = useCallback(() => {
     newFavoriteListHandledRef.current = true;
@@ -1377,6 +1419,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   };
 
   const handleRenameFavoriteList = async (listId) => {
+    if (!canEditSelection) return;
     const list = normalizedSelectionLists.find((item) => item.id === listId);
     if (!list) return;
     const rawName = String(editingFavoriteListName || '').trim();
@@ -1398,6 +1441,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   };
 
   const handleDeleteFavoriteList = async (listId) => {
+    if (!canEditSelection) return;
     const list = normalizedSelectionLists.find((item) => item.id === listId);
     if (!list) return;
     const confirmed = window.confirm(`Ștergi lista "${list.name}"?`);
@@ -1606,6 +1650,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     : 'center';
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
   const favCount = allFavoriteKeys.length;
+  const selectionFinalizedDate = selectionFinalizedAt?.toDate?.() || (selectionFinalizedAt ? new Date(selectionFinalizedAt) : null);
+  const selectionFinalizedLabel = selectionFinalizedDate && !Number.isNaN(selectionFinalizedDate.getTime())
+    ? selectionFinalizedDate.toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '';
   const activeClientFolder = clientFolders.find((folder) => folder.id === effectiveActiveClientFolderId) || null;
   const activeClientFolderName = activeClientFolder?.name || '';
   const isArchived = galerie?.status === 'archived';
@@ -1801,20 +1849,22 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                       <span className="cg-favorite-list-count">{list.keys?.length || 0}</span>
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="cg-favorite-list-menu-toggle"
-                    aria-label={`Acțiuni pentru lista ${list.name}`}
-                    onClick={() => {
-                      setFavoriteMenuState(null);
-                      setCreatingFavoriteList(false);
-                      setNewFavoriteListName('');
-                      setFavoriteListMenuId((prev) => (prev === list.id ? null : list.id));
-                    }}
-                  >
-                    ⋯
-                  </button>
-                  {favoriteListMenuId === list.id && (
+                  {canEditSelection && (
+                    <button
+                      type="button"
+                      className="cg-favorite-list-menu-toggle"
+                      aria-label={`Acțiuni pentru lista ${list.name}`}
+                      onClick={() => {
+                        setFavoriteMenuState(null);
+                        setCreatingFavoriteList(false);
+                        setNewFavoriteListName('');
+                        setFavoriteListMenuId((prev) => (prev === list.id ? null : list.id));
+                      }}
+                    >
+                      ⋯
+                    </button>
+                  )}
+                  {canEditSelection && favoriteListMenuId === list.id && (
                     <div className="cg-favorite-list-menu">
                       <button type="button" className="cg-favorite-list-menu-item" onClick={() => handleStartRenameFavoriteList(list.id)}>
                         Redenumește
@@ -1827,6 +1877,29 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {allowPhotoSelection && numeSelectie && favCount > 0 && (
+          <div className={`cg-selection-submit-bar${selectionLocked ? ' is-finalized' : ''}`}>
+            <div className="cg-selection-submit-copy">
+              {selectionLocked ? <CheckCircle2 size={21} aria-hidden="true" /> : <Send size={20} aria-hidden="true" />}
+              <div>
+                <strong>{selectionLocked ? 'Selecția a fost trimisă fotografului.' : `${favCount} ${favCount === 1 ? 'fotografie selectată' : 'fotografii selectate'}`}</strong>
+                <span>
+                  {selectionLocked
+                    ? `Selecția este blocată${selectionFinalizedLabel ? ` din ${selectionFinalizedLabel}` : ''}. Fotograful o poate redeschide dacă ai nevoie de modificări.`
+                    : 'Verifică fotografiile, apoi trimite selecția finală fotografului.'}
+                </span>
+              </div>
+            </div>
+            {!selectionLocked && (
+              <button type="button" onClick={handleOpenFinalizeSelection}>
+                Trimite selecția
+                <Send size={15} aria-hidden="true" />
+              </button>
+            )}
+            {selectionLocked && <LockKeyhole size={18} className="cg-selection-lock-icon" aria-hidden="true" />}
           </div>
         )}
 
@@ -1861,7 +1934,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                     isFav={allFavoriteKeySet.has(poza.key)}
                     onFavoriteClick={handleFavoriteClick}
                     accentColor={profile.accentColor}
-                    allowPhotoSelection={allowPhotoSelection}
+                    allowPhotoSelection={canEditSelection}
                     allowOriginalDownloads={allowOriginalDownloads}
                     watermarkEnabled={watermarkEnabled}
                     watermarkLabel={watermarkLabel}
@@ -1966,6 +2039,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                             selectionTitle={selectionTitle}
                             accentColor={profile.accentColor}
                           />,
+                        ]
+                      : []),
+                    ...(canEditSelection
+                      ? [
                           <LightboxFavoriteButton
                             key="fav"
                             galerie={galerie}
@@ -2079,6 +2156,48 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         >
           <ChevronUp size={16} strokeWidth={1.8} />
         </button>
+      )}
+
+      {/* ── FINALIZARE SELECȚIE ── */}
+      {showFinalizeSelectionModal && (
+        <div
+          className="cg-modal-overlay"
+          onClick={(event) => {
+            if (event.target !== event.currentTarget || selectionFinalizing) return;
+            setShowFinalizeSelectionModal(false);
+            setSelectionFinalizeError('');
+          }}
+        >
+          <div className="cg-modal cg-finalize-modal">
+            <span className="cg-finalize-modal-icon" aria-hidden="true"><Send size={20} /></span>
+            <h3 className="cg-modal-title">Trimite selecția fotografului?</h3>
+            <p className="cg-modal-sub">
+              Vei trimite <strong>{favCount} {favCount === 1 ? 'fotografie' : 'fotografii'}</strong>. După trimitere, selecția se blochează pentru a evita modificările accidentale.
+            </p>
+            <div className="cg-finalize-modal-note">
+              Fotograful primește imediat un email și poate redeschide selecția dacă mai ai nevoie de schimbări.
+            </div>
+            {selectionFinalizeError && <p className="cg-finalize-modal-error">{selectionFinalizeError}</p>}
+            <div className="cg-modal-actions">
+              <button
+                type="button"
+                disabled={selectionFinalizing}
+                onClick={() => { setShowFinalizeSelectionModal(false); setSelectionFinalizeError(''); }}
+                className="cg-modal-btn cg-modal-btn--cancel"
+              >
+                Mai verific
+              </button>
+              <button
+                type="button"
+                disabled={selectionFinalizing}
+                onClick={handleFinalizeSelection}
+                className="cg-modal-btn cg-modal-btn--confirm"
+              >
+                {selectionFinalizing ? 'Se trimite…' : 'Da, trimite selecția'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── MODAL NUME ── */}
@@ -2576,6 +2695,63 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         .cg-favorite-lists-bar::-webkit-scrollbar {
           display: none;
         }
+        .cg-selection-submit-bar {
+          max-width: 1120px;
+          margin: 18px auto 0;
+          padding: 16px 18px;
+          border: 1px solid rgba(184,150,90,0.3);
+          border-radius: 16px;
+          background: #fffdf8;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+        }
+        .cg-selection-submit-bar.is-finalized {
+          border-color: rgba(51,126,83,0.24);
+          background: #f7fbf8;
+        }
+        .cg-selection-submit-copy {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          min-width: 0;
+          color: #b8965a;
+        }
+        .cg-selection-submit-bar.is-finalized .cg-selection-submit-copy { color: #337e53; }
+        .cg-selection-submit-copy div { min-width: 0; }
+        .cg-selection-submit-copy strong,
+        .cg-selection-submit-copy span { display: block; }
+        .cg-selection-submit-copy strong {
+          color: #1d1d1f;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 3px;
+        }
+        .cg-selection-submit-copy span {
+          color: #77777c;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .cg-selection-submit-bar > button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          flex: 0 0 auto;
+          padding: 11px 16px;
+          border: none;
+          border-radius: 999px;
+          background: #1d1d1f;
+          color: #fff;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12.5px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: transform 0.15s ease, background 0.15s ease;
+        }
+        .cg-selection-submit-bar > button:hover { background: #363638; transform: translateY(-1px); }
+        .cg-selection-lock-icon { flex: 0 0 auto; color: #337e53; }
         .cg-favorite-list-shell {
           position: relative;
           display: inline-flex;
@@ -2762,7 +2938,26 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           -webkit-backdrop-filter: blur(3px);
           text-shadow: 0 1px 1px rgba(0,0,0,0.35);
         }
-        .cg-item:hover .cg-item-overlay { opacity: 1; }
+        .cg-item:hover .cg-item-overlay,
+        .cg-item:focus-within .cg-item-overlay,
+        .cg-item-overlay--selected,
+        .cg-item-overlay--open { opacity: 1; }
+        .cg-item-overlay--selected:not(.cg-item-overlay--open) {
+          background: transparent;
+        }
+        .cg-item-overlay--selected:not(.cg-item-overlay--open) .cg-action-btn:not(.cg-action-btn--favorite) {
+          opacity: 0;
+          pointer-events: none;
+        }
+        .cg-item:hover .cg-item-overlay--selected,
+        .cg-item:focus-within .cg-item-overlay--selected {
+          background: linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 100%);
+        }
+        .cg-item:hover .cg-item-overlay--selected .cg-action-btn,
+        .cg-item:focus-within .cg-item-overlay--selected .cg-action-btn {
+          opacity: 1;
+          pointer-events: auto;
+        }
         .cg-item-actions { display: flex; gap: 8px; pointer-events: auto; }
         .cg-action-btn {
           display: flex;
@@ -2777,7 +2972,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           border: 1px solid rgba(255,255,255,0.3);
           cursor: pointer;
           color: rgba(255,255,255,0.9);
-          transition: background 0.15s, transform 0.15s;
+          transition: background 0.15s, transform 0.15s, opacity 0.2s;
           -webkit-tap-highlight-color: transparent;
         }
         .cg-action-btn:hover { background: rgba(255,255,255,0.28); transform: scale(1.06); }
@@ -3105,6 +3300,35 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           color: #fff;
         }
         .cg-modal-btn--confirm:hover { background: #3a3a3c; }
+        .cg-modal-btn:disabled { opacity: 0.58; cursor: wait; }
+        .cg-finalize-modal { max-width: 440px; }
+        .cg-finalize-modal-icon {
+          width: 42px;
+          height: 42px;
+          margin-bottom: 18px;
+          border-radius: 13px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #8c6d39;
+          background: rgba(184,150,90,0.12);
+        }
+        .cg-finalize-modal .cg-modal-sub strong { color: #1d1d1f; font-weight: 600; }
+        .cg-finalize-modal-note {
+          margin: -6px 0 22px;
+          padding: 12px 14px;
+          border-radius: 12px;
+          background: #f6f5f2;
+          color: #6e6e73;
+          font-size: 12.5px;
+          line-height: 1.5;
+        }
+        .cg-finalize-modal-error {
+          margin: -8px 0 18px;
+          color: #b42318;
+          font-size: 12.5px;
+          line-height: 1.45;
+        }
 
         /* ── Animation ── */
         @keyframes cg-spin {
@@ -3125,6 +3349,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         @media (max-width: 900px) {
           .cg-toolbar { padding: 0 16px; min-height: 52px; height: 52px; }
           .cg-favorite-lists-bar { padding: 14px 16px 0; }
+          .cg-selection-submit-bar { margin: 14px 16px 0; }
           .cg-gallery { padding: 28px 16px 0; }
           .cg-footer { padding: 48px 20px 40px; }
           .cg-masonry { margin-left: -6px; }
@@ -3154,6 +3379,15 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-toolbar-btn > span:not(.cg-toolbar-fav-badge) { display: none; }
           .cg-toolbar-fav-badge { display: inline; }
           .cg-favorite-lists-bar { padding: 12px 12px 0; gap: 8px; }
+          .cg-selection-submit-bar {
+            margin: 12px 12px 0;
+            padding: 14px;
+            align-items: stretch;
+            flex-direction: column;
+            gap: 12px;
+          }
+          .cg-selection-submit-bar > button { width: 100%; }
+          .cg-selection-lock-icon { display: none; }
           .cg-favorite-list-tab { padding: 7px 10px; }
           .cg-favorite-list-menu-toggle { width: 26px; height: 26px; }
           .cg-gallery { padding: 20px 8px 0; }
@@ -3161,8 +3395,26 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-masonry-col { padding-left: 6px; }
           .cg-masonry-col > div { margin-bottom: 6px; }
           .cg-item { border-radius: 4px; }
-          .cg-item-overlay { opacity: 1; background: linear-gradient(to top, rgba(0,0,0,0.35) 0%, transparent 60%); }
-          .cg-action-btn { width: 36px; height: 36px; }
+          .cg-item-overlay,
+          .cg-item-overlay--selected:not(.cg-item-overlay--open) {
+            opacity: 1;
+            padding: 8px;
+            background: transparent;
+          }
+          .cg-item-overlay--selected:not(.cg-item-overlay--open) .cg-action-btn:not(.cg-action-btn--favorite) {
+            opacity: 0.42;
+            pointer-events: auto;
+          }
+          .cg-action-btn {
+            width: 32px;
+            height: 32px;
+            opacity: 0.42;
+            background: rgba(20,20,22,0.34);
+            border-color: rgba(255,255,255,0.18);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+          }
+          .cg-action-btn svg { width: 16px; height: 16px; }
+          .cg-action-btn--active { opacity: 1; background: rgba(20,20,22,0.58); }
           .cg-footer { padding: 40px 16px 32px; margin-top: 32px; }
           .cg-scroll-top-btn {
             right: 16px;

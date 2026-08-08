@@ -1,14 +1,21 @@
 const { Resend } = require('resend')
 
-const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
-  starter: 'price_1T6a3S1ax2jGrLZHmevohZWA',
-  pro: 'price_1T6a4F1ax2jGrLZH92vUsGzE',
-  studio: 'price_1T6a501ax2jGrLZHgLBbkzT4',
+const FALLBACK_PLAN_BY_PRICE_ID = Object.freeze({
+  price_1T6a3S1ax2jGrLZHmevohZWA: 'Esențial',
+  price_1TAzSw1ax2jGrLZHiihltxme: 'Esențial',
+  price_1TAzSw1ax2jGrLZHq7UZbHBt: 'Esențial',
+  price_1TAzSx1ax2jGrLZH9zPBW4PW: 'Plus',
+  price_1TAzSy1ax2jGrLZHPtB0oLr3: 'Plus',
+  price_1T6a4F1ax2jGrLZH92vUsGzE: 'Pro',
+  price_1TAzSz1ax2jGrLZHPfhcPu81: 'Pro',
+  price_1T6a501ax2jGrLZHgLBbkzT4: 'Studio',
+  price_1TAzT01ax2jGrLZHsqLDBI44: 'Studio',
 })
 
 const PLAN_STORAGE_BY_NAME = Object.freeze({
-  Starter: 150,
-  Pro: 600,
+  'Esențial': 100,
+  Plus: 500,
+  Pro: 1000,
   Studio: 2000,
 })
 
@@ -29,31 +36,29 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
-function resolvePlanFromPriceId(priceId, ids = {}) {
+function toDisplayPlanName(value) {
+  const normalized = sanitize(value).toLowerCase()
+  if (!normalized) return ''
+  if (normalized.includes('studio') || normalized.includes('unlimited')) return 'Studio'
+  if (normalized.includes('pro')) return 'Pro'
+  if (normalized.includes('plus')) return 'Plus'
+  if (normalized.includes('esential') || normalized.includes('esențial') || normalized.includes('starter')) return 'Esențial'
+  return ''
+}
+
+function resolvePlanFromPriceId(priceId, priceIdToPlan = {}) {
   const candidate = sanitize(priceId)
   if (!candidate) return ''
-  if (candidate === ids.starter) return 'Starter'
-  if (candidate === ids.pro) return 'Pro'
-  if (candidate === ids.studio) return 'Studio'
-  return ''
+  return toDisplayPlanName(priceIdToPlan[candidate] || FALLBACK_PLAN_BY_PRICE_ID[candidate])
 }
 
 function resolvePlanFromName(value) {
   const normalized = sanitize(value).toLowerCase()
   if (!normalized) return ''
-  if (normalized.includes('starter')) return 'Starter'
-  if (normalized.includes('studio') || normalized.includes('unlimited')) return 'Studio'
-  if (normalized.includes('pro')) return 'Pro'
-  return ''
+  return toDisplayPlanName(normalized)
 }
 
-function resolvePlanForPaymentEmail({ session = {}, paymentData = {}, priceIds = {} } = {}) {
-  const fallbackIds = {
-    starter: sanitize(priceIds.starter) || FALLBACK_STRIPE_PRICE_IDS.starter,
-    pro: sanitize(priceIds.pro) || FALLBACK_STRIPE_PRICE_IDS.pro,
-    studio: sanitize(priceIds.studio) || FALLBACK_STRIPE_PRICE_IDS.studio,
-  }
-
+function resolvePlanForPaymentEmail({ session = {}, paymentData = {}, priceIdToPlan = {} } = {}) {
   const priceIdCandidates = [
     session.metadata?.priceId,
     session.metadata?.stripePriceId,
@@ -62,7 +67,7 @@ function resolvePlanForPaymentEmail({ session = {}, paymentData = {}, priceIds =
   ]
 
   for (const priceId of priceIdCandidates) {
-    const fromPrice = resolvePlanFromPriceId(priceId, fallbackIds)
+    const fromPrice = resolvePlanFromPriceId(priceId, priceIdToPlan)
     if (fromPrice) return fromPrice
   }
 
@@ -79,16 +84,17 @@ function resolvePlanForPaymentEmail({ session = {}, paymentData = {}, priceIds =
 
   const amount = Number(paymentData.amount)
   if (Number.isFinite(amount)) {
-    if (amount === 39) return 'Starter'
-    if (amount === 79) return 'Pro'
-    if (amount === 129) return 'Studio'
+    if ([29, 289, 39, 390].includes(amount)) return 'Esențial'
+    if ([49, 489, 69, 690].includes(amount)) return 'Plus'
+    if ([79, 789, 99, 990].includes(amount)) return 'Pro'
+    if ([129, 1289, 149, 1490].includes(amount)) return 'Studio'
   }
 
-  return 'Starter'
+  return 'Plan plătit'
 }
 
 function getStorageLimitForPlan(planName) {
-  return PLAN_STORAGE_BY_NAME[planName] || 150
+  return PLAN_STORAGE_BY_NAME[planName] || null
 }
 
 function buildWelcomeEmailHtml({ displayName = '', dashboardUrl = '' } = {}) {
@@ -220,10 +226,76 @@ function buildWelcomeEmailHtml({ displayName = '', dashboardUrl = '' } = {}) {
 </html>`
 }
 
-function buildPaymentSuccessEmailHtml({ displayName = '', planName = 'Starter', storageLimitGb = 150, dashboardUrl = '' } = {}) {
+function buildVerificationEmailHtml({ displayName = '', verificationUrl = '' } = {}) {
+  const safeDisplayName = escapeHtml(displayName || 'Fotograf')
+  const safeVerificationUrl = escapeHtml(verificationUrl)
+
+  return `<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirmă adresa de email</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'DM Sans','Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f5f5f7;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:580px;">
+          <tr>
+            <td align="center" style="padding-bottom:28px;">
+              <span style="font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:400;letter-spacing:4px;color:#1d1d1f;">MINA</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.07);">
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td style="height:4px;background:linear-gradient(90deg,#b8965a 0%,#d4af6a 50%,#b8965a 100%);"></td>
+                </tr>
+              </table>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:42px 40px 38px;">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#b8965a;">Un singur pas</p>
+                    <h1 style="margin:0 0 22px;font-size:27px;font-weight:700;line-height:1.25;color:#1d1d1f;letter-spacing:-0.4px;">Confirmă adresa de email</h1>
+                    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#3a3a3c;">Salut, ${safeDisplayName}!</p>
+                    <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:#3a3a3c;">Confirmă adresa de email pentru a putea crea galerii, publica site-ul și încărca fotografii în Mina.</p>
+                    <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;">
+                      <tr>
+                        <td style="border-radius:10px;background-color:#1d1d1f;">
+                          <a href="${safeVerificationUrl}" style="display:inline-block;padding:14px 26px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">Confirmă adresa de email &rarr;</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#86868b;">Dacă butonul nu funcționează, copiază linkul de mai jos în browser:</p>
+                    <p style="margin:0;padding:12px 14px;background:#f5f5f7;border-radius:8px;font-size:12px;line-height:1.55;word-break:break-all;color:#58585d;">${safeVerificationUrl}</p>
+                    <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#86868b;">Dacă nu ai creat un cont Mina, poți ignora acest mesaj.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:26px 16px 8px;">
+              <p style="margin:0;font-size:13px;color:#86868b;line-height:1.6;">Cu drag,<br /><strong style="color:#1d1d1f;">Echipa Mina</strong></p>
+              <p style="margin:8px 0 0;font-size:12px;color:#aeaeb2;">cloudbymina.com · galerii profesionale pentru fotografi</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
+function buildPaymentSuccessEmailHtml({ displayName = '', planName = 'Plan plătit', storageLimitGb = null, dashboardUrl = '' } = {}) {
   const safeDisplayName = escapeHtml(displayName || 'Fotograf')
   const safePlanName = escapeHtml(planName)
-  const safeStorage = escapeHtml(`${storageLimitGb} GB`)
+  const safeStorage = Number.isFinite(Number(storageLimitGb))
+    ? escapeHtml(Number(storageLimitGb) >= 1000 ? `${Number(storageLimitGb) / 1000} TB` : `${storageLimitGb} GB`)
+    : ''
   const safeDashboardUrl = escapeHtml(dashboardUrl)
 
   return `
@@ -233,7 +305,7 @@ function buildPaymentSuccessEmailHtml({ displayName = '', planName = 'Starter', 
       <p style="margin:0 0 8px">Abonamentul tău Mina este acum activ:</p>
       <ul style="margin:0 0 16px;padding-left:20px">
         <li><strong>Plan:</strong> ${safePlanName}</li>
-        <li><strong>Stocare:</strong> ${safeStorage}</li>
+        ${safeStorage ? `<li><strong>Stocare:</strong> ${safeStorage}</li>` : ''}
       </ul>
       <p style="margin:0 0 18px">
         Îți poți gestiona galeriile direct din dashboard.
@@ -338,7 +410,7 @@ function buildContactNotificationEmailHtml({ nume = '', email = '', mesaj = '' }
   `
 }
 
-function buildSelectionSavedEmailHtml({
+function buildSelectionFinalizedEmailHtml({
   galleryName = '',
   clientName = '',
   favoritesCount = 0,
@@ -350,19 +422,19 @@ function buildSelectionSavedEmailHtml({
   const safeDashboardUrl = escapeHtml(dashboardUrl)
 
   return `
-    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1d1d1f">
-      <h2 style="margin:0 0 12px">Selecție nouă de favorite</h2>
-      <p style="margin:0 0 12px">Clientul <strong>${safeClientName}</strong> a actualizat selecția pentru galeria <strong>${safeGalleryName}</strong>.</p>
-      <p style="margin:0 0 16px">Total favorite selectate acum: <strong>${safeFavoritesCount}</strong>.</p>
-      <p style="margin:0 0 18px">
-        Deschide dashboard-ul Mina pentru a vedea selecția completă și pentru a continua comunicarea cu clientul.
-      </p>
-      <p style="margin:0 0 18px">
-        <a href="${safeDashboardUrl}" style="display:inline-block;padding:10px 16px;background:#111111;color:#ffffff;text-decoration:none;border-radius:8px">
-          Deschide dashboard-ul
-        </a>
-      </p>
-      <p style="margin:0;color:#666">Echipa Mina</p>
+    <div style="margin:0;background:#f5f4f1;padding:36px 18px;font-family:Arial,sans-serif;color:#1d1d1f">
+      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e8e6e1;border-radius:18px;overflow:hidden">
+        <div style="padding:22px 28px;border-bottom:1px solid #efede8;font-family:Georgia,serif;font-size:24px;letter-spacing:0.18em">MINA</div>
+        <div style="padding:34px 28px;line-height:1.65">
+          <p style="margin:0 0 10px;color:#b8965a;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase">Selecție finalizată</p>
+          <h2 style="margin:0 0 16px;font-family:Georgia,serif;font-size:30px;font-weight:400">${safeClientName} a trimis selecția.</h2>
+          <p style="margin:0 0 10px">Galeria: <strong>${safeGalleryName}</strong></p>
+          <p style="margin:0 0 24px">Fotografii selectate: <strong>${safeFavoritesCount}</strong></p>
+          <p style="margin:0 0 24px;color:#666">Selecția este acum blocată pentru client. O poți vedea, exporta pentru Lightroom sau redeschide din dashboard.</p>
+          <a href="${safeDashboardUrl}" style="display:inline-block;padding:13px 20px;background:#1d1d1f;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:600">Vezi selecția în Mina</a>
+        </div>
+        <div style="padding:18px 28px;background:#faf9f7;color:#777;font-size:12px">cloudbymina.com · galerii profesionale pentru fotografi</div>
+      </div>
     </div>
   `
 }
@@ -411,13 +483,51 @@ function buildGalleryLinkEmailHtml({
   `
 }
 
-function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } = {}) {
+function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIdToPlan = {} } = {}) {
   const key = sanitize(apiKey)
   if (!key) {
     throw new Error('RESEND_API_KEY is not configured.')
   }
 
   const resend = new Resend(key)
+
+  async function sendVerificationEmail({ toEmail, displayName, verificationUrl } = {}) {
+    const email = normalizeEmail(toEmail)
+    const url = sanitize(verificationUrl)
+    if (!email) {
+      return { skipped: true, reason: 'missing_email' }
+    }
+    if (!url) {
+      return { skipped: true, reason: 'missing_verification_url' }
+    }
+
+    const response = await resend.emails.send({
+      from: fromEmail,
+      to: [email],
+      subject: 'Confirmă adresa de email pentru Mina',
+      html: buildVerificationEmailHtml({
+        displayName: sanitize(displayName) || 'Fotograf',
+        verificationUrl: url,
+      }),
+      text: [
+        `Salut, ${sanitize(displayName) || 'Fotograf'}!`,
+        '',
+        'Confirmă adresa de email pentru a putea crea galerii, publica site-ul și încărca fotografii în Mina.',
+        '',
+        url,
+        '',
+        'Dacă nu ai creat un cont Mina, poți ignora acest mesaj.',
+        '',
+        'Echipa Mina',
+      ].join('\n'),
+    })
+
+    if (response?.error) {
+      throw new Error(`Resend verification email failed: ${sanitize(response.error.message || response.error.name || 'unknown error')}`)
+    }
+
+    return { skipped: false, email }
+  }
 
   async function sendWelcomeEmail(user = {}) {
     const email = normalizeEmail(user.email)
@@ -447,7 +557,7 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
     const planName = resolvePlanForPaymentEmail({
       session,
       paymentData,
-      priceIds,
+      priceIdToPlan,
     })
 
     const storageLimitGb = getStorageLimitForPlan(planName)
@@ -562,7 +672,7 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
     }
   }
 
-  async function sendSelectionSavedNotificationEmail({
+  async function sendSelectionFinalizedNotificationEmail({
     toEmail,
     galleryName,
     clientName,
@@ -576,8 +686,8 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
     await resend.emails.send({
       from: fromEmail,
       to: [to],
-      subject: `[Mina] ${sanitize(clientName || 'Client')} a selectat ${Math.max(0, Number(favoritesCount) || 0)} favorite din galeria ${sanitize(galleryName || 'Galerie')}`.slice(0, 190),
-      html: buildSelectionSavedEmailHtml({
+      subject: `[Mina] Selecție finalizată — ${sanitize(clientName || 'Client')}, ${Math.max(0, Number(favoritesCount) || 0)} fotografii`.slice(0, 190),
+      html: buildSelectionFinalizedEmailHtml({
         galleryName,
         clientName,
         favoritesCount,
@@ -627,13 +737,14 @@ function createEmailService({ apiKey, fromEmail, dashboardUrl, priceIds = {} } =
 
 
   return {
+    sendVerificationEmail,
     sendWelcomeEmail,
     sendPaymentSuccessEmail,
     sendSubscriptionCanceledEmail,
     sendPaymentFailedEmail,
     sendDisputeEmail,
     sendContactNotificationEmail,
-    sendSelectionSavedNotificationEmail,
+    sendSelectionFinalizedNotificationEmail,
     sendGalleryLinkEmail,
   }
 }

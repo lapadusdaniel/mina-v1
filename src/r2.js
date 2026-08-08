@@ -74,11 +74,6 @@ function ensurePublicPath(path, operation) {
   }
 }
 
-async function buildReadAuthHeaders() {
-  const idToken = await readCurrentIdToken(false)
-  return authHeadersFromToken(idToken)
-}
-
 /** Upload file to R2. Requires Firebase idToken for Worker auth. */
 export const uploadPoza = async (file, galerieId, _ownerUid, onProgress, targetPath, idToken) => {
   requireIdToken(idToken, 'Upload')

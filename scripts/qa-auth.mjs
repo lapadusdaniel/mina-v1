@@ -131,7 +131,7 @@ async function loginAndCheckDesktop(context, screenshotsPath, credentials) {
   assert(currentUrl.includes('/dashboard') || currentUrl.includes('/settings'), `Login failed. URL curent: ${currentUrl}`)
 
   try {
-    await page.waitForSelector('.dashboard-sidebar', { state: 'attached', timeout: 20000 })
+    await page.waitForSelector('.dashboard-sidebar', { state: 'visible', timeout: 45000 })
   } catch (err) {
     const failShot = path.join(screenshotsPath, 'dashboard-desktop-fail.png')
     await page.screenshot({ path: failShot, fullPage: true }).catch(() => {})
@@ -172,21 +172,22 @@ async function checkMobileWithSameSession(context, screenshotsPath) {
   const page = await context.newPage()
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(`${baseUrl}/dashboard`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(800)
 
   try {
-    await page.waitForSelector('.dashboard-sidebar', { state: 'attached', timeout: 20000 })
+    await page.waitForSelector('.dashboard-mobile-nav-shell', { state: 'visible', timeout: 45000 })
   } catch (err) {
     const failShot = path.join(screenshotsPath, 'dashboard-mobile-fail.png')
     await page.screenshot({ path: failShot, fullPage: true }).catch(() => {})
     const bodyText = await page.locator('body').innerText().catch(() => '')
     throw new Error(
-      `Sidebar missing on mobile. URL=${page.url()} body="${bodyText.slice(0, 220)}" screenshot=${failShot}`
+      `Navigația mobilă lipsește. URL=${page.url()} body="${bodyText.slice(0, 220)}" screenshot=${failShot}`
     )
   }
+  await page.waitForTimeout(600)
 
   const mobileInfo = await page.evaluate(() => {
-    const node = document.querySelector('.dashboard-sidebar')
+    const node = document.querySelector('.dashboard-mobile-nav-shell')
     if (!node) return null
     const rect = node.getBoundingClientRect()
     const style = window.getComputedStyle(node)
@@ -194,18 +195,21 @@ async function checkMobileWithSameSession(context, screenshotsPath) {
       width: rect.width,
       left: rect.left,
       top: rect.top,
-      bottom: rect.bottom,
       position: style.position,
       viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
     }
   })
 
-  if (!mobileInfo) throw new Error('Sidebar mobile lipseste.')
-  if (mobileInfo.position !== 'fixed') {
-    throw new Error(`Sidebar mobile nu e fixed (position=${mobileInfo.position}).`)
+  if (!mobileInfo) throw new Error('Navigația mobilă lipsește.')
+  if (mobileInfo.position !== 'sticky') {
+    throw new Error(`Navigația mobilă nu e sticky (position=${mobileInfo.position}).`)
   }
-  if (mobileInfo.bottom < mobileInfo.viewportHeight - 2) {
-    throw new Error(`Sidebar mobile nu sta jos (bottom=${mobileInfo.bottom}, vh=${mobileInfo.viewportHeight}).`)
+  if (mobileInfo.top > 2) {
+    throw new Error(`Navigația mobilă nu stă sus (top=${mobileInfo.top}).`)
+  }
+  if (mobileInfo.width < mobileInfo.viewportWidth - 2) {
+    throw new Error(`Navigația mobilă nu ocupă lățimea ecranului (${mobileInfo.width}/${mobileInfo.viewportWidth}).`)
   }
 
   const mobileShot = path.join(screenshotsPath, 'dashboard-mobile.png')

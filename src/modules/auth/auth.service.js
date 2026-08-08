@@ -1,17 +1,20 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  reload as reloadFirebaseUser,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
 } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 
 function normalizeUser(firebaseUser, profileData) {
   if (!firebaseUser) return null
   return {
     uid: firebaseUser.uid,
     email: firebaseUser.email,
+    emailVerified: firebaseUser.emailVerified === true,
     name:
       profileData?.name ||
       firebaseUser.displayName ||
@@ -52,7 +55,9 @@ async function ensureUserProfileDoc(db, firebaseUser) {
   return payload
 }
 
-export function createAuthModule({ auth, db }) {
+export function createAuthModule({ auth, db, functions }) {
+  const sendBrandedVerificationEmail = httpsCallable(functions, 'sendBrandedVerificationEmail')
+
   return {
     auth,
     db,
@@ -66,6 +71,23 @@ export function createAuthModule({ auth, db }) {
       if (!current) return null
       const profile = await ensureUserProfileDoc(db, current)
       return normalizeUser(current, profile)
+    },
+
+    async refreshCurrentUser() {
+      const current = auth.currentUser
+      if (!current) return null
+      await reloadFirebaseUser(current)
+      await current.getIdToken(true)
+      const profile = await ensureUserProfileDoc(db, current)
+      return normalizeUser(current, profile)
+    },
+
+    async sendVerificationEmail() {
+      const current = auth.currentUser
+      if (!current) throw new Error('Trebuie să fii autentificat.')
+      if (current.emailVerified) return { alreadyVerified: true }
+      const response = await sendBrandedVerificationEmail()
+      return response.data || { sent: true }
     },
 
     watchSession(onChange) {
@@ -115,6 +137,12 @@ export function createAuthModule({ auth, db }) {
         categorii: ['Nunți', 'Botezuri', 'Corporate', 'Portret'],
         createdAt: new Date().toISOString(),
       })
+
+      try {
+        await sendBrandedVerificationEmail()
+      } catch (error) {
+        console.warn('Nu am putut trimite automat emailul de verificare:', error)
+      }
 
       return normalizeUser(userCredential.user, {
         name,

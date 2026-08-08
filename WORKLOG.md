@@ -1,3 +1,65 @@
+### 2026-08-06 — Preț Fondator + prețuri Standard Stripe
+
+- Recalculat costurile pe infrastructura reală Backblaze B2; păstrate cotele Free 15 GB, Esențial 100 GB, Plus 500 GB, Pro 1 TB și Studio 2 TB
+- Stabilite prețurile Standard: 39/390, 69/690, 99/990 și 149/1.490 lei; prețurile existente devin Preț Fondator până la 30 septembrie 2026
+- Create și verificate în Stripe live toate cele 8 Price ID-uri Standard; prețurile Fondator existente au rămas intacte
+- Oferta Fondator rămâne la reînnoire cât timp abonamentul este activ fără întrerupere; schimbarea planului prin portal păstrează catalogul Fondator
+- Create două configurații Stripe Customer Portal, Fondator și Standard, cu schimbare de plan și perioadă de facturare
+- Checkout-ul a fost mutat pe selecție server-side după `planId` și dată, reutilizează Stripe Customer-ul existent și refuză un al doilea abonament principal activ
+- Centralizat catalogul public de prețuri pentru landing și dashboard; adăugate textele ofertei și condițiile legale
+- Corectate emailurile de plată pentru Esențial/Plus/Pro/Studio și cotele 100/500/1.000/2.000 GB
+- Corectat Admin Financiar: cost Backblaze B2 în loc de Cloudflare R2 și MRR lunarizat din suma/perioada Stripe
+
+### 2026-08-05 — Migrare parole + audit 3 (deploy finalizat)
+
+- Corectat `scripts/migrate-gallery-passwords.js` pentru proiect ESM (`import firebase-admin` în loc de `require`)
+- Rulat migrarea în proiectul live `mina-v1-aea51`:
+  - 10 galerii găsite
+  - 0 migrate, 10 fără hash legacy, 0 erori
+  - niciun `settings.privacy.passwordHash` nu mai există în documentele publice verificate
+- Audit local:
+  - aliniat Worker-ul la planurile curente `Free / Esential / Plus / Pro / Studio`
+  - aliniat cotele server-side la `15 / 100 / 500 / 1000 / 2000 GB` (+500 GB add-on Studio)
+  - eliminate fallback-urile server-side la metadata stale din `users/{uid}.plan`
+  - actualizate testele B2, QA public/auth și verificările env pentru configurația curentă
+  - corectată ordinea hook-urilor React din `AdminPanel`
+- Rezultate:
+  - teste locale: 26/26 PASS
+  - build: PASS
+  - lint: 0 erori (8 avertismente exhaustive-deps)
+  - QA public live: PASS desktop + mobil
+  - QA auth live: PASS desktop + mobil; conturile temporare au fost șterse
+- Billing/Blaze activat și deploy live finalizat:
+  - `updateStorageUsed` autentifică apelul cu tokenul Firebase verificat al utilizatorului, fără a reutiliza cheia Backblaze ca secret intern
+  - adăugată funcția `verifyGalleryShareAccess`, care validează server-side tokenurile galeriilor protejate fără a expune hashul prin Firestore
+  - Worker Cloudflare publicat cu planurile și cotele curente
+  - buildul frontend curent publicat pe Firebase Hosting
+  - perechea de credențiale Backblaze din Firebase verificată direct: răspuns 200
+- Audit live final:
+  - `qa:worker`: PASS pentru upload owner, quota sync, blocare non-owner, share token public și delete/cleanup
+  - `preflight:live`: PASS (17/17 env, 26/26 teste, build)
+  - `qa:public`: PASS desktop + mobil
+  - `qa:auth`: PASS desktop + mobil; utilizatorul temporar a fost șters
+  - lint: 0 erori, 8 avertismente non-blocante `exhaustive-deps`
+
+### 2026-04-15 — Verificare string-uri plan în billing
+
+- Verificat `src/modules/billing/billing.service.js` pentru consistența dintre valorile returnate de `normalizePlanName()` și `priceIdToPlan()` versus cheile din `PLAN_PRIORITY`
+- Rezultat: nu există mismatch-uri de string (casing, diacritice sau typo); toate valorile returnate sunt exact `Free`, `Esential`, `Plus`, `Pro`, `Studio`
+- Nu a fost necesară nicio modificare de logică sau cod în `billing.service.js`
+
+### 2026-04-15 — Consistență citire abonament: Settings folosește aceeași sursă ca Dashboard
+
+- Investigat contul afectat în Firestore:
+  - `users/{uid}` conținea încă `plan: "free"` și `subscriptionStatus: "canceled"` (stale)
+  - `adminOverrides/{uid}` avea `plan: "Starter"`
+  - `customers/{uid}/subscriptions/*` conținea abonament activ
+- `src/modules/billing/billing.service.js`:
+  - extras helper comun de rezolvare a planului afișat
+  - `getBillingOverview()` folosește acum aceeași ordine ca `watchUserPlan()`: `adminOverrides` → subscriptions active → `Free`
+  - eliminat fallback-ul la `users/{uid}.plan` pentru limita de storage din billing overview, deoarece producea valoare stale diferită de Dashboard
+- Rezultat: pagina de abonament, pagina Settings și bara de storage din Dashboard citesc aceeași sursă de adevăr pentru plan și limită
+
 ### 2026-04-01 — Security pass 3: password regression closed, quota server-side, Firestore rules tightened
 
 - **FIX 1 — Închidere finală regresie `passwordHash` public** (`functions/index.js`, `src/modules/galleries/galleries.service.js`)
@@ -447,3 +509,14 @@
 
 - Modificată constanta `SELECTION_EMAIL_DEBOUNCE_MS` din `functions/index.js` de la `2 * 60 * 60 * 1000` la `8 * 60 * 60 * 1000`
 - Păstrată aceeași cheie de debounce `selectionEmailLog/{galleryId}_{clientId}` și același flow tranzacțional; s-a schimbat doar fereastra de timp
+
+### 2026-08-06 — Structură nouă de prețuri și ofertă Fondator
+
+- Confirmată structura de lansare: Free 15 GB / 3 galerii, Esențial 100 GB, Plus 500 GB, Pro 1 TB și Studio 2 TB
+- Transformate prețurile curente în `Preț Fondator` (29 / 49 / 79 / 129 lei lunar), disponibil până la 30 septembrie 2026 și păstrat cât timp abonamentul rămâne activ fără întrerupere
+- Adăugate prețurile Standard (39 / 69 / 99 / 149 lei lunar) și echivalentele anuale pentru toate cele patru planuri plătite
+- Create și verificate în Stripe cele 16 prețuri live și două configurații Customer Portal separate, fiecare cu 4 produse și 8 opțiuni de plan
+- Centralizat catalogul în `src/modules/billing/pricing.config.js` și actualizate landing page, dashboard, Termeni, emailuri, admin, checkout-ul Firebase și Worker-ul de stocare
+- Adăugate protecții împotriva abonamentelor principale duplicate și păstrarea eligibilității Fondator la schimbarea planului prin portalul oficial
+- Publicate cu succes toate funcțiile Firebase, Worker-ul Cloudflare (versiunea `1e7e0653-5007-4301-99cc-01b7cbb45b14`) și Firebase Hosting
+- Verificări finale: 30/30 teste, build reușit, 27/27 variabile live, QA public pe `cloudbymina.com`, QA Worker, desktop și mobil fără erori de pagină sau overflow orizontal

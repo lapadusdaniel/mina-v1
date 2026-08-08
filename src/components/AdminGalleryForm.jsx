@@ -141,7 +141,7 @@ export default function AdminGalleryForm({ user, onSuccess, onCancel, disabled, 
       onSuccess?.()
     } catch (error) {
       console.error('Error:', error)
-      alert('Eroare la adăugare galerie!')
+      alert(error?.message || 'Eroare la adăugare galerie!')
     }
   }
 

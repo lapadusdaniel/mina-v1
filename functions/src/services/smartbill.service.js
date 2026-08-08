@@ -3,6 +3,7 @@ const DEFAULT_CURRENCY = 'RON'
 const DEFAULT_UNIT = 'serv'
 const DEFAULT_TAX_NAME = 'Normala'
 const DEFAULT_TAX_PERCENTAGE = 21
+const DEFAULT_ISSUER_IS_TAX_PAYER = false
 
 function sanitizeString(value, maxLen = 255) {
   return String(value || '').trim().slice(0, maxLen)
@@ -11,6 +12,14 @@ function sanitizeString(value, maxLen = 255) {
 function toNumber(value, fallback = 0) {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : fallback
+}
+
+function toBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (['1', 'true', 'yes', 'da'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'nu'].includes(normalized)) return false
+  return fallback
 }
 
 function formatDate(value) {
@@ -37,6 +46,7 @@ class SmartBillService {
     cif = process.env.SMARTBILL_CIF,
     seriesName = process.env.SMARTBILL_SERIES_NAME,
     baseUrl = process.env.SMARTBILL_API_BASE,
+    issuerIsTaxPayer = process.env.SMARTBILL_IS_TAX_PAYER,
     taxName = process.env.SMARTBILL_TAX_NAME,
     taxPercentage = process.env.SMARTBILL_TAX_PERCENTAGE,
   } = {}) {
@@ -45,6 +55,7 @@ class SmartBillService {
     this.cif = sanitizeString(cif, 32)
     this.seriesName = sanitizeString(seriesName, 32)
     this.baseUrl = sanitizeString(baseUrl || SMARTBILL_API_BASE, 120)
+    this.issuerIsTaxPayer = toBoolean(issuerIsTaxPayer, DEFAULT_ISSUER_IS_TAX_PAYER)
     this.taxName = sanitizeString(taxName || DEFAULT_TAX_NAME, 32)
 
     const parsedTax = toNumber(taxPercentage, DEFAULT_TAX_PERCENTAGE)
@@ -93,18 +104,23 @@ class SmartBillService {
       const unitPriceRaw = item.unitPrice ?? item.price ?? fallbackAmount
       const unitPrice = Number(toNumber(unitPriceRaw, 0).toFixed(2))
 
-      return {
+      const normalizedItem = {
         name: sanitizeString(item.name || fallbackName, 180),
         quantity,
         measuringUnitName: sanitizeString(item.measuringUnitName || item.unit || DEFAULT_UNIT, 20) || DEFAULT_UNIT,
         currency,
         price: unitPrice,
-        isTaxIncluded: true,
-        taxName: this.taxName,
-        taxPercentage: this.taxPercentage,
         isService: true,
         saveToDb: false,
       }
+
+      if (this.issuerIsTaxPayer) {
+        normalizedItem.isTaxIncluded = true
+        normalizedItem.taxName = this.taxName
+        normalizedItem.taxPercentage = this.taxPercentage
+      }
+
+      return normalizedItem
     })
   }
 

@@ -73,17 +73,36 @@ export default function LaunchChecklist() {
     const stripePlus     = import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY     || ''
     const stripePro      = import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY      || ''
     const stripeStudio   = import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY   || ''
+    const stripeRegularPrices = [
+      import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_REGULAR_MONTHLY || '',
+      import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_REGULAR_YEARLY || '',
+      import.meta.env.VITE_STRIPE_PRICE_PLUS_REGULAR_MONTHLY || '',
+      import.meta.env.VITE_STRIPE_PRICE_PLUS_REGULAR_YEARLY || '',
+      import.meta.env.VITE_STRIPE_PRICE_PRO_REGULAR_MONTHLY || '',
+      import.meta.env.VITE_STRIPE_PRICE_PRO_REGULAR_YEARLY || '',
+      import.meta.env.VITE_STRIPE_PRICE_STUDIO_REGULAR_MONTHLY || '',
+      import.meta.env.VITE_STRIPE_PRICE_STUDIO_REGULAR_YEARLY || '',
+    ]
+    const stripePortalFounder = import.meta.env.VITE_STRIPE_PORTAL_CONFIGURATION_FOUNDER || ''
+    const stripePortalStandard = import.meta.env.VITE_STRIPE_PORTAL_CONFIGURATION_STANDARD || ''
 
     const firebaseOk = Boolean(firebaseProjectId && firebaseAuthDomain)
     const workerOk = /^https:\/\//i.test(workerUrl)
-    const stripeConfigured = Boolean(stripeKey && stripeEsential && stripePlus && stripePro && stripeStudio)
+    const stripeConfigured = Boolean(
+      stripeKey && stripeEsential && stripePlus && stripePro && stripeStudio
+      && stripeRegularPrices.every(Boolean)
+      && stripePortalFounder && stripePortalStandard
+    )
     const stripeLive =
       stripeConfigured &&
       stripeKey.startsWith('pk_live_') &&
       stripeEsential.startsWith('price_') &&
       stripePlus.startsWith('price_') &&
       stripePro.startsWith('price_') &&
-      stripeStudio.startsWith('price_')
+      stripeStudio.startsWith('price_') &&
+      stripeRegularPrices.every((priceId) => priceId.startsWith('price_')) &&
+      stripePortalFounder.startsWith('bpc_') &&
+      stripePortalStandard.startsWith('bpc_')
 
     return [
       {
@@ -104,7 +123,7 @@ export default function LaunchChecklist() {
         id: 'stripe',
         label: 'Stripe live config',
         details: stripeLive
-          ? 'Publishable key + price IDs sunt setate pentru live'
+          ? 'Publishable key + prețurile Fondator și Standard sunt setate pentru live'
           : stripeConfigured
             ? 'Stripe este configurat, dar nu pare în live mode'
             : 'Lipsesc variabile Stripe în .env',

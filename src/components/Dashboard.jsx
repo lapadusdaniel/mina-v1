@@ -24,6 +24,7 @@ import Settings from '../pages/Settings'
 import SubscriptionSection from './SubscriptionSection'
 import SiteEditor from './SiteEditor'
 import LaunchChecklist from './LaunchChecklist'
+import MinaHelpAssistant from './MinaHelpAssistant'
 import { getGalleryPublicUrl } from '../utils/publicLinks'
 
 const {
@@ -35,11 +36,11 @@ const {
 
 const SIDEBAR_TABS = [
   { key: 'galerii', label: 'Galerii', mobileLabel: 'Galerii', icon: Layout },
-  { key: 'card', label: 'Card', mobileLabel: 'Card', icon: Contact },
-  { key: 'trash', label: 'Coș de gunoi', mobileLabel: 'Coș de gunoi', icon: Trash2 },
-  { key: 'site', label: 'Site-ul meu (Beta)', mobileLabel: 'Site-ul meu', icon: Layout },
-  { key: 'abonament', label: 'Abonament', mobileLabel: 'Abonament', icon: CreditCard },
-  { key: 'setari', label: 'Setări', mobileLabel: 'Setări', icon: SettingsIcon }
+  { key: 'site', label: 'Site-ul meu', mobileLabel: 'Site-ul meu', icon: Layout },
+  { key: 'card', label: 'Profil public', mobileLabel: 'Profil public', icon: Contact },
+  { key: 'abonament', label: 'Plan și facturare', mobileLabel: 'Plan și facturare', icon: CreditCard, secondaryStart: true },
+  { key: 'setari', label: 'Setări', mobileLabel: 'Setări', icon: SettingsIcon },
+  { key: 'trash', label: 'Coș de gunoi', mobileLabel: 'Coș de gunoi', icon: Trash2 }
 ]
 const TRASH_RETENTION_DAYS = 30
 const ACTIVE_GALLERY_STORAGE_KEY = 'mina_active_gallery_id'
@@ -49,6 +50,7 @@ const THUMB_MAX_DIMENSION = 800
 const THUMB_QUALITY = 0.92
 const CARD_LOGO_PATH = (userId) => `branding/${userId}/logo.png`
 const DEFAULT_FOLDER_ID = 'default'
+const MINA_ASSISTANT_ENABLED = import.meta.env.VITE_MINA_ASSISTANT_ENABLED !== 'false'
 
 function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const navigate = useNavigate()
@@ -75,10 +77,40 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [emailVerified, setEmailVerified] = useState(user?.emailVerified === true)
+  const [verificationStatus, setVerificationStatus] = useState('idle')
   const userMenuRef = useRef(null)
   const mobileNavRef = useRef(null)
 
-  const { userPlan, storageLimit, checkAccess } = useUserSubscription(user?.uid)
+  const { userPlan, storageLimit, loading: planLoading, checkAccess } = useUserSubscription(user?.uid)
+
+  useEffect(() => {
+    setEmailVerified(user?.emailVerified === true)
+  }, [user?.emailVerified])
+
+  const resendVerificationEmail = async () => {
+    setVerificationStatus('sending')
+    try {
+      await authService.sendVerificationEmail()
+      setVerificationStatus('sent')
+    } catch (error) {
+      console.error('Verification email failed:', error)
+      setVerificationStatus('error')
+    }
+  }
+
+  const refreshVerificationStatus = async () => {
+    setVerificationStatus('checking')
+    try {
+      const refreshedUser = await authService.refreshCurrentUser()
+      const verified = refreshedUser?.emailVerified === true
+      setEmailVerified(verified)
+      setVerificationStatus(verified ? 'verified' : 'not-verified')
+    } catch (error) {
+      console.error('Verification refresh failed:', error)
+      setVerificationStatus('error')
+    }
+  }
 
   // Show success modal when returning from Stripe with ?payment=success
   useEffect(() => {
@@ -458,6 +490,11 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
   const handleUploadPoze = async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length || !galerieActiva) return
+    if (!emailVerified) {
+      alert('Confirmă adresa de email înainte să încarci fotografii.')
+      e.target.value = ''
+      return
+    }
     cancelUploadRef.current = false
     const sessionId = ++uploadSessionRef.current
     setUploading(true)
@@ -1176,11 +1213,11 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         </h1>
       </div>
       <nav className="sidebar-nav">
-        {SIDEBAR_TABS.map(({ key, label, icon: Icon }) => (
+        {SIDEBAR_TABS.map(({ key, label, icon: Icon, secondaryStart }) => (
           <button
             key={key}
             type="button"
-            className={`dashboard-sidebar-btn ${activeTab === key ? 'active' : ''}`}
+            className={`dashboard-sidebar-btn ${secondaryStart ? 'dashboard-sidebar-btn--secondary-start' : ''} ${activeTab === key ? 'active' : ''}`}
             onClick={() => runUiTransition(() => handleSelectTab(key))}
           >
             <span className="dashboard-sidebar-btn-indicator" />
@@ -1259,11 +1296,11 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         id="dashboard-mobile-menu"
         className={`dashboard-mobile-menu ${mobileNavOpen ? 'is-open' : ''}`}
       >
-        {SIDEBAR_TABS.map(({ key, mobileLabel, label }) => (
+        {SIDEBAR_TABS.map(({ key, mobileLabel, label, secondaryStart }) => (
           <button
             key={key}
             type="button"
-            className={`dashboard-mobile-menu-item ${activeTab === key ? 'active' : ''}`}
+            className={`dashboard-mobile-menu-item ${secondaryStart ? 'dashboard-mobile-menu-item--secondary-start' : ''} ${activeTab === key ? 'active' : ''}`}
             onClick={() => runUiTransition(() => handleSelectTab(key))}
           >
             {mobileLabel || label}
@@ -1493,7 +1530,12 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
 
         {/* Tab Site ── ADĂUGAT */}
         {activeTab === 'site' && (
-          <SiteEditor user={user} userGalleries={galerii} />
+          <SiteEditor
+            user={user}
+            userGalleries={galerii}
+            userPlan={userPlan}
+            planLoading={planLoading}
+          />
         )}
 
         {/* Tab Lansare */}
@@ -1516,7 +1558,14 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         {/* Tab Abonament */}
         {activeTab === 'abonament' && (
           <div className="dashboard-subscription-wrap" style={{ width: '100%', padding: '20px 40px' }}>
-            <SubscriptionSection user={user} userPlan={userPlan} storageLimit={storageLimit} checkAccess={checkAccess} mode="plansOnly" />
+            <SubscriptionSection
+              user={user}
+              userPlan={userPlan}
+              storageLimit={storageLimit}
+              checkAccess={checkAccess}
+              mode="plansOnly"
+              initialBillingCycle={searchParams.get('cycle') === 'yearly' ? 'yearly' : 'monthly'}
+            />
           </div>
         )}
 
@@ -1535,8 +1584,32 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       {renderSidebar()}
       <div className={`dashboard-main-content ${!galerieActiva ? 'page-content dashboard-app' : ''}`}>
         {renderMobileHeader()}
+        {!emailVerified && (
+          <div className="dashboard-verification-banner" role="status">
+            <div>
+              <strong>Confirmă adresa de email</strong>
+              <span>Ți-am trimis un link de confirmare. Este necesar înainte să creezi galerii, să publici site-ul sau să încarci fotografii.</span>
+            </div>
+            <div className="dashboard-verification-actions">
+              <button type="button" onClick={resendVerificationEmail} disabled={verificationStatus === 'sending'}>
+                {verificationStatus === 'sending' ? 'Se trimite...' : verificationStatus === 'sent' ? 'Email trimis' : 'Retrimite emailul'}
+              </button>
+              <button type="button" onClick={refreshVerificationStatus} disabled={verificationStatus === 'checking'}>
+                {verificationStatus === 'checking' ? 'Verific...' : 'Am confirmat'}
+              </button>
+            </div>
+            {verificationStatus === 'not-verified' && <small>Adresa nu apare încă verificată. Deschide linkul din email și încearcă din nou.</small>}
+            {verificationStatus === 'error' && <small>Nu am putut verifica acum. Încearcă din nou peste câteva secunde.</small>}
+          </div>
+        )}
         {renderMainContent()}
       </div>
+
+      <MinaHelpAssistant
+        enabled={MINA_ASSISTANT_ENABLED && emailVerified}
+        page={galerieActiva ? 'interior galerie' : activeTab}
+        plan={userPlan}
+      />
 
       {showPaymentSuccess && (
         <div className="dashboard-payment-success-overlay" onClick={() => setShowPaymentSuccess(false)}>

@@ -3,7 +3,7 @@
 ## In-scope (obligatoriu)
 1. Autentificare fotograf (register/login/logout).
 2. Creare galerie (nume, slug, data, expirare optionala).
-3. Upload poze (original + thumb + medium) in R2 prin worker.
+3. Upload poze (original + thumb + medium) în Backblaze B2 prin Worker-ul Cloudflare.
 4. Galerie publica pe slug.
 5. Selectie favorite de catre client.
 6. Dashboard fotograf: lista galerii, trash, restore.

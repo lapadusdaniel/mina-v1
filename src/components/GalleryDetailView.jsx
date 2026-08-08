@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Masonry from 'react-masonry-css'
 import { httpsCallable } from 'firebase/functions'
-import { FolderPlus, Link as LinkIcon, MessageCircle, Pencil, Settings, Trash2 } from 'lucide-react'
+import { Check, Eye, FolderPlus, Link as LinkIcon, MessageCircle, Pencil, Settings, Trash2, X } from 'lucide-react'
 import AdminSelections from './AdminSelections'
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
@@ -443,7 +443,6 @@ export default function GalleryDetailView({
   const [sendingLink, setSendingLink] = useState(false)
   const [sendLinkTab, setSendLinkTab] = useState('link')
   const [copyLinkSuccess, setCopyLinkSuccess] = useState(false)
-  const skipBlurSaveRef = useRef(false)
   const copyLinkTimeoutRef = useRef(null)
 
   const selectionMode = selectedKeys.size > 0
@@ -561,7 +560,9 @@ export default function GalleryDetailView({
     }
   }, [])
 
-  const startFolderRename = (folder) => {
+  const startFolderRename = (event, folder) => {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
     setEditingFolderId(folder.id)
     setEditingFolderName(folder.name || '')
   }
@@ -828,6 +829,94 @@ export default function GalleryDetailView({
     }
   }
 
+  const renderFolderTab = (folder, count, isActive) => {
+    const isEditing = editingFolderId === folder.id
+    const isSaving = renamingFolderId === folder.id
+
+    return (
+      <div className={`dashboard-folder-tab${isActive ? ' is-active' : ''}${isEditing ? ' is-editing' : ''}`}>
+        {isEditing ? (
+          <div
+            className="dashboard-folder-rename"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) cancelFolderRename()
+            }}
+          >
+            <input
+              type="text"
+              value={editingFolderName}
+              autoFocus
+              disabled={isSaving}
+              onChange={(event) => setEditingFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  saveFolderRename(folder)
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  cancelFolderRename()
+                }
+              }}
+              className="dashboard-folder-rename-input"
+              aria-label={`Nume folder ${folder.name}`}
+            />
+            <button
+              type="button"
+              className="dashboard-folder-rename-action is-save"
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                saveFolderRename(folder)
+              }}
+              disabled={isSaving}
+              aria-label="Salvează numele folderului"
+            >
+              <Check size={13} />
+            </button>
+            <button
+              type="button"
+              className="dashboard-folder-rename-action"
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                cancelFolderRename()
+              }}
+              disabled={isSaving}
+              aria-label="Anulează redenumirea"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={`dashboard-folder-chip${isActive ? ' is-active' : ''}`}
+              onClick={() => onSelectFolder?.(folder.id)}
+              onDoubleClick={(event) => startFolderRename(event, folder)}
+              title={folder.name}
+            >
+              <span>{folder.name}</span>
+              <span className="dashboard-folder-chip-count">{count}</span>
+            </button>
+            {isActive && (
+              <button
+                type="button"
+                onClick={(event) => startFolderRename(event, folder)}
+                className="dashboard-folder-rename-btn"
+                aria-label={`Redenumește folderul ${folder.name}`}
+                title="Redenumește folderul"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="dashboard-root">
       <div className="dashboard-gallery-header">
@@ -856,6 +945,7 @@ export default function GalleryDetailView({
           </button>
         </div>
         <div className="dashboard-header-actions">
+          <AdminSelections galerie={galerie} userId={user?.uid} />
           <button
             type="button"
             onClick={openSendLinkModal}
@@ -868,6 +958,7 @@ export default function GalleryDetailView({
             onClick={() => setSettingsOpen(true)}
             className="dashboard-settings-btn"
             title="Setări galerie"
+            aria-label="Setări galerie"
           >
             <Settings size={16} />
           </button>
@@ -879,9 +970,11 @@ export default function GalleryDetailView({
                 if (previewPath) window.open(previewPath, '_blank')
               }
             }}
-            className="dashboard-preview-btn"
+            className="dashboard-settings-btn"
+            title="Preview client"
+            aria-label="Preview client"
           >
-            Preview Client
+            <Eye size={16} />
           </button>
         </div>
       </div>
@@ -889,69 +982,7 @@ export default function GalleryDetailView({
       <div className="dashboard-folders-section">
         <div className="dashboard-folders-list">
           {showDefaultTab && (
-            <div
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              {editingFolderId === DEFAULT_FOLDER_ID ? (
-                <input
-                  type="text"
-                  value={editingFolderName}
-                  autoFocus
-                  disabled={renamingFolderId === DEFAULT_FOLDER_ID}
-                  onChange={(event) => setEditingFolderName(event.target.value)}
-                  onBlur={() => {
-                    if (skipBlurSaveRef.current) {
-                      skipBlurSaveRef.current = false
-                      return
-                    }
-                    saveFolderRename(defaultFolder)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      saveFolderRename(defaultFolder)
-                    }
-                    if (event.key === 'Escape') {
-                      event.preventDefault()
-                      skipBlurSaveRef.current = true
-                      cancelFolderRename()
-                    }
-                  }}
-                  className="dashboard-folder-chip is-active"
-                  style={{ minWidth: 120 }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className={`dashboard-folder-chip ${activeFolderId === DEFAULT_FOLDER_ID ? 'is-active' : ''}`}
-                  onClick={() => onSelectFolder?.(DEFAULT_FOLDER_ID)}
-                >
-                  <span>{defaultFolderName}</span>
-                  <span className="dashboard-folder-chip-count">{defaultPhotosCount}</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => startFolderRename(defaultFolder)}
-                disabled={renamingFolderId === DEFAULT_FOLDER_ID}
-                aria-label={`Redenumește folderul ${defaultFolderName}`}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#86868b',
-                  padding: 4,
-                  width: 20,
-                  height: 20,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                }}
-              >
-                <Pencil size={12} />
-              </button>
-            </div>
+            renderFolderTab(defaultFolder, defaultPhotosCount, activeFolderId === DEFAULT_FOLDER_ID)
           )}
 
           {hasExplicitFolders && (
@@ -963,75 +994,10 @@ export default function GalleryDetailView({
                     draggable={editingFolderId !== folder.id}
                     onDragStart={(event) => handleFolderDragStart(event, folder.id)}
                     onDragEnd={handleFolderDragEnd}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      opacity: draggedFolderId === folder.id ? 0.55 : 1,
-                      borderRadius: 12,
-                      transition: 'opacity 0.15s ease',
-                    }}
+                    className="dashboard-folder-draggable"
+                    style={{ opacity: draggedFolderId === folder.id ? 0.55 : 1 }}
                   >
-                    {editingFolderId === folder.id ? (
-                      <input
-                        type="text"
-                        value={editingFolderName}
-                        autoFocus
-                        disabled={renamingFolderId === folder.id}
-                        onChange={(event) => setEditingFolderName(event.target.value)}
-                        onBlur={() => {
-                          if (skipBlurSaveRef.current) {
-                            skipBlurSaveRef.current = false
-                            return
-                          }
-                          saveFolderRename(folder)
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            saveFolderRename(folder)
-                          }
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            skipBlurSaveRef.current = true
-                            cancelFolderRename()
-                          }
-                        }}
-                        className="dashboard-folder-chip is-active"
-                        style={{ minWidth: 120 }}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className={`dashboard-folder-chip ${activeFolderId === folder.id ? 'is-active' : ''}`}
-                        onClick={() => onSelectFolder?.(folder.id)}
-                        title={folder.name}
-                      >
-                        <span>{folder.name}</span>
-                        <span className="dashboard-folder-chip-count">{Number(folder.photoCount || 0)}</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => startFolderRename(folder)}
-                      disabled={renamingFolderId === folder.id}
-                      aria-label={`Redenumește folderul ${folder.name}`}
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        color: '#86868b',
-                        padding: 4,
-                        width: 20,
-                        height: 20,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <Pencil size={12} />
-                    </button>
+                    {renderFolderTab(folder, Number(folder.photoCount || 0), activeFolderId === folder.id)}
                   </div>
                   {renderFolderDropZone(index + 1)}
                 </Fragment>
@@ -1059,15 +1025,14 @@ export default function GalleryDetailView({
               type="button"
               className="dashboard-folder-delete-btn"
               onClick={() => onDeleteFolder?.(activeFolderId)}
+              title="Șterge folderul curent"
+              aria-label="Șterge folderul curent"
             >
               <Trash2 size={16} />
-              <span>Șterge folderul</span>
             </button>
           )}
         </div>
       </div>
-
-      <AdminSelections galerie={galerie} userId={user?.uid} />
 
       <div className="dashboard-gallery-content">
         {loadingPoze ? (

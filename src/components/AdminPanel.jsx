@@ -6,6 +6,11 @@ import {
   CheckCircle, Ban, Trash2, Edit3, Eye
 } from 'lucide-react'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import {
+  FOUNDER_STRIPE_PRICES,
+  REGULAR_STRIPE_PRICES,
+  resolvePlanFromConfiguredPriceId,
+} from '../modules/billing/pricing.config'
 import { getGalleryPublicPath } from '../utils/publicLinks'
 import './AdminPanel.css'
 
@@ -20,14 +25,16 @@ function hasAdminAccess(user) {
 }
 
 const PLAN_PRICES = {
-  [import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_MONTHLY  || '']: 'Esențial',
-  [import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_YEARLY   || '']: 'Esențial',
-  [import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY      || '']: 'Plus',
-  [import.meta.env.VITE_STRIPE_PRICE_PLUS_YEARLY       || '']: 'Plus',
-  [import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY       || '']: 'Pro',
-  [import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY        || '']: 'Pro',
-  [import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY    || '']: 'Studio',
-  [import.meta.env.VITE_STRIPE_PRICE_STUDIO_YEARLY     || '']: 'Studio',
+  ...Object.fromEntries(
+    [...Object.values(FOUNDER_STRIPE_PRICES), ...Object.values(REGULAR_STRIPE_PRICES)]
+      .filter(Boolean)
+      .map((priceId) => [
+        priceId,
+        resolvePlanFromConfiguredPriceId(priceId) === 'Esential'
+          ? 'Esențial'
+          : resolvePlanFromConfiguredPriceId(priceId),
+      ])
+  ),
   // legacy fallbacks
   [import.meta.env.VITE_STRIPE_PRICE_STARTER || '']: 'Esențial',
   [import.meta.env.VITE_STRIPE_PRICE_PRO     || '']: 'Pro',
@@ -42,6 +49,14 @@ const STRIPE_PRICE_PRO_MONTHLY      = import.meta.env.VITE_STRIPE_PRICE_PRO_MONT
 const STRIPE_PRICE_PRO_YEARLY       = import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY       || ''
 const STRIPE_PRICE_STUDIO_MONTHLY   = import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY   || ''
 const STRIPE_PRICE_STUDIO_YEARLY    = import.meta.env.VITE_STRIPE_PRICE_STUDIO_YEARLY    || ''
+const STRIPE_PRICE_ESENTIAL_REGULAR_MONTHLY = import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_REGULAR_MONTHLY || ''
+const STRIPE_PRICE_ESENTIAL_REGULAR_YEARLY  = import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_REGULAR_YEARLY || ''
+const STRIPE_PRICE_PLUS_REGULAR_MONTHLY     = import.meta.env.VITE_STRIPE_PRICE_PLUS_REGULAR_MONTHLY || ''
+const STRIPE_PRICE_PLUS_REGULAR_YEARLY      = import.meta.env.VITE_STRIPE_PRICE_PLUS_REGULAR_YEARLY || ''
+const STRIPE_PRICE_PRO_REGULAR_MONTHLY      = import.meta.env.VITE_STRIPE_PRICE_PRO_REGULAR_MONTHLY || ''
+const STRIPE_PRICE_PRO_REGULAR_YEARLY       = import.meta.env.VITE_STRIPE_PRICE_PRO_REGULAR_YEARLY || ''
+const STRIPE_PRICE_STUDIO_REGULAR_MONTHLY   = import.meta.env.VITE_STRIPE_PRICE_STUDIO_REGULAR_MONTHLY || ''
+const STRIPE_PRICE_STUDIO_REGULAR_YEARLY    = import.meta.env.VITE_STRIPE_PRICE_STUDIO_REGULAR_YEARLY || ''
 
 const ADMIN_ACTIVE_SECTION_STORAGE_KEY = 'adminActiveSection'
 const ADMIN_ALLOWED_SECTIONS = ['overview', 'users', 'galerii', 'abonamente', 'financiar', 'mesaje', 'setari']
@@ -618,10 +633,20 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
   const proActive     = activeSubscriptions.filter((sub) => sub.plan === 'Pro').length
   const studioActive  = activeSubscriptions.filter((sub) => sub.plan === 'Studio').length
 
-  const esentialMRR = esentialActive * 29
-  const plusMRR    = plusActive    * 49
-  const proMRR     = proActive     * 79
-  const studioMRR  = studioActive  * 129
+  const monthlyRevenue = (subscription, fallbackMonthly) => {
+    const amountMinor = Number(subscription?.unitAmount)
+    if (!Number.isFinite(amountMinor) || amountMinor < 0) return fallbackMonthly
+    const amount = amountMinor / 100
+    return subscription?.interval === 'year' ? amount / 12 : amount
+  }
+  const sumPlanMRR = (planNames, fallbackMonthly) => activeSubscriptions
+    .filter((sub) => planNames.includes(sub.plan))
+    .reduce((sum, sub) => sum + monthlyRevenue(sub, fallbackMonthly), 0)
+
+  const esentialMRR = sumPlanMRR(['Esențial', 'Starter'], 29)
+  const plusMRR    = sumPlanMRR(['Plus'], 49)
+  const proMRR     = sumPlanMRR(['Pro'], 79)
+  const studioMRR  = sumPlanMRR(['Studio'], 129)
   const totalMRR   = esentialMRR + plusMRR + proMRR + studioMRR
 
   const bytesInGb = 1024 ** 3
@@ -647,9 +672,9 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
   const billableGb = Math.max(0, totalStorageGb - freeTierGb)
 
   const usdToLei = 4.7
-  const r2CostUsd = billableGb * 0.015
-  const r2CostLei = r2CostUsd * usdToLei
-  const estimatedProfitLei = totalMRR - r2CostLei
+  const b2CostUsd = billableGb * (6.95 / 1000)
+  const b2CostLei = b2CostUsd * usdToLei
+  const estimatedGrossMarginLei = totalMRR - b2CostLei
 
   const fmtInt = (value) =>
     new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 }).format(value)
@@ -663,29 +688,29 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
     <div>
       <div className="ap-page-header">
         <h1 className="ap-page-title">Financiar</h1>
-        <p className="ap-page-sub">MRR, costuri infrastructură și profit estimat</p>
+        <p className="ap-page-sub">MRR lunarizat și costul real al stocării Backblaze B2</p>
       </div>
 
       <div className="ap-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <div className="ap-stat-card">
           <div className="ap-stat-label">MRR Esențial</div>
           <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(esentialMRR)} lei`}</div>
-          <div className="ap-stat-trend">{esentialActive} abonamente active × 29 lei</div>
+          <div className="ap-stat-trend">{esentialActive} abonamente active · lunarizat din Stripe</div>
         </div>
         <div className="ap-stat-card">
           <div className="ap-stat-label">MRR Plus</div>
           <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(plusMRR)} lei`}</div>
-          <div className="ap-stat-trend">{plusActive} abonamente active × 49 lei</div>
+          <div className="ap-stat-trend">{plusActive} abonamente active · lunarizat din Stripe</div>
         </div>
         <div className="ap-stat-card">
           <div className="ap-stat-label">MRR Pro</div>
           <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(proMRR)} lei`}</div>
-          <div className="ap-stat-trend">{proActive} abonamente active × 79 lei</div>
+          <div className="ap-stat-trend">{proActive} abonamente active · lunarizat din Stripe</div>
         </div>
         <div className="ap-stat-card">
           <div className="ap-stat-label">MRR Studio</div>
           <div className="ap-stat-value">{isLoading ? '...' : `${fmtInt(studioMRR)} lei`}</div>
-          <div className="ap-stat-trend">{studioActive} abonamente active × 129 lei</div>
+          <div className="ap-stat-trend">{studioActive} abonamente active · lunarizat din Stripe</div>
         </div>
         <div className="ap-stat-card">
           <div className="ap-stat-label">Total MRR</div>
@@ -705,33 +730,33 @@ function FinanciarSection({ users, subscriptions, loadingUsers, loadingSubscript
               {isLoading ? '...' : `${fmtDecimal(totalStorageGb, 1)} GB`}
             </div>
             <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtInt(totalStorageBytes)} bytes`}</div>
-            <div style={{ fontSize: '11.5px', color: '#86868b', marginTop: 4 }}>{isLoading ? '' : `Free tier R2: ${fmtDecimal(freeTierUsedGb, 2)} GB`}</div>
-            <div style={{ fontSize: '11.5px', color: '#86868b', marginTop: 2 }}>{isLoading ? '' : `Billable R2: ${fmtDecimal(billableGb, 2)} GB`}</div>
+            <div style={{ fontSize: '11.5px', color: '#86868b', marginTop: 4 }}>{isLoading ? '' : `Free tier B2: ${fmtDecimal(freeTierUsedGb, 2)} GB`}</div>
+            <div style={{ fontSize: '11.5px', color: '#86868b', marginTop: 2 }}>{isLoading ? '' : `Billable B2: ${fmtDecimal(billableGb, 2)} GB`}</div>
           </div>
 
           <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(0,0,0,0.06)', background: '#fff' }}>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Cost R2 (0.015 USD/GB, după 10 GB gratis)</div>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a1a1a6', marginBottom: 7 }}>Cost B2 estimat (6,95 USD/TB, după 10 GB gratis)</div>
             <div style={{ fontSize: '1.45rem', color: '#1d1d1f', fontFamily: 'DM Serif Display, Georgia, serif' }}>
-              {isLoading ? '...' : `${fmtDecimal(r2CostUsd)} USD`}
+              {isLoading ? '...' : `${fmtDecimal(b2CostUsd)} USD`}
             </div>
-            <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(r2CostLei)} lei (curs 4.7)`}</div>
+            <div style={{ fontSize: '12px', color: '#86868b', marginTop: 6 }}>{isLoading ? '' : `${fmtDecimal(b2CostLei)} lei (curs estimat 4,7)`}</div>
           </div>
         </div>
       </div>
 
       <div className="ap-card">
         <div className="ap-card-header">
-          <span className="ap-card-title">Profit estimat</span>
+          <span className="ap-card-title">Marjă brută după storage</span>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <div style={{ fontSize: '12.5px', color: '#86868b' }}>Formula: MRR total - cost R2 (lei)</div>
+            <div style={{ fontSize: '12.5px', color: '#86868b' }}>Formula: MRR total - cost B2 estimat</div>
             <div style={{ fontSize: '11.5px', color: '#a1a1a6', marginTop: 6 }}>
-              {isLoading ? '' : `${fmtInt(totalMRR)} lei - ${fmtDecimal(r2CostLei)} lei`}
+              {isLoading ? '' : `${fmtInt(totalMRR)} lei - ${fmtDecimal(b2CostLei)} lei · înainte de Stripe, taxe și celelalte costuri`}
             </div>
           </div>
-          <div className={`ap-stat-value ${estimatedProfitLei >= 0 ? 'ap-stat-value--green' : 'ap-stat-value--red'}`} style={{ marginBottom: 0 }}>
-            {isLoading ? '...' : `${fmtDecimal(estimatedProfitLei)} lei`}
+          <div className={`ap-stat-value ${estimatedGrossMarginLei >= 0 ? 'ap-stat-value--green' : 'ap-stat-value--red'}`} style={{ marginBottom: 0 }}>
+            {isLoading ? '...' : `${fmtDecimal(estimatedGrossMarginLei)} lei`}
           </div>
         </div>
       </div>
@@ -901,28 +926,10 @@ export default function AdminPanel({ user }) {
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(true)
   const [usersLoadError, setUsersLoadError] = useState('')
-
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  if (!hasAdminAccess(user)) {
-    return (
-      <div className="ap-denied">
-        <p style={{ fontSize: '2rem' }}>🔒</p>
-        <p className="ap-denied-title">Acces restricționat</p>
-        <p className="ap-denied-sub">Această pagină este accesibilă doar administratorilor.</p>
-        <p className="ap-denied-sub" style={{ marginTop: 6 }}>
-          Cont curent: <strong>{user.email || 'fără email'}</strong>
-        </p>
-        <button className="ap-btn ap-btn--primary" style={{ marginTop: 16 }} onClick={() => navigate('/dashboard')}>
-          Înapoi la dashboard
-        </button>
-      </div>
-    )
-  }
+  const canAccessAdmin = hasAdminAccess(user)
 
   useEffect(() => {
+    if (!canAccessAdmin) return
     try {
       const savedSection = sessionStorage.getItem(ADMIN_ACTIVE_SECTION_STORAGE_KEY)
       if (savedSection && ADMIN_ALLOWED_SECTIONS.includes(savedSection)) {
@@ -931,9 +938,10 @@ export default function AdminPanel({ user }) {
     } catch (_) {
       // no-op
     }
-  }, [])
+  }, [canAccessAdmin])
 
   useEffect(() => {
+    if (!canAccessAdmin) return
     try {
       if (ADMIN_ALLOWED_SECTIONS.includes(activeSection)) {
         sessionStorage.setItem(ADMIN_ACTIVE_SECTION_STORAGE_KEY, activeSection)
@@ -941,10 +949,11 @@ export default function AdminPanel({ user }) {
     } catch (_) {
       // no-op
     }
-  }, [activeSection])
+  }, [activeSection, canAccessAdmin])
 
   // ── Load utilizatori din colecția 'users' (creată la Register) ──
   useEffect(() => {
+    if (!canAccessAdmin) return
     const load = async () => {
       let snapshot = null
       try {
@@ -960,6 +969,14 @@ export default function AdminPanel({ user }) {
           stripePriceProYearly:       STRIPE_PRICE_PRO_YEARLY,
           stripePriceStudioMonthly:   STRIPE_PRICE_STUDIO_MONTHLY,
           stripePriceStudioYearly:    STRIPE_PRICE_STUDIO_YEARLY,
+          stripePriceEsentialRegularMonthly: STRIPE_PRICE_ESENTIAL_REGULAR_MONTHLY,
+          stripePriceEsentialRegularYearly:  STRIPE_PRICE_ESENTIAL_REGULAR_YEARLY,
+          stripePricePlusRegularMonthly:     STRIPE_PRICE_PLUS_REGULAR_MONTHLY,
+          stripePricePlusRegularYearly:      STRIPE_PRICE_PLUS_REGULAR_YEARLY,
+          stripePriceProRegularMonthly:      STRIPE_PRICE_PRO_REGULAR_MONTHLY,
+          stripePriceProRegularYearly:       STRIPE_PRICE_PRO_REGULAR_YEARLY,
+          stripePriceStudioRegularMonthly:   STRIPE_PRICE_STUDIO_REGULAR_MONTHLY,
+          stripePriceStudioRegularYearly:    STRIPE_PRICE_STUDIO_REGULAR_YEARLY,
         })
       } catch (listErr) {
         setUsersLoadError('Nu pot citi lista completă de utilizatori (permisiuni Firestore).')
@@ -1005,11 +1022,15 @@ export default function AdminPanel({ user }) {
 
         const subscriptionsRaw = Array.isArray(snapshot?.subscriptions) ? snapshot.subscriptions : []
         const allSubs = subscriptionsRaw.map((d) => {
-          const priceId = d.items?.data?.[0]?.price?.id || d.price?.id
+          const price = d.items?.data?.[0]?.price || d.price || {}
+          const priceId = price?.id
           return {
             uid: d.uid,
             status: d.status,
             plan: d.plan === 'Unlimited' ? 'Studio' : (PLAN_PRICES[priceId] || d.plan || 'Free'),
+            priceId,
+            unitAmount: Number(price?.unit_amount ?? price?.unitAmount ?? price?.unit_amount_decimal),
+            interval: String(price?.recurring?.interval || ''),
             created: d.created,
             current_period_end: d.current_period_end,
           }
@@ -1026,10 +1047,11 @@ export default function AdminPanel({ user }) {
       }
     }
     load()
-  }, [user?.uid])
+  }, [canAccessAdmin, user?.brandName, user?.email, user?.isAdmin, user?.name, user?.role, user?.uid])
 
   // ── Load galerii ──
   useEffect(() => {
+    if (!canAccessAdmin) return undefined
     const unsubscribe = adminService.watchGalleries(
       (data) => {
         setGalerii(data)
@@ -1038,10 +1060,11 @@ export default function AdminPanel({ user }) {
       () => setLoadingGalerii(false)
     )
     return () => unsubscribe()
-  }, [])
+  }, [canAccessAdmin])
 
   // ── Load mesaje ──
   useEffect(() => {
+    if (!canAccessAdmin) return undefined
     const unsubscribe = adminService.watchContactMessages(
       (data) => {
         setMessages(data)
@@ -1050,7 +1073,27 @@ export default function AdminPanel({ user }) {
       () => setLoadingMessages(false)
     )
     return () => unsubscribe()
-  }, [])
+  }, [canAccessAdmin])
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (!canAccessAdmin) {
+    return (
+      <div className="ap-denied">
+        <p style={{ fontSize: '2rem' }}>🔒</p>
+        <p className="ap-denied-title">Acces restricționat</p>
+        <p className="ap-denied-sub">Această pagină este accesibilă doar administratorilor.</p>
+        <p className="ap-denied-sub" style={{ marginTop: 6 }}>
+          Cont curent: <strong>{user.email || 'fără email'}</strong>
+        </p>
+        <button className="ap-btn ap-btn--primary" style={{ marginTop: 16 }} onClick={() => navigate('/dashboard')}>
+          Înapoi la dashboard
+        </button>
+      </div>
+    )
+  }
 
   // ── Statistici ──
   const esentialUsers = subscriptions.filter(s => (s.plan === 'Esențial' || s.plan === 'Starter') && ['active', 'trialing'].includes(s.status)).length

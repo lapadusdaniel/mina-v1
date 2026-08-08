@@ -27,9 +27,10 @@ export function useUserSubscription(uid) {
   const checkAccess = useCallback((feature) => {
     switch (feature) {
       case 'pro':
-      case 'site':
       case 'customSlug':
         return userPlan === 'Pro' || userPlan === 'Studio'
+      case 'site':
+        return userPlan !== 'Free'
       case 'studio':
       case 'unlimited':
       case 'customDomain':

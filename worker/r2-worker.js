@@ -32,17 +32,53 @@ const QUOTA_CACHE_TTL_MS = 15 * 1000
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing'])
 const PLAN_PRIORITY = {
   Free: 0,
-  Starter: 1,
-  Pro: 2,
-  Studio: 3,
+  Esential: 1,
+  Plus: 2,
+  Pro: 3,
+  Studio: 4,
 }
 const DEFAULT_STORAGE_LIMITS_GB = {
-  Free: 30,
-  Starter: 150,
-  Pro: 600,
+  Free: 15,
+  Esential: 100,
+  Plus: 500,
+  Pro: 1000,
   Studio: 2000,
 }
 const STUDIO_ADDON_BONUS_GB = 500
+const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
+  Esential: [
+    'price_1TAzSw1ax2jGrLZHiihltxme',
+    'price_1TAzSw1ax2jGrLZHq7UZbHBt',
+    'price_1TAwpq1pBe1FB1ICMrpWiGvp',
+    'price_1TAwpq1pBe1FB1ICPafRQt8m',
+    'price_1U1Qt31ax2jGrLZHYsjdMS6c',
+    'price_1U1Qt31ax2jGrLZHtIROmtcV',
+  ],
+  Plus: [
+    'price_1TAzSx1ax2jGrLZH9zPBW4PW',
+    'price_1TAzSy1ax2jGrLZHPtB0oLr3',
+    'price_1TAwpr1pBe1FB1ICoADRS2t1',
+    'price_1TAwps1pBe1FB1IC4jUywXzL',
+    'price_1U1Qt41ax2jGrLZHuddImmll',
+    'price_1U1Qt51ax2jGrLZHXrm1KBrK',
+  ],
+  Pro: [
+    'price_1T6a4F1ax2jGrLZH92vUsGzE',
+    'price_1TAzSz1ax2jGrLZHPfhcPu81',
+    'price_1TAwpt1pBe1FB1ICWbscU6NL',
+    'price_1TAwpt1pBe1FB1ICYt0RrpQA',
+    'price_1U1Qt61ax2jGrLZHahcYtOC6',
+    'price_1U1Qt61ax2jGrLZH258DaGGZ',
+  ],
+  Studio: [
+    'price_1T6a501ax2jGrLZHgLBbkzT4',
+    'price_1TAzT01ax2jGrLZHsqLDBI44',
+    'price_1TAwpu1pBe1FB1ICDvu7ghLj',
+    'price_1TAwpv1pBe1FB1ICYIhJiX7v',
+    'price_1U1Qt71ax2jGrLZHBilAcXHi',
+    'price_1U1Qt81ax2jGrLZHd6ZPVoDy',
+  ],
+})
 
 async function b2Get(key, env) {
   const endpoint = String(env.B2_ENDPOINT || '').trim()
@@ -212,11 +248,6 @@ async function b2List(prefix, env) {
   }
 
   return { objects }
-}
-
-async function b2ListAllKeys(prefix, env) {
-  const result = await b2List(prefix, env)
-  return (result.objects || []).map(o => o.key)
 }
 
 async function signRequest({ method, url, headers, payload, region, service, keyId, appKey, date, datetime, payloadHash }) {
@@ -514,10 +545,11 @@ async function checkRateLimit(request, env) {
 
 function normalizePlan(raw) {
   const normalized = String(raw || '').trim().toLowerCase()
-  if (normalized === 'studio' || normalized === 'unlimited') return 'Studio'
-  if (normalized === 'pro') return 'Pro'
-  if (normalized === 'starter') return 'Starter'
-  if (normalized === 'free') return 'Free'
+  if (normalized.includes('studio') || normalized.includes('unlimited')) return 'Studio'
+  if (normalized.includes('pro')) return 'Pro'
+  if (normalized.includes('plus')) return 'Plus'
+  if (normalized.includes('esential') || normalized.includes('esențial') || normalized.includes('starter')) return 'Esential'
+  if (normalized.includes('free')) return 'Free'
   return ''
 }
 
@@ -530,7 +562,11 @@ function parseNumber(raw, fallback) {
 function storageLimitBytesForPlan(plan, env, addonActive = false) {
   const normalizedPlan = normalizePlan(plan) || 'Free'
   const envKey = `STORAGE_LIMIT_${normalizedPlan.toUpperCase()}_GB`
-  const legacyEnvKey = normalizedPlan === 'Studio' ? 'STORAGE_LIMIT_UNLIMITED_GB' : null
+  const legacyEnvKey = normalizedPlan === 'Studio'
+    ? 'STORAGE_LIMIT_UNLIMITED_GB'
+    : normalizedPlan === 'Esential'
+      ? 'STORAGE_LIMIT_STARTER_GB'
+      : null
   const limitGb = parseNumber(
     env?.[envKey] ?? (legacyEnvKey ? env?.[legacyEnvKey] : undefined),
     DEFAULT_STORAGE_LIMITS_GB[normalizedPlan]
@@ -549,10 +585,39 @@ function parseCommaSeparatedSet(rawValue) {
 }
 
 function getConfiguredPriceIds(env) {
-  const starter = new Set([...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER_IDS)])
-  const pro = new Set([...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_IDS)])
-  const studio = new Set([...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO_IDS), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED), ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED_IDS)])
-  return { starter, pro, studio }
+  const esential = new Set([
+    ...FALLBACK_STRIPE_PRICE_IDS.Esential,
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_ESENTIAL),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_ESENTIAL_MONTHLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_ESENTIAL_YEARLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_ESENTIAL_IDS),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STARTER_IDS),
+  ])
+  const plus = new Set([
+    ...FALLBACK_STRIPE_PRICE_IDS.Plus,
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PLUS),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PLUS_MONTHLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PLUS_YEARLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PLUS_IDS),
+  ])
+  const pro = new Set([
+    ...FALLBACK_STRIPE_PRICE_IDS.Pro,
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_MONTHLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_YEARLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_PRO_IDS),
+  ])
+  const studio = new Set([
+    ...FALLBACK_STRIPE_PRICE_IDS.Studio,
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO_MONTHLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO_YEARLY),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_STUDIO_IDS),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED),
+    ...parseCommaSeparatedSet(env?.STRIPE_PRICE_UNLIMITED_IDS),
+  ])
+  return { esential, plus, pro, studio }
 }
 
 function pickMaxPlan(currentPlan, candidatePlan) {
@@ -628,21 +693,24 @@ function inferPlanFromSubscription(docData, env) {
   const explicitPlan = normalizePlan(docData?.plan || docData?.role || docData?.metadata?.plan || docData?.metadata?.tier)
   if (explicitPlan) return explicitPlan
   const priceId = parseSubscriptionPriceId(docData)
-  if (!priceId) return 'Free'
   const configured = getConfiguredPriceIds(env)
-  if (configured.studio.has(priceId)) return 'Studio'
-  if (configured.pro.has(priceId)) return 'Pro'
-  if (configured.starter.has(priceId)) return 'Starter'
+  if (priceId) {
+    if (configured.studio.has(priceId)) return 'Studio'
+    if (configured.pro.has(priceId)) return 'Pro'
+    if (configured.plus.has(priceId)) return 'Plus'
+    if (configured.esential.has(priceId)) return 'Esential'
+  }
   const priceObj = parseSubscriptionPriceObject(docData)
   const fromLabels = normalizePlan(priceObj?.lookup_key || priceObj?.lookupKey || priceObj?.nickname || priceObj?.product?.name || docData?.product?.name)
   if (fromLabels) return fromLabels
   const unitAmount = Number(priceObj?.unit_amount ?? priceObj?.unitAmount ?? priceObj?.unit_amount_decimal ?? docData?.unit_amount ?? docData?.unitAmount ?? docData?.unit_amount_decimal)
   if (Number.isFinite(unitAmount)) {
-    if (unitAmount >= 12900) return 'Studio'
-    if (unitAmount >= 7900) return 'Pro'
-    if (unitAmount >= 3900) return 'Starter'
+    if ([12900, 128900, 14900, 149000].includes(unitAmount)) return 'Studio'
+    if ([7900, 78900, 9900, 99000].includes(unitAmount)) return 'Pro'
+    if ([4900, 48900, 6900, 69000].includes(unitAmount)) return 'Plus'
+    if ([2900, 28900, 3900, 39000].includes(unitAmount)) return 'Esential'
   }
-  return 'Pro'
+  return 'Free'
 }
 
 function invalidateQuotaCache(uid) { if (!uid) return; quotaCache.delete(uid) }
@@ -717,7 +785,13 @@ async function verifyFirebaseToken(idToken, apiKey) {
   })
   if (!res.ok) return null
   const data = await res.json().catch(() => null)
-  return data?.users?.[0]?.localId || null
+  const user = data?.users?.[0]
+  const uid = String(user?.localId || '').trim()
+  if (!uid) return null
+  return {
+    uid,
+    emailVerified: user?.emailVerified === true,
+  }
 }
 
 function firestoreDocBaseUrl(projectId) {
@@ -786,18 +860,15 @@ async function resolveUserPlan({ uid, idToken, env }) {
     bestPlan = pickMaxPlan(bestPlan, inferPlanFromSubscription(sub, env))
   }
   if (bestPlan !== 'Free') return bestPlan
-  const userDoc = await fetchFirestoreDocByPath({ projectId, docPath: `users/${uid}`, idToken, apiKey }).catch(() => null)
-  const userPlan = normalizePlan(firestoreDocToPlain(userDoc)?.plan)
-  if (userPlan) return userPlan
   return 'Free'
 }
 
-async function syncStorageUsedDelta({ uid, deltaBytes, env }) {
+async function syncStorageUsedDelta({ uid, deltaBytes, idToken, env }) {
   const normalizedUid = String(uid || '').trim()
   const delta = Math.trunc(Number(deltaBytes || 0))
   if (!normalizedUid || !Number.isFinite(delta) || delta === 0) return { ok: true, skipped: true }
-  const workerSecret = String(env?.B2_APPLICATION_KEY || '').trim()
-  if (!workerSecret || !env?.FIREBASE_PROJECT_ID) {
+  const normalizedIdToken = String(idToken || '').trim()
+  if (!normalizedIdToken || !env?.FIREBASE_PROJECT_ID) {
     throw new Error('Storage sync misconfiguration')
   }
 
@@ -809,7 +880,8 @@ async function syncStorageUsedDelta({ uid, deltaBytes, env }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Worker-Secret': workerSecret,
+        Authorization: `Bearer ${normalizedIdToken}`,
+        'X-Firebase-Auth': normalizedIdToken,
       },
       body: JSON.stringify({
         uid: normalizedUid,
@@ -868,7 +940,15 @@ async function assertStorageQuotaBeforeUpload({ authContext, pathInfo, uploadByt
 
 async function getGalleryOwnerUid({ galleryId, idToken, projectId }) {
   if (!galleryId || !idToken || !projectId) return null
-  const data = await fetchGalleryDoc({ galleryId, projectId, idToken })
+  let data = null
+  try {
+    data = await fetchGalleryDoc({ galleryId, projectId, idToken })
+  } catch (error) {
+    // Firestore intentionally hides galleries from non-owners. Treat that
+    // permission denial as "not owner" while preserving real upstream errors.
+    if (/Firestore read failed \(403\)/.test(String(error?.message || ''))) return null
+    throw error
+  }
   return firestoreStringField(data, 'userId') || null
 }
 
@@ -914,7 +994,19 @@ async function assertPublicGalleryAccess(galleryId, shareToken, env) {
   try {
     config = await getGalleryPublicAccessConfig({ galleryId, env })
   } catch (err) {
-    // Fail-closed: any error fetching gallery metadata → deny access
+    // Protected gallery documents are intentionally hidden by Firestore rules.
+    // Verify their share token through an Admin-backed function instead.
+    const incomingToken = normalizeShareToken(shareToken)
+    if (incomingToken && env?.FIREBASE_PROJECT_ID) {
+      const endpoint = `https://us-central1-${env.FIREBASE_PROJECT_ID}.cloudfunctions.net/verifyGalleryShareAccess`
+      const verification = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ galleryId, shareToken: incomingToken }),
+      }).catch(() => null)
+      if (verification?.ok) return { ok: true }
+    }
+    // Fail-closed: an invalid token or upstream error always denies access.
     console.error(`[assertPublicGalleryAccess] Firestore error for gallery ${galleryId}:`, err?.message || err)
     return { ok: false, status: 403, message: 'Gallery access check failed' }
   }
@@ -954,18 +1046,23 @@ async function requireAuthContext(request, env) {
   const idToken = requireBearerToken(request)
   if (!idToken) return { error: text('Unauthorized', 401) }
   if (!env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT_ID) return { error: text('Server misconfiguration', 500) }
-  const uid = await verifyFirebaseToken(idToken, env.FIREBASE_API_KEY)
-  if (!uid) return { error: text('Invalid or expired token', 401) }
-  return { uid, idToken }
+  const identity = await verifyFirebaseToken(idToken, env.FIREBASE_API_KEY)
+  if (!identity?.uid) return { error: text('Invalid or expired token', 401) }
+  return { uid: identity.uid, emailVerified: identity.emailVerified, idToken }
+}
+
+function requireVerifiedEmail(authContext) {
+  if (authContext?.emailVerified === true) return null
+  return text('Confirmă adresa de email înainte să încarci fotografii.', 403)
 }
 
 async function getOptionalAuthContext(request, env) {
   const idToken = requireBearerToken(request)
   if (!idToken) return null
   if (!env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT_ID) return null
-  const uid = await verifyFirebaseToken(idToken, env.FIREBASE_API_KEY)
-  if (!uid) return null
-  return { uid, idToken }
+  const identity = await verifyFirebaseToken(idToken, env.FIREBASE_API_KEY)
+  if (!identity?.uid) return null
+  return { uid: identity.uid, emailVerified: identity.emailVerified, idToken }
 }
 
 async function assertPublicGalleryAccessOrOwner({ galleryId, shareToken, request, env }) {
@@ -1046,6 +1143,9 @@ export const __workerTestables = {
   requireBearerToken,
   resolveRateLimitBinding,
   rateLimitKeyForRequest,
+  normalizePlan,
+  storageLimitBytesForPlan,
+  inferPlanFromSubscription,
 }
 
 export default {
@@ -1071,6 +1171,8 @@ export default {
       if (request.method === 'POST' && isPresignRoute) {
         const authContext = await requireAuthContext(request, env)
         if (authContext.error) return authContext.error
+        const verificationError = requireVerifiedEmail(authContext)
+        if (verificationError) return verificationError
         const body = await request.json().catch(() => null)
         const galleryIdRaw = normalizePath(body?.galleryId || '')
         const galleryId = galleryIdRaw.includes('/') ? '' : galleryIdRaw
@@ -1089,6 +1191,8 @@ export default {
       if (request.method === 'POST' && isConfirmRoute) {
         const authContext = await requireAuthContext(request, env)
         if (authContext.error) return authContext.error
+        const verificationError = requireVerifiedEmail(authContext)
+        if (verificationError) return verificationError
         const body = await request.json().catch(() => null)
         const uploadKey = normalizePath(body?.key || '')
         if (!uploadKey) return text('Missing key', 400)
@@ -1119,6 +1223,7 @@ export default {
           await syncStorageUsedDelta({
             uid: authContext.uid,
             deltaBytes: meta.contentLength,
+            idToken: authContext.idToken,
             env,
           })
         } catch (syncError) {
@@ -1190,6 +1295,8 @@ export default {
         if (!key) return text('Missing key', 400)
         const authContext = await requireAuthContext(request, env)
         if (authContext.error) return authContext.error
+        const verificationError = requireVerifiedEmail(authContext)
+        if (verificationError) return verificationError
         const pathInfo = parsePathInfo(key)
         const access = await assertWritablePathAccess(pathInfo, authContext, env)
         if (!access.ok) return text(access.message, access.status)
@@ -1207,6 +1314,7 @@ export default {
             await syncStorageUsedDelta({
               uid: authContext.uid,
               deltaBytes: uploadBytes,
+              idToken: authContext.idToken,
               env,
             })
           } catch (syncError) {
@@ -1239,6 +1347,7 @@ export default {
             await syncStorageUsedDelta({
               uid: authContext.uid,
               deltaBytes: -deletedBytes,
+              idToken: authContext.idToken,
               env,
             })
             applyQuotaCacheDelta(authContext.uid, -deletedBytes)
@@ -1259,6 +1368,7 @@ export default {
           await syncStorageUsedDelta({
             uid: authContext.uid,
             deltaBytes: -existingMeta.contentLength,
+            idToken: authContext.idToken,
             env,
           })
           applyQuotaCacheDelta(authContext.uid, -existingMeta.contentLength)

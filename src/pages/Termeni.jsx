@@ -2,7 +2,7 @@ import LegalPage from './LegalPage'
 
 export default function Termeni() {
   return (
-    <LegalPage title="Termeni și Condiții" updatedAt="Martie 2026">
+    <LegalPage title="Termeni și Condiții" updatedAt="August 2026">
       <section>
         <h2>1. Definiții</h2>
         <p>
@@ -30,10 +30,16 @@ export default function Termeni() {
           <strong>4.1. Înregistrare:</strong> Pentru utilizarea serviciilor Mina este necesară crearea unui cont cu adresă de email validă și parolă. Sunteți responsabil pentru securitatea credențialelor contului dumneavoastră.
         </p>
         <p>
-          <strong>4.2. Planuri disponibile:</strong> Free: 15 GB stocare, 0 lei/lună — disponibil permanent. Esențial: 100 GB stocare, galerii nelimitate, 29 lei/lună. Plus: 500 GB stocare, galerii nelimitate, 49 lei/lună. Pro: 1 TB stocare, galerii nelimitate, 79 lei/lună. Studio: 2 TB stocare, galerii nelimitate, 129 lei/lună.
+          <strong>4.2. Planuri și prețuri standard:</strong> Free: 15 GB stocare și maximum 3 galerii active, 0 lei. Esențial: 100 GB, 39 lei/lună sau 390 lei/an. Plus: 500 GB, 69 lei/lună sau 690 lei/an. Pro: 1 TB, 99 lei/lună sau 990 lei/an. Studio: 2 TB, 149 lei/lună sau 1.490 lei/an. Planurile plătite includ galerii nelimitate și site de prezentare. Funcționalitățile și prețul final aplicabil sunt afișate înainte de confirmarea plății.
         </p>
         <p>
-          <strong>4.3. Facturare:</strong> Abonamentele plătite sunt facturate lunar, în avans. Plata se procesează prin Stripe. Prin furnizarea datelor de plată, autorizați taxarea automată lunară.
+          <strong>4.3. Oferta „Preț Fondator”:</strong> Oferta este disponibilă pentru abonamentele plătite a căror primă plată este confirmată până la 30 septembrie 2026, ora 23:59, ora României. Prețurile Fondator sunt: Esențial — 29 lei/lună sau 289 lei/an; Plus — 49 lei/lună sau 489 lei/an; Pro — 79 lei/lună sau 789 lei/an; Studio — 129 lei/lună sau 1.289 lei/an. Prețul Fondator se aplică la fiecare reînnoire cât timp abonamentul plătit al aceluiași cont rămâne activ fără întrerupere. Schimbarea planului sau a perioadei de facturare prin portalul oficial Mina nu întrerupe eligibilitatea; se aplică Prețul Fondator corespunzător noii opțiuni. Eligibilitatea încetează când abonamentul este anulat și perioada deja plătită se încheie, când abonamentul expiră în urma unei plăți neachitate sau când contul este șters. O plată reîncercată și confirmată înainte de încetarea abonamentului nu întrerupe eligibilitatea. După pierderea eligibilității, un abonament nou se încheie la prețurile disponibile la acel moment. Oferta nu se aplică opțiunilor suplimentare, dacă acestea nu sunt marcate explicit ca eligibile.
+        </p>
+        <p>
+          <strong>4.4. Facturare și reînnoire:</strong> Abonamentele plătite sunt facturate în avans, lunar sau anual, conform opțiunii selectate la cumpărare. Plata se procesează prin Stripe. Prin confirmarea achiziției, autorizați taxarea automată la începutul fiecărei perioade de facturare, până la anulare.
+        </p>
+        <p>
+          <strong>4.5. Anulare:</strong> Puteți anula reînnoirea din dashboard. În lipsa unei rambursări datorate conform legii sau Politicii de Rambursare, accesul la planul plătit rămâne activ până la sfârșitul perioadei deja achitate.
         </p>
       </section>
 
@@ -60,7 +66,7 @@ export default function Termeni() {
       <section>
         <h2>7. Disponibilitate și întreruperi</h2>
         <p>
-          Mina depune eforturi rezonabile pentru a asigura disponibilitatea serviciului. Nu garantăm disponibilitate 100% și nu suntem răspunzători pentru întreruperi cauzate de: probleme tehnice la furnizorii terți (Cloudflare, Firebase, Stripe), cazuri de forță majoră, întreținere planificată anunțată în prealabil.
+          Mina depune eforturi rezonabile pentru a asigura disponibilitatea serviciului. Nu garantăm disponibilitate 100% și pot exista întreruperi cauzate de probleme tehnice la furnizorii terți (inclusiv Cloudflare, Firebase, Backblaze, Stripe sau Resend), cazuri de forță majoră ori întreținere planificată.
         </p>
       </section>
 

@@ -6,6 +6,20 @@ const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { defineSecret } = require('firebase-functions/params')
 const { SmartBillService } = require('./src/services/smartbill.service')
 const { createEmailService } = require('./src/services/email.service')
+const {
+  requestMinaAssistant,
+  sanitizeAssistantHistory,
+  sanitizeAssistantText,
+} = require('./src/services/mina-assistant.service')
+const {
+  accessTokensMatch,
+  didSelectionFinalize,
+  isGalleryOpenForClientSelection,
+  normalizeAccessToken,
+  normalizeClientName: normalizeSelectionClientName,
+  normalizeSelectionStatus,
+  toClientSelectionId,
+} = require('./src/services/selection-finalization.service')
 
 if (!admin.apps.length) {
   admin.initializeApp()
@@ -25,21 +39,53 @@ const B2_KEY_ID = defineSecret('B2_KEY_ID')
 const B2_APPLICATION_KEY = defineSecret('B2_APPLICATION_KEY')
 const B2_BUCKET_NAME = defineSecret('B2_BUCKET_NAME')
 const GALLERY_VERIFY_SECRET = defineSecret('GALLERY_VERIFY_SECRET')
+const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
 
 const MINA_EMAIL_FROM = 'Mina <hello@cloudbymina.com>'
 const MINA_DASHBOARD_URL = 'https://cloudbymina.com/dashboard'
-const SELECTION_EMAIL_DEBOUNCE_MS = 8 * 60 * 60 * 1000
+const FOUNDER_OFFER_END_MS = Date.parse('2026-09-30T20:59:59.999Z')
 
 const FALLBACK_STRIPE_PRICE_IDS = Object.freeze({
-  esential_monthly: 'price_1TAwpq1pBe1FB1ICMrpWiGvp',
-  esential_yearly:  'price_1TAwpq1pBe1FB1ICPafRQt8m',
-  plus_monthly:     'price_1TAwpr1pBe1FB1ICoADRS2t1',
-  plus_yearly:      'price_1TAwps1pBe1FB1IC4jUywXzL',
-  pro_monthly:      'price_1TAwpt1pBe1FB1ICWbscU6NL',
-  pro_yearly:       'price_1TAwpt1pBe1FB1ICYt0RrpQA',
-  studio_monthly:   'price_1TAwpu1pBe1FB1ICDvu7ghLj',
-  studio_yearly:    'price_1TAwpv1pBe1FB1ICYIhJiX7v',
+  esential_monthly: 'price_1TAzSw1ax2jGrLZHiihltxme',
+  esential_yearly:  'price_1TAzSw1ax2jGrLZHq7UZbHBt',
+  plus_monthly:     'price_1TAzSx1ax2jGrLZH9zPBW4PW',
+  plus_yearly:      'price_1TAzSy1ax2jGrLZHPtB0oLr3',
+  pro_monthly:      'price_1T6a4F1ax2jGrLZH92vUsGzE',
+  pro_yearly:       'price_1TAzSz1ax2jGrLZHPfhcPu81',
+  studio_monthly:   'price_1T6a501ax2jGrLZHgLBbkzT4',
+  studio_yearly:    'price_1TAzT01ax2jGrLZHsqLDBI44',
   addon:            'price_1T6a5e1ax2jGrLZHbnDNHkwM',
+})
+
+const FALLBACK_REGULAR_STRIPE_PRICE_IDS = Object.freeze({
+  esential_monthly: 'price_1U1Qt31ax2jGrLZHYsjdMS6c',
+  esential_yearly:  'price_1U1Qt31ax2jGrLZHtIROmtcV',
+  plus_monthly:     'price_1U1Qt41ax2jGrLZHuddImmll',
+  plus_yearly:      'price_1U1Qt51ax2jGrLZHXrm1KBrK',
+  pro_monthly:      'price_1U1Qt61ax2jGrLZHahcYtOC6',
+  pro_yearly:       'price_1U1Qt61ax2jGrLZH258DaGGZ',
+  studio_monthly:   'price_1U1Qt71ax2jGrLZHBilAcXHi',
+  studio_yearly:    'price_1U1Qt81ax2jGrLZHd6ZPVoDy',
+})
+
+const LEGACY_STRIPE_PRICE_IDS = Object.freeze({
+  Esential: [
+    'price_1T6a3S1ax2jGrLZHmevohZWA',
+    'price_1TAwpq1pBe1FB1ICMrpWiGvp',
+    'price_1TAwpq1pBe1FB1ICPafRQt8m',
+  ],
+  Plus: [
+    'price_1TAwpr1pBe1FB1ICoADRS2t1',
+    'price_1TAwps1pBe1FB1IC4jUywXzL',
+  ],
+  Pro: [
+    'price_1TAwpt1pBe1FB1ICWbscU6NL',
+    'price_1TAwpt1pBe1FB1ICYt0RrpQA',
+  ],
+  Studio: [
+    'price_1TAwpu1pBe1FB1ICDvu7ghLj',
+    'price_1TAwpv1pBe1FB1ICYIhJiX7v',
+  ],
 })
 
 const SUPPORTED_STRIPE_EVENTS = new Set([
@@ -59,31 +105,104 @@ const PLAN_BY_PRICE_ID = Object.freeze({
   [FALLBACK_STRIPE_PRICE_IDS.studio_monthly]:   'Studio',
   [FALLBACK_STRIPE_PRICE_IDS.studio_yearly]:    'Studio',
   [FALLBACK_STRIPE_PRICE_IDS.addon]:            'Studio',
+  ...Object.fromEntries(
+    Object.entries(LEGACY_STRIPE_PRICE_IDS).flatMap(([plan, ids]) => ids.map((id) => [id, plan]))
+  ),
 })
 
 function sanitizePriceId(value) {
   return String(value || '').trim()
 }
 
-function getAllowedCheckoutPriceIds() {
-  const ids = [
-    sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.esential_monthly,
-    sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_YEARLY)  || FALLBACK_STRIPE_PRICE_IDS.esential_yearly,
-    sanitizePriceId(process.env.STRIPE_PRICE_PLUS_MONTHLY)     || FALLBACK_STRIPE_PRICE_IDS.plus_monthly,
-    sanitizePriceId(process.env.STRIPE_PRICE_PLUS_YEARLY)      || FALLBACK_STRIPE_PRICE_IDS.plus_yearly,
-    sanitizePriceId(process.env.STRIPE_PRICE_PRO_MONTHLY)      || FALLBACK_STRIPE_PRICE_IDS.pro_monthly,
-    sanitizePriceId(process.env.STRIPE_PRICE_PRO_YEARLY)       || FALLBACK_STRIPE_PRICE_IDS.pro_yearly,
-    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_MONTHLY)   || FALLBACK_STRIPE_PRICE_IDS.studio_monthly,
-    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_YEARLY)    || FALLBACK_STRIPE_PRICE_IDS.studio_yearly,
-  ]
+function getFounderPriceIdsByPlanKey() {
+  return {
+    esential_monthly: sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.esential_monthly,
+    esential_yearly: sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_YEARLY) || FALLBACK_STRIPE_PRICE_IDS.esential_yearly,
+    plus_monthly: sanitizePriceId(process.env.STRIPE_PRICE_PLUS_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.plus_monthly,
+    plus_yearly: sanitizePriceId(process.env.STRIPE_PRICE_PLUS_YEARLY) || FALLBACK_STRIPE_PRICE_IDS.plus_yearly,
+    pro_monthly: sanitizePriceId(process.env.STRIPE_PRICE_PRO_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.pro_monthly,
+    pro_yearly: sanitizePriceId(process.env.STRIPE_PRICE_PRO_YEARLY) || FALLBACK_STRIPE_PRICE_IDS.pro_yearly,
+    studio_monthly: sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.studio_monthly,
+    studio_yearly: sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_YEARLY) || FALLBACK_STRIPE_PRICE_IDS.studio_yearly,
+  }
+}
+
+function getRegularPriceIdsByPlanKey() {
+  return {
+    esential_monthly: sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_REGULAR_MONTHLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.esential_monthly,
+    esential_yearly: sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_REGULAR_YEARLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.esential_yearly,
+    plus_monthly: sanitizePriceId(process.env.STRIPE_PRICE_PLUS_REGULAR_MONTHLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.plus_monthly,
+    plus_yearly: sanitizePriceId(process.env.STRIPE_PRICE_PLUS_REGULAR_YEARLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.plus_yearly,
+    pro_monthly: sanitizePriceId(process.env.STRIPE_PRICE_PRO_REGULAR_MONTHLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.pro_monthly,
+    pro_yearly: sanitizePriceId(process.env.STRIPE_PRICE_PRO_REGULAR_YEARLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.pro_yearly,
+    studio_monthly: sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_REGULAR_MONTHLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.studio_monthly,
+    studio_yearly: sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_REGULAR_YEARLY) || FALLBACK_REGULAR_STRIPE_PRICE_IDS.studio_yearly,
+  }
+}
+
+function sanitizeCheckoutPlanKey(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  const valid = new Set([
+    'esential_monthly', 'esential_yearly',
+    'plus_monthly', 'plus_yearly',
+    'pro_monthly', 'pro_yearly',
+    'studio_monthly', 'studio_yearly',
+  ])
+  return valid.has(normalized) ? normalized : ''
+}
+
+function isFounderOfferActive(nowMs = Date.now()) {
+  return Number.isFinite(Number(nowMs)) && Number(nowMs) <= FOUNDER_OFFER_END_MS
+}
+
+function getCheckoutPriceIdForPlanKey(planKey, nowMs = Date.now()) {
+  const normalizedPlanKey = sanitizeCheckoutPlanKey(planKey)
+  if (!normalizedPlanKey) return ''
+  const priceIds = isFounderOfferActive(nowMs)
+    ? getFounderPriceIdsByPlanKey()
+    : getRegularPriceIdsByPlanKey()
+  return sanitizePriceId(priceIds[normalizedPlanKey])
+}
+
+function getAllowedCheckoutPriceIds(nowMs = Date.now()) {
+  const ids = Object.values(getRegularPriceIdsByPlanKey())
+  if (isFounderOfferActive(nowMs)) ids.push(...Object.values(getFounderPriceIdsByPlanKey()))
   return new Set(ids.filter(Boolean))
 }
 
+function getAllConfiguredPlanPriceMap() {
+  const result = { ...PLAN_BY_PRICE_ID }
+  const planByKey = {
+    esential_monthly: 'Esential', esential_yearly: 'Esential',
+    plus_monthly: 'Plus', plus_yearly: 'Plus',
+    pro_monthly: 'Pro', pro_yearly: 'Pro',
+    studio_monthly: 'Studio', studio_yearly: 'Studio',
+  }
+  for (const priceIds of [getFounderPriceIdsByPlanKey(), getRegularPriceIdsByPlanKey()]) {
+    for (const [key, id] of Object.entries(priceIds)) {
+      if (id) result[id] = planByKey[key]
+    }
+  }
+  return result
+}
+
+function isFounderPriceId(priceId) {
+  const candidate = sanitizePriceId(priceId)
+  if (!candidate) return false
+  const knownFounderIds = [
+    ...Object.values(getFounderPriceIdsByPlanKey()),
+    ...Object.values(LEGACY_STRIPE_PRICE_IDS).flat(),
+  ]
+  return knownFounderIds.includes(candidate)
+}
+
 function getStudioPriceIdSet() {
-  return new Set([
-    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.studio_monthly,
-    sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_YEARLY)  || FALLBACK_STRIPE_PRICE_IDS.studio_yearly,
-  ].filter(Boolean))
+  return new Set(
+    Object.entries(getAllConfiguredPlanPriceMap())
+      .filter(([, plan]) => plan === 'Studio')
+      .map(([priceId]) => priceId)
+      .filter(Boolean)
+  )
 }
 
 function getAddonPriceId() {
@@ -181,7 +300,8 @@ function constantTimeSecretEquals(left, right) {
 
 async function verifyRequestAuth(req) {
   const authHeader = readBearerAuthHeader(req)
-  const token = authHeader.slice('Bearer '.length).trim()
+  const forwardedToken = String(req.get?.('X-Firebase-Auth') || '').trim()
+  const token = forwardedToken || authHeader.slice('Bearer '.length).trim()
   if (!token) {
     throw new HttpsError('unauthenticated', 'Token invalid.')
   }
@@ -317,7 +437,11 @@ async function deleteB2Prefix(prefix) {
 }
 
 function normalizePlanName(value) {
-  const normalized = String(value || '').trim().toLowerCase()
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
   if (!normalized) return ''
   if (normalized.includes('studio') || normalized.includes('unlimited')) return 'Studio'
   if (normalized.includes('pro')) return 'Pro'
@@ -327,32 +451,66 @@ function normalizePlanName(value) {
   return ''
 }
 
+const PLAN_PRIORITY = Object.freeze({
+  Free: 0,
+  Esential: 1,
+  Plus: 2,
+  Pro: 3,
+  Studio: 4,
+})
+
+async function resolveUserPlanFromFirestore(uid) {
+  const normalizedUid = String(uid || '').trim()
+  if (!normalizedUid) return 'Free'
+
+  const [overrideSnap, subsSnap] = await Promise.all([
+    db.collection('adminOverrides').doc(normalizedUid).get(),
+    db.collection('customers').doc(normalizedUid).collection('subscriptions').get(),
+  ])
+
+  const overrideData = overrideSnap.exists ? (overrideSnap.data() || {}) : {}
+  const overridePlan = normalizePlanName(overrideData.plan)
+  if (overridePlan) return overridePlan
+
+  let resolvedPlan = 'Free'
+  for (const subDoc of subsSnap.docs) {
+    const subscription = subDoc.data() || {}
+    const status = String(subscription.status || '').trim().toLowerCase()
+    if (!['active', 'trialing'].includes(status)) continue
+
+    const candidates = [
+      resolvePlanFromPriceId(extractPrimarySubscriptionPriceId(subscription)),
+      normalizePlanName(subscription.plan),
+      normalizePlanName(subscription.role),
+      normalizePlanName(subscription.metadata?.plan),
+      normalizePlanName(subscription.metadata?.tier),
+    ]
+    const candidate = candidates.find(Boolean) || 'Free'
+    if ((PLAN_PRIORITY[candidate] || 0) > (PLAN_PRIORITY[resolvedPlan] || 0)) {
+      resolvedPlan = candidate
+    }
+  }
+
+  return resolvedPlan
+}
+
 function resolvePlanFromPriceId(priceId) {
   const id = sanitizePriceId(priceId)
   if (!id) return ''
-
-  const envMap = {
-    [sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_MONTHLY) || FALLBACK_STRIPE_PRICE_IDS.esential_monthly]: 'Esential',
-    [sanitizePriceId(process.env.STRIPE_PRICE_ESENTIAL_YEARLY)  || FALLBACK_STRIPE_PRICE_IDS.esential_yearly]:  'Esential',
-    [sanitizePriceId(process.env.STRIPE_PRICE_PLUS_MONTHLY)     || FALLBACK_STRIPE_PRICE_IDS.plus_monthly]:     'Plus',
-    [sanitizePriceId(process.env.STRIPE_PRICE_PLUS_YEARLY)      || FALLBACK_STRIPE_PRICE_IDS.plus_yearly]:      'Plus',
-    [sanitizePriceId(process.env.STRIPE_PRICE_PRO_MONTHLY)      || FALLBACK_STRIPE_PRICE_IDS.pro_monthly]:      'Pro',
-    [sanitizePriceId(process.env.STRIPE_PRICE_PRO_YEARLY)       || FALLBACK_STRIPE_PRICE_IDS.pro_yearly]:       'Pro',
-    [sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_MONTHLY)   || FALLBACK_STRIPE_PRICE_IDS.studio_monthly]:   'Studio',
-    [sanitizePriceId(process.env.STRIPE_PRICE_STUDIO_YEARLY)    || FALLBACK_STRIPE_PRICE_IDS.studio_yearly]:    'Studio',
-    [sanitizePriceId(process.env.STRIPE_PRICE_ADDON)            || FALLBACK_STRIPE_PRICE_IDS.addon]:            'Studio',
-  }
-
-  return envMap[id] || PLAN_BY_PRICE_ID[id] || ''
+  return getAllConfiguredPlanPriceMap()[id] || ''
 }
 
 function resolvePlanFromAmount(amountMinorUnits) {
   const amount = Number(amountMinorUnits)
   if (!Number.isFinite(amount)) return ''
   if (amount === 2900  || amount === 28900)  return 'Esential'
+  if (amount === 3900  || amount === 39000)  return 'Esential'
   if (amount === 4900  || amount === 48900)  return 'Plus'
+  if (amount === 6900  || amount === 69000)  return 'Plus'
   if (amount === 7900  || amount === 78900)  return 'Pro'
+  if (amount === 9900  || amount === 99000)  return 'Pro'
   if (amount === 12900 || amount === 128900) return 'Studio'
+  if (amount === 14900 || amount === 149000) return 'Studio'
   return ''
 }
 
@@ -422,6 +580,60 @@ function getCheckoutStripeKey() {
   return sanitizePriceId(STRIPE_SECRET_KEY.value())
 }
 
+function isMainSubscriptionData(subscription = {}) {
+  const status = String(subscription.status || '').trim().toLowerCase()
+  if (!['active', 'trialing'].includes(status)) return false
+  if (String(subscription.metadata?.type || '').trim().toLowerCase() === 'addon') return false
+  return extractPrimarySubscriptionPriceId(subscription) !== getAddonPriceId()
+}
+
+async function getCheckoutCustomerContext(uid) {
+  const normalizedUid = String(uid || '').trim()
+  const [userSnap, customerSnap, subscriptionsSnap] = await Promise.all([
+    db.collection('users').doc(normalizedUid).get(),
+    db.collection('customers').doc(normalizedUid).get(),
+    db.collection('customers').doc(normalizedUid).collection('subscriptions').get(),
+  ])
+
+  const userData = userSnap.exists ? (userSnap.data() || {}) : {}
+  const customerData = customerSnap.exists ? (customerSnap.data() || {}) : {}
+  const stripeCustomerId = [
+    userData.stripeCustomerId,
+    userData.stripe_customer_id,
+    customerData.stripeId,
+    customerData.stripeCustomerId,
+    customerData.stripe_customer_id,
+    customerData.customer_id,
+  ].map(sanitizePriceId).find((value) => value.startsWith('cus_')) || ''
+
+  const subscriptions = subscriptionsSnap.docs
+    .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }))
+  const activeMainSubscription = subscriptions.find(isMainSubscriptionData) || null
+  const activeAddonSubscription = subscriptions.find((subscription) => {
+    const status = String(subscription.status || '').trim().toLowerCase()
+    return ['active', 'trialing'].includes(status)
+      && extractPrimarySubscriptionPriceId(subscription) === getAddonPriceId()
+  }) || null
+
+  return {
+    userData,
+    stripeCustomerId,
+    activeMainSubscription,
+    activeAddonSubscription,
+  }
+}
+
+async function hasActiveMainSubscriptionInStripe(stripe, stripeCustomerId) {
+  const customerId = sanitizePriceId(stripeCustomerId)
+  if (!customerId) return false
+  const subscriptions = await stripe.subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 100,
+  })
+  return subscriptions.data.some(isMainSubscriptionData)
+}
+
 function serverTimestamp() {
   return admin.firestore.FieldValue.serverTimestamp()
 }
@@ -472,20 +684,21 @@ function keysFromSelection(data = {}) {
     : []
 }
 
-function getSelectionCount(data = {}) {
-  const count = Number(data?.count)
-  if (Number.isFinite(count) && count >= 0) return count
-  return keysFromSelection(data).length
+function listsFromSelection(data = {}) {
+  if (!Array.isArray(data?.lists)) return []
+  return data.lists.slice(0, 50).map((list, index) => ({
+    id: sanitizeDisplayName(list?.id || `list_${index}`, 120),
+    name: sanitizeDisplayName(list?.name || 'Favorite', 80),
+    keys: Array.isArray(list?.keys)
+      ? list.keys.slice(0, 3000).map((key) => String(key || '').trim()).filter(Boolean)
+      : [],
+  }))
 }
 
-function didSelectionChange(beforeData = {}, afterData = {}) {
-  const beforeKeys = [...keysFromSelection(beforeData)].sort()
-  const afterKeys = [...keysFromSelection(afterData)].sort()
-  if (beforeKeys.length !== afterKeys.length) return true
-  for (let i = 0; i < beforeKeys.length; i += 1) {
-    if (beforeKeys[i] !== afterKeys[i]) return true
-  }
-  return false
+function timestampToIso(value) {
+  if (typeof value?.toDate === 'function') return value.toDate().toISOString()
+  const parsed = new Date(value || '')
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
 }
 
 function getAppOrigin() {
@@ -742,11 +955,7 @@ function getEmailService() {
     apiKey: String(RESEND_API_KEY.value() || process.env.RESEND_API_KEY || '').trim(),
     fromEmail: MINA_EMAIL_FROM,
     dashboardUrl: MINA_DASHBOARD_URL,
-    priceIds: {
-      starter: String(process.env.STRIPE_PRICE_STARTER || '').trim() || FALLBACK_STRIPE_PRICE_IDS.starter,
-      pro: String(process.env.STRIPE_PRICE_PRO || '').trim() || FALLBACK_STRIPE_PRICE_IDS.pro,
-      studio: String(process.env.STRIPE_PRICE_STUDIO || '').trim() || FALLBACK_STRIPE_PRICE_IDS.studio,
-    },
+    priceIdToPlan: getAllConfiguredPlanPriceMap(),
   })
 }
 
@@ -897,6 +1106,21 @@ async function handleCheckoutSessionCompleted(event) {
       },
       { merge: true }
     )
+  } else {
+    const primaryPlanPriceId = sanitizePriceId(
+      session.metadata?.priceId || paymentData.primaryPriceId
+    )
+    await userRef.set(
+      {
+        founderPriceActive: isFounderPriceId(primaryPlanPriceId),
+        subscriptionPriceId: primaryPlanPriceId || null,
+        subscriptionPlan: resolvePlanFromPriceId(primaryPlanPriceId) || session.metadata?.planName || null,
+        subscriptionPricingVersion: isFounderPriceId(primaryPlanPriceId) ? 'founder-2026' : 'standard-2026',
+        subscriptionActivatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
   }
 
   const smartBillService = new SmartBillService({
@@ -1030,11 +1254,11 @@ async function handleCustomerSubscriptionDeleted(event) {
   }
 
   const userData = userSnap.data() || {}
+  const deletedPriceId = extractPrimarySubscriptionPriceId(subscription)
   const planName =
+    resolvePlanFromPriceId(deletedPriceId) ||
     normalizePlanName(userData.plan || userData.subscriptionPlan || userData.currentPlan) ||
     normalizePlanName(subscription.items?.data?.[0]?.price?.nickname) || 'Plan activ'
-
-  const deletedPriceId = extractPrimarySubscriptionPriceId(subscription)
   const addonPriceId = getAddonPriceId()
   const isAddonCancellation = Boolean(deletedPriceId && deletedPriceId === addonPriceId)
 
@@ -1085,6 +1309,8 @@ async function handleCustomerSubscriptionDeleted(event) {
       plan: 'free',
       subscriptionStatus: 'canceled',
       subscriptionCanceledAt: serverTimestamp(),
+      founderPriceActive: false,
+      subscriptionPricingVersion: null,
       addonActive: false,
       addonSubscriptionId: null,
       stripeCustomerId,
@@ -1427,6 +1653,274 @@ async function saveGalleryPasswordHash(galleryId, password = '') {
   return { cleared: false, passwordHash }
 }
 
+function requireVerifiedCallableUser(request) {
+  const uid = String(request.auth?.uid || '').trim()
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat.')
+  }
+  if (request.auth?.token?.email_verified !== true) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Confirmă adresa de email înainte să creezi galerii, să publici site-ul sau să încarci fotografii.'
+    )
+  }
+  return uid
+}
+
+function sanitizeCallablePayload(value, maxBytes, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpsError('invalid-argument', `${label} invalid.`)
+  }
+
+  let serialized = ''
+  try {
+    serialized = JSON.stringify(value)
+  } catch (_) {
+    throw new HttpsError('invalid-argument', `${label} invalid.`)
+  }
+  if (!serialized || Buffer.byteLength(serialized, 'utf8') > maxBytes) {
+    throw new HttpsError('invalid-argument', `${label} este prea mare.`)
+  }
+  return JSON.parse(serialized)
+}
+
+function sanitizePublicSlug(value, fallback = '') {
+  const normalized = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 90)
+
+  return normalized || `galerie-${crypto.randomBytes(4).toString('hex')}`
+}
+
+function stripPrivateGalleryFields(settings) {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return {}
+  const nextSettings = { ...settings }
+  if (nextSettings.privacy && typeof nextSettings.privacy === 'object' && !Array.isArray(nextSettings.privacy)) {
+    const privacy = { ...nextSettings.privacy }
+    delete privacy.passwordHash
+    nextSettings.privacy = privacy
+  }
+  return nextSettings
+}
+
+exports.createGallery = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 40,
+  },
+  async (request) => {
+    const uid = requireVerifiedCallableUser(request)
+    const input = sanitizeCallablePayload(request.data?.gallery, 160 * 1024, 'Galeria')
+    const name = sanitizeDisplayName(input.nume, 160)
+    if (!name) {
+      throw new HttpsError('invalid-argument', 'Numele galeriei este obligatoriu.')
+    }
+
+    const plan = await resolveUserPlanFromFirestore(uid)
+    const galleryRef = db.collection('galerii').doc()
+    const baseSlug = sanitizePublicSlug(input.slug, name)
+    const fallbackSlug = `${baseSlug}-${galleryRef.id.slice(0, 6).toLowerCase()}`
+    const baseSlugRef = db.collection('slugs').doc(baseSlug)
+    const fallbackSlugRef = db.collection('slugs').doc(fallbackSlug)
+    const ownerQuery = db.collection('galerii').where('userId', '==', uid)
+    const userSnap = await db.collection('users').doc(uid).get()
+    const userData = userSnap.exists ? (userSnap.data() || {}) : {}
+
+    const createdSlug = await db.runTransaction(async (transaction) => {
+      const [ownerGalleries, baseSlugSnap, fallbackSlugSnap] = await Promise.all([
+        transaction.get(ownerQuery),
+        transaction.get(baseSlugRef),
+        transaction.get(fallbackSlugRef),
+      ])
+
+      if (plan === 'Free') {
+        const activeCount = ownerGalleries.docs.reduce((count, galleryDoc) => {
+          const gallery = galleryDoc.data() || {}
+          const status = String(gallery.status || 'active').trim().toLowerCase()
+          const isActive = !['trash', 'archived'].includes(status) && gallery.statusActiv !== false
+          return count + (isActive ? 1 : 0)
+        }, 0)
+        if (activeCount >= 3) {
+          throw new HttpsError(
+            'resource-exhausted',
+            'Planul Free permite maximum 3 galerii active. Arhivează una sau alege un abonament.'
+          )
+        }
+      }
+
+      let slug = baseSlug
+      let slugRef = baseSlugRef
+      if (baseSlugSnap.exists) {
+        if (fallbackSlugSnap.exists) {
+          throw new HttpsError('already-exists', 'Nu am putut genera un link unic. Încearcă din nou.')
+        }
+        slug = fallbackSlug
+        slugRef = fallbackSlugRef
+      }
+
+      const dataExpirare = input.dataExpirare ? String(input.dataExpirare) : null
+      const expiryDate = dataExpirare ? new Date(dataExpirare) : null
+      const payload = {
+        nume: name,
+        slug,
+        categoria: sanitizeDisplayName(input.categoria, 80) || 'Nunți',
+        dataEveniment: input.dataEveniment ? String(input.dataEveniment).slice(0, 80) : null,
+        dataExpirare,
+        dataExpirareTs: expiryDate && !Number.isNaN(expiryDate.getTime())
+          ? admin.firestore.Timestamp.fromDate(expiryDate)
+          : null,
+        storageDuration: input.storageDuration ? String(input.storageDuration).slice(0, 40) : null,
+        settings: stripPrivateGalleryFields(input.settings),
+        gridLayout: sanitizeDisplayName(input.gridLayout, 30) || '4col',
+        numeSelectieClient: sanitizeDisplayName(input.numeSelectieClient, 120) || 'Selecție fotografii',
+        limitSelectie: Number.isFinite(Number(input.limitSelectie)) ? Math.max(0, Number(input.limitSelectie)) : null,
+        maxSelectie: Number.isFinite(Number(input.maxSelectie)) ? Math.max(0, Number(input.maxSelectie)) : null,
+        allowOriginalDownloads: input.allowOriginalDownloads === true,
+        userId: uid,
+        userName: sanitizeDisplayName(userData.name || input.userName, 120) || 'Fotograf',
+        poze: 0,
+        data: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        status: 'active',
+        statusActiv: true,
+      }
+
+      transaction.create(galleryRef, payload)
+      transaction.create(slugRef, {
+        galleryId: galleryRef.id,
+        uid,
+        updatedAt: serverTimestamp(),
+      })
+      return slug
+    })
+
+    return { id: galleryRef.id, slug: createdSlug, plan }
+  }
+)
+
+exports.savePhotographerSite = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 30,
+  },
+  async (request) => {
+    const uid = requireVerifiedCallableUser(request)
+    const plan = await resolveUserPlanFromFirestore(uid)
+    if (plan === 'Free') {
+      throw new HttpsError('permission-denied', 'Site-ul de prezentare este disponibil în orice abonament plătit.')
+    }
+
+    const input = sanitizeCallablePayload(request.data?.site, 700 * 1024, 'Site-ul')
+    const brandName = sanitizeDisplayName(input.brandName, 160)
+    const slug = sanitizePublicSlug(input.slug, brandName)
+    const siteRef = db.collection('photographerSites').doc(uid)
+
+    const duplicateSnap = await db.collection('photographerSites').where('slug', '==', slug).limit(2).get()
+    if (duplicateSnap.docs.some((siteDoc) => siteDoc.id !== uid)) {
+      throw new HttpsError('already-exists', 'Acest link este deja folosit. Alege un alt nume de brand.')
+    }
+
+    const cleanSite = {
+      ...input,
+      uid,
+      brandName,
+      slug,
+      updatedAt: serverTimestamp(),
+    }
+    delete cleanSite.id
+
+    await db.runTransaction(async (transaction) => {
+      const currentSiteSnap = await transaction.get(siteRef)
+      const previousSlugRaw = String(currentSiteSnap.data()?.slug || '').trim()
+      const previousSlug = previousSlugRaw ? sanitizePublicSlug(previousSlugRaw) : ''
+      const newSlugRef = db.collection('siteSlugs').doc(slug)
+      const previousSlugRef = previousSlug && previousSlug !== slug
+        ? db.collection('siteSlugs').doc(previousSlug)
+        : null
+      const refsToRead = [transaction.get(newSlugRef)]
+      if (previousSlugRef) refsToRead.push(transaction.get(previousSlugRef))
+      const [newSlugSnap, previousSlugSnap] = await Promise.all(refsToRead)
+
+      const claimedUid = String(newSlugSnap.data()?.uid || '').trim()
+      if (newSlugSnap.exists && claimedUid && claimedUid !== uid) {
+        throw new HttpsError('already-exists', 'Acest link este deja folosit. Alege un alt nume de brand.')
+      }
+
+      transaction.set(siteRef, cleanSite, { merge: request.data?.merge !== false })
+      transaction.set(newSlugRef, { uid, updatedAt: serverTimestamp() }, { merge: true })
+      if (previousSlugRef && previousSlugSnap?.exists && previousSlugSnap.data()?.uid === uid) {
+        transaction.delete(previousSlugRef)
+      }
+    })
+
+    return { ok: true, slug, plan }
+  }
+)
+
+exports.setGalleryStatus = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 40,
+  },
+  async (request) => {
+    const uid = String(request.auth?.uid || '').trim()
+    if (!uid) throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat.')
+
+    const galleryId = normalizeGalleryId(request.data?.galleryId)
+    const nextStatus = String(request.data?.status || '').trim().toLowerCase()
+    if (!galleryId || !['active', 'archived', 'trash'].includes(nextStatus)) {
+      throw new HttpsError('invalid-argument', 'Statusul galeriei este invalid.')
+    }
+
+    const plan = await resolveUserPlanFromFirestore(uid)
+    const galleryRef = db.collection('galerii').doc(galleryId)
+    const ownerQuery = db.collection('galerii').where('userId', '==', uid)
+
+    await db.runTransaction(async (transaction) => {
+      const [gallerySnap, ownerGalleries] = await Promise.all([
+        transaction.get(galleryRef),
+        transaction.get(ownerQuery),
+      ])
+      if (!gallerySnap.exists || String(gallerySnap.data()?.userId || '') !== uid) {
+        throw new HttpsError('permission-denied', 'Nu ai permisiunea pentru această galerie.')
+      }
+
+      const currentStatus = String(gallerySnap.data()?.status || 'active').trim().toLowerCase()
+      if (nextStatus === 'active' && currentStatus !== 'active' && plan === 'Free') {
+        const activeCount = ownerGalleries.docs.reduce((count, galleryDoc) => {
+          const gallery = galleryDoc.data() || {}
+          const status = String(gallery.status || 'active').trim().toLowerCase()
+          const isActive = !['trash', 'archived'].includes(status) && gallery.statusActiv !== false
+          return count + (isActive ? 1 : 0)
+        }, 0)
+        if (activeCount >= 3) {
+          throw new HttpsError(
+            'resource-exhausted',
+            'Planul Free permite maximum 3 galerii active. Arhivează una sau alege un abonament.'
+          )
+        }
+      }
+
+      const patch = { status: nextStatus, updatedAt: serverTimestamp() }
+      if (nextStatus === 'trash') patch.deletedAt = serverTimestamp()
+      if (nextStatus === 'archived') patch.archivedAt = serverTimestamp()
+      if (nextStatus === 'active') {
+        patch.restoredAt = serverTimestamp()
+        patch.deletedAt = admin.firestore.FieldValue.delete()
+        patch.archivedAt = admin.firestore.FieldValue.delete()
+      }
+      transaction.update(galleryRef, patch)
+    })
+
+    return { ok: true, status: nextStatus, plan }
+  }
+)
+
 async function applyUserStorageDelta(uid, deltaBytes) {
   const normalizedUid = String(uid || '').trim()
   const delta = Math.trunc(Number(deltaBytes || 0))
@@ -1577,16 +2071,291 @@ exports.saveGalleryPassword = onCall(
   }
 )
 
-exports.sendContactNotification = onCall(
+function getContactRateLimitKey(request) {
+  const rawRequest = request.rawRequest
+  const forwardedFor = String(rawRequest?.headers?.['x-forwarded-for'] || '').split(',')[0].trim()
+  const ip = String(rawRequest?.ip || forwardedFor || 'unknown').trim()
+  return crypto
+    .createHash('sha256')
+    .update(`${process.env.GCLOUD_PROJECT || 'mina'}:${ip}`)
+    .digest('hex')
+}
+
+async function enforceAssistantRateLimit(uid) {
+  const rateRef = db.collection('assistantRateLimits').doc(uid)
+  const now = admin.firestore.Timestamp.now()
+  const nowMs = now.toMillis()
+  const dayKey = new Date(nowMs).toISOString().slice(0, 10)
+
+  await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(rateRef)
+    const data = snap.exists ? (snap.data() || {}) : {}
+    const sameDay = data.dayKey === dayKey
+    const count = sameDay ? Math.max(0, Number(data.count || 0)) : 0
+    const lastAtMs = typeof data.lastAt?.toMillis === 'function' ? data.lastAt.toMillis() : 0
+
+    if (lastAtMs && (nowMs - lastAtMs) < 2500) {
+      throw new HttpsError('resource-exhausted', 'Așteaptă câteva secunde înainte de următoarea întrebare.')
+    }
+    if (count >= 25) {
+      throw new HttpsError('resource-exhausted', 'Ai atins limita de 25 de întrebări pentru astăzi.')
+    }
+
+    transaction.set(rateRef, {
+      dayKey,
+      count: count + 1,
+      lastAt: now,
+      expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + 3 * 24 * 60 * 60 * 1000),
+    }, { merge: true })
+  })
+}
+
+exports.askMinaAssistant = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 10,
+    timeoutSeconds: 35,
+    memory: '256MiB',
+    secrets: [OPENAI_API_KEY],
+  },
+  async (request) => {
+    const uid = requireVerifiedCallableUser(request)
+    const question = sanitizeAssistantText(request.data?.question, 500)
+    if (!question) {
+      throw new HttpsError('invalid-argument', 'Scrie o întrebare despre Mina.')
+    }
+
+    await enforceAssistantRateLimit(uid)
+
+    const apiKey = String(OPENAI_API_KEY.value() || '').trim()
+    if (!apiKey) {
+      throw new HttpsError('failed-precondition', 'Ajutorul Mina nu este configurat momentan.')
+    }
+
+    const plan = await resolveUserPlanFromFirestore(uid).catch(() => 'Free')
+    const page = sanitizeAssistantText(request.data?.page, 80) || 'dashboard'
+    const history = sanitizeAssistantHistory(request.data?.history)
+
+    try {
+      const answer = await requestMinaAssistant({ apiKey, question, history, page, plan })
+      return { answer }
+    } catch (error) {
+      logger.error('askMinaAssistant failed', {
+        uid,
+        status: Number(error?.status || 0) || null,
+        code: String(error?.message || 'unknown').slice(0, 80),
+      })
+      if (Number(error?.status) === 429) {
+        throw new HttpsError('resource-exhausted', 'Asistentul este ocupat momentan. Încearcă din nou în câteva secunde.')
+      }
+      throw new HttpsError('unavailable', 'Nu am putut răspunde acum. Încearcă din nou sau folosește formularul Contact.')
+    }
+  }
+)
+
+async function enforceContactRateLimit(request) {
+  const rateRef = db.collection('contactRateLimits').doc(getContactRateLimitKey(request))
+  const now = admin.firestore.Timestamp.now()
+  const nowMs = now.toMillis()
+
+  await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(rateRef)
+    const data = snap.exists ? (snap.data() || {}) : {}
+    const lastAtMs = typeof data.lastAt?.toMillis === 'function' ? data.lastAt.toMillis() : 0
+    const windowStartedMs = typeof data.windowStartedAt?.toMillis === 'function'
+      ? data.windowStartedAt.toMillis()
+      : nowMs
+    const inCurrentWindow = (nowMs - windowStartedMs) < 60 * 60 * 1000
+    const currentCount = inCurrentWindow ? Math.max(0, Number(data.count || 0)) : 0
+
+    if (lastAtMs && (nowMs - lastAtMs) < 60 * 1000) {
+      throw new HttpsError('resource-exhausted', 'Ai trimis deja un mesaj. Încearcă din nou peste un minut.')
+    }
+    if (inCurrentWindow && currentCount >= 5) {
+      throw new HttpsError('resource-exhausted', 'Prea multe mesaje trimise. Încearcă din nou mai târziu.')
+    }
+
+    transaction.set(rateRef, {
+      count: currentCount + 1,
+      lastAt: now,
+      windowStartedAt: inCurrentWindow ? (data.windowStartedAt || now) : now,
+      expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + 2 * 60 * 60 * 1000),
+    }, { merge: true })
+  })
+}
+
+async function enforceVerificationEmailRateLimit(uid) {
+  const rateRef = db.collection('emailVerificationRateLimits').doc(uid)
+  const now = admin.firestore.Timestamp.now()
+  const nowMs = now.toMillis()
+
+  await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(rateRef)
+    const data = snap.exists ? (snap.data() || {}) : {}
+    const lastAtMs = typeof data.lastAt?.toMillis === 'function' ? data.lastAt.toMillis() : 0
+    const windowStartedMs = typeof data.windowStartedAt?.toMillis === 'function'
+      ? data.windowStartedAt.toMillis()
+      : nowMs
+    const inCurrentWindow = (nowMs - windowStartedMs) < 60 * 60 * 1000
+    const currentCount = inCurrentWindow ? Math.max(0, Number(data.count || 0)) : 0
+
+    if (lastAtMs && (nowMs - lastAtMs) < 60 * 1000) {
+      throw new HttpsError('resource-exhausted', 'Emailul a fost deja trimis. Încearcă din nou peste un minut.')
+    }
+    if (inCurrentWindow && currentCount >= 5) {
+      throw new HttpsError('resource-exhausted', 'Ai cerut prea multe emailuri de confirmare. Încearcă din nou mai târziu.')
+    }
+
+    transaction.set(rateRef, {
+      count: currentCount + 1,
+      lastAt: now,
+      windowStartedAt: inCurrentWindow ? (data.windowStartedAt || now) : now,
+      expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + 2 * 60 * 60 * 1000),
+    }, { merge: true })
+  })
+}
+
+exports.sendBrandedVerificationEmail = onCall(
   {
     region: 'us-central1',
     maxInstances: 20,
     secrets: [RESEND_API_KEY],
   },
   async (request) => {
-    const nume = sanitizeContactField(request.data?.nume, 120)
+    const uid = String(request.auth?.uid || '').trim()
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat.')
+    }
+
+    const authUser = await admin.auth().getUser(uid)
+    if (authUser.emailVerified === true) {
+      return { ok: true, alreadyVerified: true }
+    }
+
+    const email = normalizeEmail(authUser.email)
+    if (!email || !isValidEmail(email)) {
+      throw new HttpsError('failed-precondition', 'Contul nu are o adresă de email validă.')
+    }
+
+    await enforceVerificationEmailRateLimit(uid)
+
+    let displayName = sanitizeDisplayName(authUser.displayName, 120)
+    if (!displayName) {
+      const userSnap = await db.collection('users').doc(uid).get()
+      const userData = userSnap.exists ? (userSnap.data() || {}) : {}
+      displayName = sanitizeDisplayName(userData.name || userData.brandName, 120)
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString('base64url')
+    const tokenHash = crypto.createHash('sha256').update(verificationToken).digest('hex')
+    const emailHash = crypto.createHash('sha256').update(email).digest('hex')
+    const tokenRef = db.collection('emailVerificationTokens').doc(tokenHash)
+    const now = admin.firestore.Timestamp.now()
+    const verificationUrl = `${getAppOrigin()}/verify-email?token=${encodeURIComponent(verificationToken)}`
+
+    await tokenRef.set({
+      uid,
+      emailHash,
+      createdAt: now,
+      expiresAt: admin.firestore.Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60 * 1000),
+    })
+
+    let result
+    try {
+      result = await getEmailService().sendVerificationEmail({
+        toEmail: email,
+        displayName: displayName || 'Fotograf',
+        verificationUrl,
+      })
+    } catch (error) {
+      await tokenRef.delete().catch(() => {})
+      throw error
+    }
+
+    logger.info('Branded verification email sent.', {
+      uid,
+      sent: !result?.skipped,
+    })
+
+    return { ok: true, sent: !result?.skipped }
+  }
+)
+
+exports.confirmBrandedEmail = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 30,
+  },
+  async (request) => {
+    const verificationToken = String(request.data?.token || '').trim()
+    if (!/^[A-Za-z0-9_-]{43}$/.test(verificationToken)) {
+      throw new HttpsError('invalid-argument', 'Linkul de confirmare este invalid.')
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(verificationToken).digest('hex')
+    const tokenRef = db.collection('emailVerificationTokens').doc(tokenHash)
+    const tokenSnap = await tokenRef.get()
+    if (!tokenSnap.exists) {
+      throw new HttpsError('permission-denied', 'Linkul de confirmare este invalid sau a fost înlocuit.')
+    }
+
+    const tokenData = tokenSnap.data() || {}
+    const uid = String(tokenData.uid || '').trim()
+    const expiresAtMs = typeof tokenData.expiresAt?.toMillis === 'function'
+      ? tokenData.expiresAt.toMillis()
+      : 0
+    if (!uid || expiresAtMs < Date.now()) {
+      throw new HttpsError('deadline-exceeded', 'Linkul de confirmare a expirat.')
+    }
+
+    const authUser = await admin.auth().getUser(uid)
+    const currentEmail = normalizeEmail(authUser.email)
+    const currentEmailHash = crypto.createHash('sha256').update(currentEmail).digest('hex')
+    if (!currentEmail || !constantTimeSecretEquals(currentEmailHash, tokenData.emailHash)) {
+      throw new HttpsError('permission-denied', 'Adresa contului s-a schimbat. Cere un link nou de confirmare.')
+    }
+
+    if (tokenData.usedAt && authUser.emailVerified !== true) {
+      throw new HttpsError('permission-denied', 'Linkul de confirmare a fost deja folosit.')
+    }
+
+    if (authUser.emailVerified !== true) {
+      await admin.auth().updateUser(uid, { emailVerified: true })
+    }
+
+    const verifiedAt = admin.firestore.Timestamp.now()
+    await Promise.all([
+      tokenRef.set({ usedAt: verifiedAt }, { merge: true }),
+      db.collection('users').doc(uid).set({
+        emailVerified: true,
+        emailVerifiedAt: verifiedAt,
+      }, { merge: true }),
+    ])
+
+    logger.info('Email verified through Mina link.', { uid })
+    return {
+      ok: true,
+      verified: true,
+      alreadyVerified: authUser.emailVerified === true,
+    }
+  }
+)
+
+exports.submitContactMessage = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 20,
+    secrets: [RESEND_API_KEY],
+  },
+  async (request) => {
+    const honeypot = sanitizeContactField(request.data?.websiteConfirm, 200)
+    if (honeypot) return { ok: true, accepted: true }
+
+    const nume = sanitizeContactField(request.data?.nume || request.data?.name, 120)
     const email = normalizeEmail(request.data?.email)
-    const mesaj = sanitizeContactField(request.data?.mesaj, 5000)
+    const phone = sanitizeContactField(request.data?.phone, 40)
+    const mesaj = sanitizeContactField(request.data?.mesaj || request.data?.message, 5000)
+    const photographerUid = sanitizeContactField(request.data?.photographerUid, 128)
 
     if (!nume || !email || !mesaj) {
       throw new HttpsError('invalid-argument', 'Nume, email și mesaj sunt obligatorii.')
@@ -1596,21 +2365,248 @@ exports.sendContactNotification = onCall(
       throw new HttpsError('invalid-argument', 'Adresa de email este invalidă.')
     }
 
-    const result = await getEmailService().sendContactNotificationEmail({
-      toEmail: 'hello@cloudbymina.com',
+    if (photographerUid.includes('/')) {
+      throw new HttpsError('invalid-argument', 'Destinatar invalid.')
+    }
+
+    await enforceContactRateLimit(request)
+
+    const messageRef = await db.collection('contactMessages').add({
+      name: nume,
       nume,
       email,
+      phone,
+      message: mesaj,
       mesaj,
+      photographerUid: photographerUid || null,
+      read: false,
+      createdAt: serverTimestamp(),
     })
 
-    logger.info('Contact notification sent', {
-      ...result,
-      fromEmail: email,
+    let emailSent = false
+    if (!photographerUid) {
+      try {
+        const result = await getEmailService().sendContactNotificationEmail({
+          toEmail: 'hello@cloudbymina.com',
+          nume,
+          email,
+          mesaj,
+        })
+        emailSent = !result?.skipped
+        logger.info('Contact notification sent', {
+          ...result,
+          messageId: messageRef.id,
+          fromEmail: email,
+        })
+      } catch (error) {
+        logger.error('Contact notification failed', {
+          messageId: messageRef.id,
+          message: error?.message || String(error),
+        })
+      }
+    }
+
+    return {
+      ok: true,
+      accepted: true,
+      emailSent,
+    }
+  }
+)
+
+exports.sendContactNotification = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 5,
+  },
+  async () => {
+    throw new HttpsError('failed-precondition', 'Acest endpoint a fost înlocuit.')
+  }
+)
+
+exports.getGallerySelectionAccess = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 40,
+  },
+  async (request) => {
+    const galleryId = normalizeGalleryId(request.data?.galleryId)
+    const clientName = normalizeSelectionClientName(request.data?.clientName)
+    const clientId = toClientSelectionId(clientName)
+    const accessToken = normalizeAccessToken(request.data?.accessToken)
+
+    if (!galleryId || !clientId || !accessToken) {
+      throw new HttpsError('invalid-argument', 'Datele selecției sunt invalide.')
+    }
+
+    const gallerySnap = await db.collection('galerii').doc(galleryId).get()
+    if (!gallerySnap.exists || !isGalleryOpenForClientSelection(gallerySnap.data() || {})) {
+      throw new HttpsError('permission-denied', 'Galeria nu permite selecții în acest moment.')
+    }
+
+    const selectionSnap = await db.collection('gallerySelections').doc(galleryId).collection('clients').doc(clientId).get()
+    if (!selectionSnap.exists) {
+      return {
+        ok: true,
+        exists: false,
+        clientId,
+        status: 'draft',
+        count: 0,
+        keys: [],
+        lists: [],
+      }
+    }
+
+    let selection = selectionSnap.data() || {}
+    if (!normalizeAccessToken(selection.clientAccessToken)) {
+      if (normalizeSelectionStatus(selection.status) === 'finalized') {
+        throw new HttpsError('permission-denied', 'Această selecție aparține altei sesiuni de client.')
+      }
+
+      const now = admin.firestore.Timestamp.now()
+      await selectionSnap.ref.set({
+        clientAccessToken: accessToken,
+        updatedAt: now,
+      }, { merge: true })
+      selection = { ...selection, clientAccessToken: accessToken }
+    }
+
+    if (!accessTokensMatch(selection.clientAccessToken, accessToken)) {
+      throw new HttpsError('permission-denied', 'Această selecție aparține altei sesiuni de client.')
+    }
+
+    const keys = keysFromSelection(selection)
+    return {
+      ok: true,
+      exists: true,
+      clientId,
+      clientName: sanitizeDisplayName(selection.clientName || clientName, 120),
+      clientEmail: normalizeEmail(selection.clientEmail),
+      clientPhone: sanitizeDisplayName(selection.clientPhone, 40),
+      clientAdditionalInfo: sanitizeContactField(selection.clientAdditionalInfo, 1000),
+      clientComment: sanitizeContactField(selection.clientComment, 1000),
+      selectionTitle: sanitizeDisplayName(selection.selectionTitle, 160),
+      status: normalizeSelectionStatus(selection.status),
+      finalizedAt: timestampToIso(selection.finalizedAt),
+      reopenedAt: timestampToIso(selection.reopenedAt),
+      count: keys.length,
+      keys,
+      lists: listsFromSelection(selection),
+    }
+  }
+)
+
+exports.finalizeGallerySelection = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 30,
+  },
+  async (request) => {
+    const galleryId = normalizeGalleryId(request.data?.galleryId)
+    const clientName = normalizeSelectionClientName(request.data?.clientName)
+    const clientId = toClientSelectionId(clientName)
+    const accessToken = normalizeAccessToken(request.data?.accessToken)
+
+    if (!galleryId || !clientId || !accessToken) {
+      throw new HttpsError('invalid-argument', 'Datele selecției sunt invalide.')
+    }
+
+    const galleryRef = db.collection('galerii').doc(galleryId)
+    const selectionRef = db.collection('gallerySelections').doc(galleryId).collection('clients').doc(clientId)
+    const now = admin.firestore.Timestamp.now()
+
+    const result = await db.runTransaction(async (transaction) => {
+      const [gallerySnap, selectionSnap] = await Promise.all([
+        transaction.get(galleryRef),
+        transaction.get(selectionRef),
+      ])
+
+      if (!gallerySnap.exists || !isGalleryOpenForClientSelection(gallerySnap.data() || {})) {
+        throw new HttpsError('permission-denied', 'Galeria nu permite selecții în acest moment.')
+      }
+      if (!selectionSnap.exists) {
+        throw new HttpsError('not-found', 'Selecția nu a fost găsită.')
+      }
+
+      const selection = selectionSnap.data() || {}
+      if (!accessTokensMatch(selection.clientAccessToken, accessToken)) {
+        throw new HttpsError('permission-denied', 'Această selecție aparține altei sesiuni de client.')
+      }
+
+      const keys = keysFromSelection(selection)
+      if (keys.length === 0) {
+        throw new HttpsError('failed-precondition', 'Selectează cel puțin o fotografie înainte de trimitere.')
+      }
+
+      if (normalizeSelectionStatus(selection.status) === 'finalized') {
+        return {
+          alreadyFinalized: true,
+          count: keys.length,
+          finalizedAt: timestampToIso(selection.finalizedAt),
+        }
+      }
+
+      transaction.set(selectionRef, {
+        status: 'finalized',
+        finalizedAt: now,
+        updatedAt: now,
+        count: keys.length,
+      }, { merge: true })
+
+      return {
+        alreadyFinalized: false,
+        count: keys.length,
+        finalizedAt: now.toDate().toISOString(),
+      }
     })
 
     return {
       ok: true,
-      sent: !result?.skipped,
+      clientId,
+      status: 'finalized',
+      ...result,
+    }
+  }
+)
+
+exports.reopenGallerySelection = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 20,
+  },
+  async (request) => {
+    const uid = String(request.auth?.uid || '').trim()
+    const galleryId = normalizeGalleryId(request.data?.galleryId)
+    const clientId = sanitizeDisplayName(request.data?.clientId, 120)
+
+    if (!uid) throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat.')
+    if (!galleryId || !clientId || clientId.includes('/')) {
+      throw new HttpsError('invalid-argument', 'Selecția este invalidă.')
+    }
+
+    const gallerySnap = await db.collection('galerii').doc(galleryId).get()
+    if (!gallerySnap.exists) throw new HttpsError('not-found', 'Galeria nu a fost găsită.')
+    if (String(gallerySnap.get('userId') || '').trim() !== uid) {
+      throw new HttpsError('permission-denied', 'Nu poți redeschide selecțiile acestei galerii.')
+    }
+
+    const selectionRef = db.collection('gallerySelections').doc(galleryId).collection('clients').doc(clientId)
+    const selectionSnap = await selectionRef.get()
+    if (!selectionSnap.exists) throw new HttpsError('not-found', 'Selecția nu a fost găsită.')
+
+    const now = admin.firestore.Timestamp.now()
+    await selectionRef.set({
+      status: 'draft',
+      reopenedAt: now,
+      finalizedAt: admin.firestore.FieldValue.delete(),
+      updatedAt: now,
+    }, { merge: true })
+
+    return {
+      ok: true,
+      clientId,
+      status: 'draft',
+      reopenedAt: now.toDate().toISOString(),
     }
   }
 )
@@ -1628,63 +2624,12 @@ exports.onSelectionSaved = functionsV1
 
     if (!galleryId || !clientId) return null
     if (!change.after.exists) return null
-    if (!didSelectionChange(beforeData, afterData)) return null
+    if (!didSelectionFinalize(beforeData, afterData)) return null
 
     const favoritesCount = afterKeys.length
     if (favoritesCount <= 0) return null
 
     try {
-      const logDocId = `${galleryId}_${clientId}`
-      const logRef = db.collection('selectionEmailLog').doc(logDocId)
-      const now = admin.firestore.Timestamp.now()
-      const debounceGuard = await db.runTransaction(async (transaction) => {
-        const logSnap = await transaction.get(logRef)
-        const lastSentAt = logSnap.exists ? logSnap.get('lastSentAt') : null
-        const lastSentDate = typeof lastSentAt?.toDate === 'function' ? lastSentAt.toDate() : null
-        const shouldSkip = !!lastSentDate && (Date.now() - lastSentDate.getTime()) < SELECTION_EMAIL_DEBOUNCE_MS
-
-        if (shouldSkip) {
-          return {
-            shouldSend: false,
-            logDocId,
-            logExists: logSnap.exists,
-            lastSentAt: lastSentDate,
-          }
-        }
-
-        transaction.set(logRef, {
-          galleryId,
-          clientId,
-          lastSentAt: now,
-          updatedAt: now,
-        }, { merge: true })
-
-        return {
-          shouldSend: true,
-          logDocId,
-          logExists: logSnap.exists,
-          lastSentAt: lastSentDate,
-        }
-      })
-
-      logger.info('onSelectionSaved debounce check', {
-        galleryId,
-        clientId,
-        logDocId: debounceGuard.logDocId,
-        logExists: debounceGuard.logExists,
-        lastSentAt: debounceGuard.lastSentAt?.toISOString?.() || null,
-        favoritesCount,
-      })
-
-      if (!debounceGuard.shouldSend) {
-        logger.info('onSelectionSaved skipped: debounced', {
-          galleryId,
-          clientId,
-          lastSentAt: debounceGuard.lastSentAt?.toISOString?.() || null,
-        })
-        return null
-      }
-
       const gallerySnap = await db.collection('galerii').doc(galleryId).get()
       if (!gallerySnap.exists) {
         logger.warn('onSelectionSaved skipped: gallery missing', { galleryId, clientId })
@@ -1704,14 +2649,14 @@ exports.onSelectionSaved = functionsV1
         return null
       }
 
-      const result = await getEmailService().sendSelectionSavedNotificationEmail({
+      const result = await getEmailService().sendSelectionFinalizedNotificationEmail({
         toEmail: photographer.email,
         galleryName: sanitizeDisplayName(galleryData.nume || 'Galerie Mina', 160),
         clientName: sanitizeDisplayName(afterData.clientName || clientId, 120),
         favoritesCount,
       })
 
-      logger.info('onSelectionSaved email sent', {
+      logger.info('onSelectionSaved finalization email sent', {
         galleryId,
         clientId,
         ownerUid,
@@ -1838,23 +2783,17 @@ exports.sendGalleryLink = onCall(
 
 exports.updateStorageUsed = functionsV1
   .region('us-central1')
-  .runWith({ maxInstances: 40, secrets: ['B2_APPLICATION_KEY'] })
+  .runWith({ maxInstances: 40 })
   .https.onRequest(async (req, res) => {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method Not Allowed' })
       return
     }
 
-    const workerSecret = String(req.get('X-Worker-Secret') || '').trim()
-    const expectedSecret = String(B2_APPLICATION_KEY.value() || '').trim()
-    if (!constantTimeSecretEquals(workerSecret, expectedSecret)) {
-      res.status(403).json({ error: 'Forbidden' })
-      return
-    }
-
     let uid = ''
 
     try {
+      const authenticatedUid = await verifyRequestAuth(req)
       const payload = parseJsonRequestBody(req)
       uid = String(payload?.uid || '').trim()
       const deltaBytes = Math.trunc(Number(payload?.deltaBytes || 0))
@@ -1864,6 +2803,10 @@ exports.updateStorageUsed = functionsV1
       }
       if (!Number.isFinite(deltaBytes) || deltaBytes === 0) {
         res.status(400).json({ error: 'deltaBytes invalid.' })
+        return
+      }
+      if (authenticatedUid !== uid) {
+        res.status(403).json({ error: 'Forbidden' })
         return
       }
 
@@ -1884,6 +2827,10 @@ exports.updateStorageUsed = functionsV1
         res.status(403).json({ error: message })
         return
       }
+      if (code === 'unauthenticated') {
+        res.status(401).json({ error: message })
+        return
+      }
       if (code === 'not-found') {
         res.status(404).json({ error: message })
         return
@@ -1894,6 +2841,65 @@ exports.updateStorageUsed = functionsV1
         error: message,
       })
       res.status(500).json({ error: 'Actualizarea storage-ului a eșuat.' })
+    }
+  })
+
+exports.verifyGalleryShareAccess = functionsV1
+  .region('us-central1')
+  .runWith({ maxInstances: 40 })
+  .https.onRequest(async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method Not Allowed' })
+      return
+    }
+
+    try {
+      const payload = parseJsonRequestBody(req)
+      const galleryId = normalizeGalleryId(payload?.galleryId)
+      const shareToken = String(payload?.shareToken || '').trim()
+      if (!galleryId || !shareToken || shareToken.length > 256) {
+        res.status(403).json({ error: 'Forbidden' })
+        return
+      }
+
+      const gallerySnap = await db.collection('galerii').doc(galleryId).get()
+      if (!gallerySnap.exists) {
+        res.status(403).json({ error: 'Forbidden' })
+        return
+      }
+
+      const galleryData = gallerySnap.data() || {}
+      const status = String(galleryData.status || '').trim().toLowerCase()
+      const galleryExpiry = galleryData.dataExpirareTs || galleryData.dataExpirare
+      const galleryExpiryMs = typeof galleryExpiry?.toMillis === 'function'
+        ? galleryExpiry.toMillis()
+        : Date.parse(String(galleryExpiry || ''))
+      const shareExpiry = galleryData.publicShareExpiresAt
+      const shareExpiryMs = typeof shareExpiry?.toMillis === 'function'
+        ? shareExpiry.toMillis()
+        : Date.parse(String(shareExpiry || ''))
+      const expectedHash = String(galleryData.publicShareTokenHash || '').trim().toLowerCase()
+      const incomingHash = crypto.createHash('sha256').update(shareToken).digest('hex')
+
+      const allowed = status !== 'trash'
+        && status !== 'archived'
+        && galleryData.statusActiv !== false
+        && (!Number.isFinite(galleryExpiryMs) || galleryExpiryMs >= Date.now())
+        && (!Number.isFinite(shareExpiryMs) || shareExpiryMs >= Date.now())
+        && constantTimeSecretEquals(incomingHash, expectedHash)
+
+      if (!allowed) {
+        res.status(403).json({ error: 'Forbidden' })
+        return
+      }
+
+      res.status(200).json({ ok: true })
+    } catch (error) {
+      logger.error('verifyGalleryShareAccess failed', {
+        error: error?.message || 'unknown error',
+      })
+      res.status(500).json({ error: 'Verification failed' })
     }
   })
 
@@ -1910,14 +2916,25 @@ exports.createCheckoutSession = onCall(
         throw new HttpsError('unauthenticated', 'Trebuie să fii autentificat pentru checkout.')
       }
 
-      const priceId = sanitizePriceId(request.data?.priceId)
+      const requestedPlanKey = sanitizeCheckoutPlanKey(request.data?.planId)
+      const requestedPriceId = sanitizePriceId(request.data?.priceId)
+      const priceId = requestedPlanKey
+        ? getCheckoutPriceIdForPlanKey(requestedPlanKey)
+        : requestedPriceId
       const successUrl = sanitizeRedirectUrl(request.data?.successUrl, 'successUrl')
       const cancelUrl = sanitizeRedirectUrl(request.data?.cancelUrl, 'cancelUrl')
-      const allowPromotionCodes =
-        request.data?.allowPromotionCodes === undefined
-          ? true
-          : Boolean(request.data.allowPromotionCodes)
+      if (request.data?.termsAccepted !== true) {
+        throw new HttpsError('failed-precondition', 'Trebuie să accepți Termenii și Politica de rambursare.')
+      }
 
+      if (!priceId) {
+        throw new HttpsError(
+          'failed-precondition',
+          isFounderOfferActive()
+            ? 'Prețul Fondator nu este configurat pentru acest plan.'
+            : 'Prețul standard nu este configurat pentru acest plan.'
+        )
+      }
       const allowedPriceIds = getAllowedCheckoutPriceIds()
       if (!allowedPriceIds.has(priceId)) {
         throw new HttpsError('invalid-argument', 'Price ID invalid pentru checkout.')
@@ -1932,20 +2949,70 @@ exports.createCheckoutSession = onCall(
         apiVersion: '2024-06-20',
       })
 
-      const session = await stripe.checkout.sessions.create({
+      const customerContext = await getCheckoutCustomerContext(uid)
+      if (customerContext.activeMainSubscription) {
+        throw new HttpsError(
+          'already-exists',
+          'Ai deja un abonament activ. Folosește portalul Stripe pentru schimbarea planului.'
+        )
+      }
+      if (
+        customerContext.stripeCustomerId
+        && await hasActiveMainSubscriptionInStripe(stripe, customerContext.stripeCustomerId)
+      ) {
+        throw new HttpsError(
+          'already-exists',
+          'Ai deja un abonament activ. Folosește portalul Stripe pentru schimbarea planului.'
+        )
+      }
+
+      const planName = resolvePlanFromPriceId(priceId)
+      const pricingVersion = isFounderPriceId(priceId) ? 'founder-2026' : 'standard-2026'
+      const planKey = requestedPlanKey || Object.entries(
+        pricingVersion === 'founder-2026'
+          ? getFounderPriceIdsByPlanKey()
+          : getRegularPriceIdsByPlanKey()
+      ).find(([, configuredPriceId]) => configuredPriceId === priceId)?.[0] || ''
+      const subscriptionMetadata = {
+        uid,
+        firebase_uid: uid,
+        priceId,
+        planId: planKey,
+        planName,
+        type: 'plan',
+        pricingVersion,
+        termsVersion: '2026-08-founder',
+      }
+
+      await db.collection('users').doc(uid).set({
+        termsAcceptedAt: serverTimestamp(),
+        termsVersion: '2026-08-founder',
+        digitalServiceImmediateConsentAt: serverTimestamp(),
+      }, { merge: true })
+
+      const sessionPayload = {
         mode: 'subscription',
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: successUrl,
         cancel_url: cancelUrl,
-        allow_promotion_codes: allowPromotionCodes,
+        allow_promotion_codes: false,
         client_reference_id: uid,
         metadata: {
-          uid,
-          firebase_uid: uid,
-          priceId,
-          type: 'plan',
+          ...subscriptionMetadata,
+          digitalServiceImmediateConsent: 'true',
         },
-      })
+        subscription_data: {
+          metadata: subscriptionMetadata,
+        },
+      }
+      if (customerContext.stripeCustomerId) {
+        sessionPayload.customer = customerContext.stripeCustomerId
+      } else {
+        const customerEmail = String(request.auth?.token?.email || customerContext.userData.email || '').trim()
+        if (customerEmail) sessionPayload.customer_email = customerEmail
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionPayload)
 
       if (!session?.url) {
         throw new HttpsError('internal', 'Stripe nu a returnat URL-ul de checkout.')
@@ -1954,12 +3021,15 @@ exports.createCheckoutSession = onCall(
       logger.info('createCheckoutSession success', {
         uid,
         priceId,
+        planKey,
+        pricingVersion,
         sessionId: session.id,
       })
 
       return {
         url: session.url,
         sessionId: session.id,
+        pricingVersion,
       }
     } catch (error) {
       console.error('createCheckoutSession error:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
@@ -2040,20 +3110,34 @@ exports.createAddonCheckoutSession = onRequest(
       apiVersion: '2024-06-20',
     })
 
-    const session = await stripe.checkout.sessions.create({
+    const customerContext = await getCheckoutCustomerContext(uid)
+    if (customerContext.activeAddonSubscription) {
+      res.status(409).json({ error: 'Add-on-ul este deja activ pentru acest cont.' })
+      return
+    }
+    const addonSubscriptionMetadata = {
+      uid,
+      firebase_uid: uid,
+      priceId: addonPriceId,
+      type: 'addon',
+    }
+    const sessionPayload = {
       mode: 'subscription',
       line_items: [{ price: addonPriceId, quantity: 1 }],
       success_url: successUrl,
       cancel_url: cancelUrl,
       allow_promotion_codes: false,
       client_reference_id: uid,
-      metadata: {
-        uid,
-        firebase_uid: uid,
-        priceId: addonPriceId,
-        type: 'addon',
+      metadata: addonSubscriptionMetadata,
+      subscription_data: {
+        metadata: addonSubscriptionMetadata,
       },
-    })
+    }
+    if (customerContext.stripeCustomerId) {
+      sessionPayload.customer = customerContext.stripeCustomerId
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionPayload)
 
     if (!session?.url) {
       res.status(500).json({ error: 'Stripe nu a returnat URL-ul de checkout.' })

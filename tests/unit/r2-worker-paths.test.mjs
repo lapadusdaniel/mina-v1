@@ -12,7 +12,12 @@ const {
   publicAssetCacheControl,
   rateLimitKeyForRequest,
   requireBearerToken,
+  normalizePlan,
+  storageLimitBytesForPlan,
+  inferPlanFromSubscription,
 } = __workerTestables
+
+const GB = 1024 * 1024 * 1024
 
 test('normalizePath removes leading slash and rejects traversal/backslash', () => {
   assert.equal(normalizePath('/galerii/abc/originals/a.jpg'), 'galerii/abc/originals/a.jpg')
@@ -76,4 +81,38 @@ test('rateLimitKeyForRequest uses only ip+method for write scope', () => {
 test('publicAssetCacheControl differentiates token vs public assets', () => {
   assert.equal(publicAssetCacheControl(''), 'public, max-age=31536000, immutable')
   assert.equal(publicAssetCacheControl('abc123'), 'private, max-age=86400')
+})
+
+test('quota plan names match the five plans sold by Mina', () => {
+  assert.equal(normalizePlan('Free'), 'Free')
+  assert.equal(normalizePlan('Esențial'), 'Esential')
+  assert.equal(normalizePlan('Starter'), 'Esential')
+  assert.equal(normalizePlan('Plus'), 'Plus')
+  assert.equal(normalizePlan('Pro'), 'Pro')
+  assert.equal(normalizePlan('Studio'), 'Studio')
+})
+
+test('server-side storage limits match the public pricing', () => {
+  assert.equal(storageLimitBytesForPlan('Free', {}), 15 * GB)
+  assert.equal(storageLimitBytesForPlan('Esential', {}), 100 * GB)
+  assert.equal(storageLimitBytesForPlan('Plus', {}), 500 * GB)
+  assert.equal(storageLimitBytesForPlan('Pro', {}), 1000 * GB)
+  assert.equal(storageLimitBytesForPlan('Studio', {}), 2000 * GB)
+  assert.equal(storageLimitBytesForPlan('Studio', {}, true), 2500 * GB)
+})
+
+test('Stripe subscriptions resolve to current Mina plans', () => {
+  assert.equal(inferPlanFromSubscription({ plan: 'Esențial' }, {}), 'Esential')
+  assert.equal(inferPlanFromSubscription({ plan: 'Plus' }, {}), 'Plus')
+  assert.equal(
+    inferPlanFromSubscription({ price: { id: 'price_1T6a4F1ax2jGrLZH92vUsGzE' } }, {}),
+    'Pro'
+  )
+  assert.equal(
+    inferPlanFromSubscription({ price: { id: 'price_1U1Qt41ax2jGrLZHuddImmll' } }, {}),
+    'Plus'
+  )
+  assert.equal(inferPlanFromSubscription({ price: { unit_amount: 12900 } }, {}), 'Studio')
+  assert.equal(inferPlanFromSubscription({ price: { unit_amount: 149000 } }, {}), 'Studio')
+  assert.equal(inferPlanFromSubscription({ price: { id: 'price_unknown' } }, {}), 'Free')
 })

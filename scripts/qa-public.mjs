@@ -11,7 +11,7 @@ const outputDir = process.argv[3]
   : path.resolve(process.cwd(), 'tmp', 'qa-public')
 
 const desktopRoutes = [
-  { route: '/', expectText: 'Galerii care lasă' },
+  { route: '/', expectText: 'Livrează galerii profesionale.' },
   { route: '/login', expectText: 'Intră în cont' },
   { route: '/register', expectText: 'Creează cont gratuit' },
 ]
@@ -78,7 +78,7 @@ async function collectPageSnapshot(page, { route, expectText, label }, viewport)
 async function runAuthRedirectCheck(page, viewport) {
   const result = await collectPageSnapshot(
     page,
-    { route: authRoute, label: 'auth', expectText: 'Intră în cont' },
+    { route: authRoute, label: 'auth', expectText: 'Livrează galerii profesionale.' },
     viewport
   )
   return {
@@ -106,7 +106,7 @@ async function main() {
     results.push(
       await collectPageSnapshot(
         page,
-        { route: '/', label: 'mobile', expectText: 'Galerii care lasă' },
+        { route: '/', label: 'mobile', expectText: 'Livrează galerii profesionale.' },
         { width: 390, height: 844 }
       )
     )

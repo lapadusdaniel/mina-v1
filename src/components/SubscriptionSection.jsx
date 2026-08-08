@@ -1,6 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getAppServices } from '../core/bootstrap/appBootstrap';
+import {
+  FOUNDER_OFFER,
+  PRICING_PLANS,
+  getPlanPrice,
+  isFounderOfferActive,
+  isFounderPriceId,
+} from '../modules/billing/pricing.config';
 import BillingSettings from './BillingSettings';
 import BillingHistory from './BillingHistory';
 import './SubscriptionSection.css';
@@ -47,65 +54,13 @@ function statusClass(status) {
   return 'is-muted'
 }
 
-const DASH_PLANS = [
-  {
-    id: 'free',
-    name: 'Free',
-    storage: '15 GB',
-    monthly: { display: '0 lei', planId: null },
-    yearly:  { display: '0 lei', equiv: null, planId: null },
-    features: ['15 GB stocare', '3 galerii active', 'Galerii cu parolă', 'Selecții favorite'],
-    lockedFeatures: ['Fără site de prezentare'],
-    highlight: false,
-    cta: 'Plan gratuit',
-  },
-  {
-    id: 'esential',
-    name: 'Esențial',
-    storage: '100 GB',
-    monthly: { display: '29 lei', planId: 'esential_monthly' },
-    yearly:  { display: '289 lei', equiv: '~24 lei/lună', planId: 'esential_yearly' },
-    features: ['100 GB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
-    lockedFeatures: [],
-    highlight: false,
-    cta: 'Alege Esențial',
-  },
-  {
-    id: 'plus',
-    name: 'Plus',
-    storage: '500 GB',
-    monthly: { display: '49 lei', planId: 'plus_monthly' },
-    yearly:  { display: '489 lei', equiv: '~41 lei/lună', planId: 'plus_yearly' },
-    features: ['500 GB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
-    lockedFeatures: [],
-    highlight: true,
-    cta: 'Alege Plus',
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    storage: '1 TB',
-    monthly: { display: '79 lei', planId: 'pro_monthly' },
-    yearly:  { display: '789 lei', equiv: '~66 lei/lună', planId: 'pro_yearly' },
-    features: ['1 TB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
-    lockedFeatures: [],
-    highlight: false,
-    cta: 'Alege Pro',
-  },
-  {
-    id: 'studio',
-    name: 'Studio',
-    storage: '2 TB',
-    monthly: { display: '129 lei', planId: 'studio_monthly' },
-    yearly:  { display: '1.289 lei', equiv: '~107 lei/lună', planId: 'studio_yearly' },
-    features: ['2 TB stocare', 'Galerii nelimitate', 'Galerii cu parolă', 'Selecții favorite', 'Site de prezentare'],
-    lockedFeatures: [],
-    highlight: false,
-    cta: 'Alege Studio',
-  },
-]
+const DASH_PLANS = PRICING_PLANS.map((plan) => ({
+  ...plan,
+  id: plan.key,
+  highlight: plan.featured,
+}))
 
-const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode = 'full' }) => {
+const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode = 'full', initialBillingCycle = 'monthly' }) => {
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [openingPortal, setOpeningPortal] = useState(false)
   const [activatingAddon, setActivatingAddon] = useState(false)
@@ -113,13 +68,15 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
   const [billingData, setBillingData] = useState(null)
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
-  const [billingCycle, setBillingCycle] = useState('monthly')
+  const [billingCycle, setBillingCycle] = useState(initialBillingCycle === 'yearly' ? 'yearly' : 'monthly')
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const founderOfferActive = isFounderOfferActive()
   const normalizedRawPlan = String(userPlanProp ?? user?.plan ?? 'Free')
   const userPlan = normalizedRawPlan === 'Unlimited' ? 'Studio' : normalizedRawPlan
   const showPlans = mode === 'full' || mode === 'plansOnly'
   const showBilling = mode === 'full' || mode === 'billingOnly'
 
-  const loadBillingOverview = async () => {
+  const loadBillingOverview = useCallback(async () => {
     if (!user?.uid) return
     setBillingLoading(true)
     setBillingError('')
@@ -132,11 +89,11 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
     } finally {
       setBillingLoading(false)
     }
-  }
+  }, [user?.uid])
 
   useEffect(() => {
     loadBillingOverview()
-  }, [user?.uid, userPlan])
+  }, [loadBillingOverview, userPlan])
 
   const handleCheckout = async (planId) => {
     if (planId === 'free') return;
@@ -152,6 +109,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
         planId,
         successUrl: window.location.origin + '/dashboard?payment=success',
         cancelUrl: window.location.origin + '/dashboard?payment=cancel',
+        termsAccepted,
       });
 
       if (url) {
@@ -185,6 +143,26 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
       ['active', 'trialing'].includes(String(activeSubscription.status || '').toLowerCase()) &&
       !activeSubscription.cancelAtPeriodEnd
   )
+  const hasActiveSubscription = Boolean(activeSubscription)
+  const activeSubscriptionHasFounderPrice = isFounderPriceId(activeSubscription?.priceId)
+  const portalConfiguration = activeSubscriptionHasFounderPrice
+    ? String(import.meta.env.VITE_STRIPE_PORTAL_CONFIGURATION_FOUNDER || '').trim()
+    : String(import.meta.env.VITE_STRIPE_PORTAL_CONFIGURATION_STANDARD || '').trim()
+
+  const handleOpenPortal = async () => {
+    setOpeningPortal(true)
+    try {
+      const portalUrl = await billingService.createPortalLink({
+        returnUrl: `${window.location.origin}/dashboard?tab=abonament&billing=updated`,
+        configuration: portalConfiguration,
+      })
+      window.location.assign(portalUrl)
+    } catch (err) {
+      console.error('Eroare portal Stripe:', err)
+      alert(`Nu pot deschide portalul Stripe.\nDetalii: ${String(err?.message || 'necunoscut')}`)
+      setOpeningPortal(false)
+    }
+  }
 
   const handleCancelAtPeriodEnd = async () => {
     if (!activeSubscription) return
@@ -216,9 +194,10 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
         portalUrl = await billingService.createPortalLink({
           returnUrl,
           flowData,
+          configuration: portalConfiguration,
         })
       } catch {
-        portalUrl = await billingService.createPortalLink({ returnUrl })
+        portalUrl = await billingService.createPortalLink({ returnUrl, configuration: portalConfiguration })
       }
       window.location.assign(portalUrl)
     } catch (err) {
@@ -277,9 +256,10 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
         portalUrl = await billingService.createPortalLink({
           returnUrl,
           flowData,
+          configuration: portalConfiguration,
         })
       } catch {
-        portalUrl = await billingService.createPortalLink({ returnUrl })
+        portalUrl = await billingService.createPortalLink({ returnUrl, configuration: portalConfiguration })
       }
 
       window.location.assign(portalUrl)
@@ -298,7 +278,19 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
             <h2 className="sub-display-title">
               Alege planul potrivit <span className="sub-display-title-accent">viziunii tale</span>.
             </h2>
-            <p className="sub-display-sub">Scalabilitate maximă pentru portofoliul tău profesional.</p>
+            <p className="sub-display-sub">Alege stocarea potrivită pentru volumul tău de lucru.</p>
+
+            {activeSubscriptionHasFounderPrice ? (
+              <div className="sub-founder-offer is-active">
+                <strong>Preț Fondator activ</strong>
+                <span>Îl păstrezi cât timp abonamentul tău plătit rămâne activ, fără întrerupere.</span>
+              </div>
+            ) : founderOfferActive && !hasActiveSubscription ? (
+              <div className="sub-founder-offer">
+                <strong>Activează până la {FOUNDER_OFFER.endsAtLabel}</strong>
+                <span>Alege un plan plătit și păstrează prețul Fondator cât timp abonamentul rămâne activ.</span>
+              </div>
+            ) : null}
 
             <div className="sub-billing-toggle">
               <button
@@ -312,7 +304,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                 onClick={() => setBillingCycle('yearly')}
               >
                 Anual
-                <span className="sub-billing-save">−17%</span>
+                <span className="sub-billing-save">≈ 2 luni incluse</span>
               </button>
             </div>
           </div>
@@ -320,10 +312,12 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
           <div className="sub-pricing-grid sub-pricing-grid-5">
             {DASH_PLANS.map((plan) => {
               const isCurrent = userPlan.toLowerCase() === plan.id
-              const price = billingCycle === 'yearly' ? plan.yearly : plan.monthly
+              const price = getPlanPrice(plan, billingCycle, {
+                founderEligible: hasActiveSubscription ? activeSubscriptionHasFounderPrice : undefined,
+              })
               const isFreePlan = plan.id === 'free'
               const checkoutId = price.planId
-              const isDisabled = isCurrent || Boolean(loadingPlan) || isFreePlan
+              const isDisabled = isCurrent || Boolean(loadingPlan) || isFreePlan || openingPortal || (!hasActiveSubscription && !termsAccepted)
 
               return (
                 <div
@@ -336,7 +330,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                   ].filter(Boolean).join(' ')}
                 >
                   {plan.highlight && !isCurrent && (
-                    <div className="sub-plan-badge">Cel mai ales</div>
+                    <div className="sub-plan-badge">Recomandat</div>
                   )}
                   {isCurrent && (
                     <div className="sub-plan-badge sub-plan-badge-current">Plan activ</div>
@@ -345,6 +339,7 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                   <h3 className="sub-plan-name">{plan.name}</h3>
                   <p className="sub-plan-storage-tag">{plan.storage} stocare</p>
 
+                  {price.founderActive && <p className="sub-plan-founder-label">Preț Fondator</p>}
                   <div className="sub-plan-price">
                     {price.display}
                     {!isFreePlan && billingCycle === 'monthly' && (
@@ -356,6 +351,11 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                   </div>
                   {billingCycle === 'yearly' && price.equiv && (
                     <p className="sub-plan-equiv">{price.equiv}</p>
+                  )}
+                  {price.standardDisplay && (
+                    <p className="sub-plan-standard-price">
+                      Preț standard: {price.standardDisplay}/{billingCycle === 'yearly' ? 'an' : 'lună'}
+                    </p>
                   )}
 
                   <ul className="sub-plan-features">
@@ -370,10 +370,18 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
                   ) : (
                     <button
                       className={`sub-plan-btn ${plan.highlight ? 'btn-gold-filled' : 'btn-outline'}`}
-                      onClick={() => checkoutId && handleCheckout(checkoutId)}
+                      onClick={() => checkoutId && (hasActiveSubscription ? handleOpenPortal() : handleCheckout(checkoutId))}
                       disabled={isDisabled}
                     >
-                      {loadingPlan === checkoutId ? 'Se încarcă...' : isCurrent ? 'Planul tău' : plan.cta}
+                      {loadingPlan === checkoutId
+                        ? 'Se încarcă...'
+                        : openingPortal
+                          ? 'Se deschide portalul...'
+                          : isCurrent
+                            ? 'Planul tău'
+                            : hasActiveSubscription
+                              ? 'Gestionează planul'
+                              : plan.cta}
                     </button>
                   )}
 
@@ -417,6 +425,23 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
               )
             })}
           </div>
+          {founderOfferActive && !hasActiveSubscription && (
+            <p className="sub-founder-terms">
+              Oferta se aplică abonamentelor plătite activate până la {FOUNDER_OFFER.endsAtLabel}, inclusiv. Dacă abonamentul este anulat sau expiră, oferta se pierde. <Link to="/termeni">Vezi condițiile complete</Link>.
+            </p>
+          )}
+          {!hasActiveSubscription && (
+            <label className="sub-legal-consent">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(event) => setTermsAccepted(event.target.checked)}
+              />
+              <span>
+                Am citit și accept <Link to="/termeni">Termenii</Link> și <Link to="/refund">Politica de rambursare</Link> și solicit activarea serviciului imediat după plată.
+              </span>
+            </label>
+          )}
         </>
       )}
 

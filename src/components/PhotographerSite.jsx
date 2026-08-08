@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Lightbox from 'yet-another-react-lightbox'
 import 'yet-another-react-lightbox/styles.css'
 import Masonry from 'react-masonry-css'
@@ -7,31 +7,66 @@ import './PhotographerSite.css'
 
 const { sites: sitesService, media: mediaService } = getAppServices()
 
-const TABS = ['Acasă', 'Portofoliu', 'Prețuri', 'Despre', 'Contact']
-
 const normalizeUrl = (url) => {
   if (!url || typeof url !== 'string') return '#'
   const t = url.trim()
   return /^https?:\/\//i.test(t) ? t : `https://${t}`
 }
 
+const normalizeSocialUrl = (url, network) => {
+  if (!url || typeof url !== 'string') return '#'
+  const value = url.trim()
+  if (/^https?:\/\//i.test(value)) return value
+  if (network === 'instagram') {
+    const handle = value
+      .replace(/^@/, '')
+      .replace(/^(www\.)?instagram\.com\//i, '')
+      .replace(/\/$/, '')
+    return `https://instagram.com/${handle}`
+  }
+  return normalizeUrl(value)
+}
+
+const instagramLabel = (value) => {
+  if (!value) return ''
+  const handle = value
+    .trim()
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+    .replace(/^@/, '')
+    .replace(/\/$/, '')
+  return handle ? `@${handle}` : ''
+}
+
+const whatsappNumber = (value) => {
+  if (!value) return ''
+  const raw = String(value).trim()
+  const digits = raw.replace(/\D/g, '')
+  if (raw.startsWith('+')) return digits
+  if (digits.startsWith('00')) return digits.slice(2)
+  if (digits.startsWith('0')) return `40${digits.slice(1)}`
+  return digits
+}
+
 // ── Contact Form ──────────────────────────────
 function ContactForm({ photographerUid }) {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', message: '', websiteConfirm: '' })
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name || !form.email) return
     setSending(true)
+    setSubmitError('')
     try {
       await sitesService.submitContactMessage({ ...form, photographerUid })
       setSent(true)
-      setForm({ name: '', email: '', phone: '', message: '' })
+      setForm({ name: '', email: '', phone: '', message: '', websiteConfirm: '' })
     } catch (err) {
       console.error(err)
+      setSubmitError('Mesajul nu a putut fi trimis. Încearcă din nou sau folosește datele de contact de mai sus.')
     } finally {
       setSending(false)
     }
@@ -47,6 +82,16 @@ function ContactForm({ photographerUid }) {
 
   return (
     <form className="ps-contact-form" onSubmit={handleSubmit}>
+      <input
+        className="ps-contact-honeypot"
+        type="text"
+        name="website"
+        value={form.websiteConfirm}
+        onChange={set('websiteConfirm')}
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+      />
       <div className="ps-form-row">
         <div className="ps-form-field">
           <label className="ps-form-label">Nume</label>
@@ -98,6 +143,7 @@ function ContactForm({ photographerUid }) {
       >
         {sending ? 'Se trimite...' : 'Trimite mesaj'}
       </button>
+      {submitError && <p className="ps-form-error" role="alert">{submitError}</p>}
     </form>
   )
 }
@@ -118,6 +164,7 @@ export default function PhotographerSite({ previewData = null }) {
   const [categoryPhotos, setCategoryPhotos] = useState({})
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [lightbox, setLightbox] = useState({ open: false, index: 0, slides: [] })
+  const loadingCategoryIds = useRef(new Set())
 
   // Despre: horizontal strip photos
   const [stripPhotos, setStripPhotos] = useState([])
@@ -125,6 +172,13 @@ export default function PhotographerSite({ previewData = null }) {
   const slug = previewData
     ? null
     : window.location.pathname.replace(/^\//, '').split('/')[0]
+
+  const changeTab = useCallback((tab) => {
+    setActiveTab(tab)
+    if (!previewData) {
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
+    }
+  }, [previewData])
 
   // ── Load site data ──
   useEffect(() => {
@@ -190,6 +244,13 @@ export default function PhotographerSite({ previewData = null }) {
       mediaService.getBrandingAsset(coverPath).then(setCoverUrl).catch(() => {
         mediaService.getPhotoUrl(coverPath, 'original').then(setCoverUrl).catch(() => {})
       })
+    } else {
+      const fallbackPhoto = (siteData.portfolio || [])
+        .flatMap((category) => category.photos || [])
+        .find((photo) => photo?.key)
+      if (fallbackPhoto?.key) {
+        mediaService.getBrandingAsset(fallbackPhoto.key).then(setCoverUrl).catch(() => {})
+      }
     }
 
     const profilePath = siteData.profilePhotoPath || siteData.aboutImagePath
@@ -199,6 +260,37 @@ export default function PhotographerSite({ previewData = null }) {
       })
     }
   }, [siteData])
+
+  // Keep the browser title and description relevant to the photographer,
+  // instead of showing Mina's generic landing-page metadata.
+  useEffect(() => {
+    if (previewData || !siteData) return
+
+    const metadataBrand = siteData.siteName || siteData.brandName || profile?.brandName || 'Fotograf'
+    const metadataDescription = (
+      siteData.tagline || siteData.heroBio ||
+      `Portofoliul foto și datele de contact pentru ${metadataBrand}.`
+    ).trim()
+    const previousTitle = document.title
+    let descriptionMeta = document.querySelector('meta[name="description"]')
+    const createdDescriptionMeta = !descriptionMeta
+    const previousDescription = descriptionMeta?.getAttribute('content') || ''
+
+    if (!descriptionMeta) {
+      descriptionMeta = document.createElement('meta')
+      descriptionMeta.setAttribute('name', 'description')
+      document.head.appendChild(descriptionMeta)
+    }
+
+    document.title = `${metadataBrand} — Portofoliu foto`
+    descriptionMeta.setAttribute('content', metadataDescription.slice(0, 160))
+
+    return () => {
+      document.title = previousTitle
+      if (createdDescriptionMeta) descriptionMeta.remove()
+      else descriptionMeta.setAttribute('content', previousDescription)
+    }
+  }, [siteData, profile, previewData])
 
   // ── Init portfolio selected category ──
   useEffect(() => {
@@ -212,7 +304,7 @@ export default function PhotographerSite({ previewData = null }) {
   // ── Load photos for a category ──
   const loadCategoryPhotos = useCallback(
     async (categoryId) => {
-      if (!siteData || categoryPhotos[categoryId] !== undefined) return
+      if (!siteData || categoryPhotos[categoryId] !== undefined || loadingCategoryIds.current.has(categoryId)) return
       const portfolio = siteData.portfolio || []
       const cat = portfolio.find((c) => c.id === categoryId)
 
@@ -221,17 +313,30 @@ export default function PhotographerSite({ previewData = null }) {
         return
       }
 
+      loadingCategoryIds.current.add(categoryId)
       setLoadingPhotos(true)
+      setCategoryPhotos((p) => ({ ...p, [categoryId]: [] }))
+      const photos = cat.photos.filter((photo) => photo?.key)
       const urls = []
-      for (const photo of cat.photos) {
-        if (!photo.key) continue
-        try {
-          const url = await mediaService.getBrandingAsset(photo.key)
-          urls.push({ url, key: photo.key })
-        } catch { /* skip */ }
+
+      try {
+        for (let start = 0; start < photos.length; start += 6) {
+          const batch = await Promise.all(
+            photos.slice(start, start + 6).map(async (photo) => {
+              try {
+                return { url: await mediaService.getBrandingAsset(photo.key), key: photo.key }
+              } catch {
+                return null
+              }
+            })
+          )
+          urls.push(...batch.filter(Boolean))
+          setCategoryPhotos((p) => ({ ...p, [categoryId]: [...urls] }))
+        }
+      } finally {
+        loadingCategoryIds.current.delete(categoryId)
+        setLoadingPhotos(false)
       }
-      setCategoryPhotos((p) => ({ ...p, [categoryId]: urls }))
-      setLoadingPhotos(false)
     },
     [siteData, categoryPhotos]
   )
@@ -299,6 +404,19 @@ export default function PhotographerSite({ previewData = null }) {
   const contactPhone = siteData.contactPhone || profile?.whatsappNumber || ''
 
   const currentCategoryPhotos = selectedCategory ? (categoryPhotos[selectedCategory] || []) : []
+  const hasPortfolio = portfolio.some((category) => category.photos?.some((photo) => photo?.key))
+  const hasPricing = pricing.some((eventType) => eventType.packages?.length > 0)
+  const hasAbout = Boolean(
+    bio || siteData.profilePhotoPath || siteData.aboutImagePath ||
+    siteData.yearsExp || siteData.sessionsCount || siteData.citiesCount
+  )
+  const visibleTabs = [
+    'Acasă',
+    ...(hasPortfolio ? ['Portofoliu'] : []),
+    ...(hasPricing ? ['Prețuri'] : []),
+    ...(hasAbout ? ['Despre'] : []),
+    'Contact',
+  ]
 
   return (
     <div className="ps-root">
@@ -312,13 +430,13 @@ export default function PhotographerSite({ previewData = null }) {
           }
         </div>
         <div className="ps-nav-tabs" role="tablist">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab}
               role="tab"
               aria-selected={activeTab === tab}
               className={`ps-nav-tab${activeTab === tab ? ' ps-nav-tab--active' : ''}`}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => changeTab(tab)}
             >
               {tab}
             </button>
@@ -342,10 +460,24 @@ export default function PhotographerSite({ previewData = null }) {
               )}
               <h1 className="ps-hero-title">{heroTitle}</h1>
               {tagline && <p className="ps-hero-tagline">{tagline}</p>}
+              <div className="ps-hero-actions">
+                {hasPortfolio && (
+                  <button className="ps-hero-button ps-hero-button--primary" onClick={() => changeTab('Portofoliu')}>
+                    Vezi portofoliul
+                  </button>
+                )}
+                <button className="ps-hero-button ps-hero-button--ghost" onClick={() => changeTab('Contact')}>
+                  Contact
+                </button>
+              </div>
             </div>
-            <div className="ps-hero-scroll-indicator">
+            <button
+              className="ps-hero-scroll-indicator"
+              onClick={() => changeTab(hasPortfolio ? 'Portofoliu' : 'Contact')}
+              aria-label={hasPortfolio ? 'Vezi portofoliul' : 'Vezi datele de contact'}
+            >
               <div className="ps-scroll-dot" />
-            </div>
+            </button>
           </div>
         )}
 
@@ -370,7 +502,7 @@ export default function PhotographerSite({ previewData = null }) {
                   ))}
                 </div>
 
-                {loadingPhotos ? (
+                {loadingPhotos && currentCategoryPhotos.length === 0 ? (
                   <div className="ps-photos-loading">Se încarcă...</div>
                 ) : currentCategoryPhotos.length === 0 ? (
                   <div className="ps-empty-state">
@@ -395,10 +527,16 @@ export default function PhotographerSite({ previewData = null }) {
                             })
                           }
                         >
-                          <img src={photo.url} alt="" loading="lazy" className="ps-masonry-img" />
+                          <img
+                            src={photo.url}
+                            alt={`${portfolio.find((category) => category.id === selectedCategory)?.name || 'Portofoliu'} — fotografia ${i + 1}`}
+                            loading="lazy"
+                            className="ps-masonry-img"
+                          />
                         </div>
                       ))}
                     </Masonry>
+                    {loadingPhotos && <div className="ps-photos-loading ps-photos-loading--more">Se încarcă mai multe fotografii...</div>}
                   </div>
                 )}
               </>
@@ -446,7 +584,7 @@ export default function PhotographerSite({ previewData = null }) {
                         )}
                         <button
                           className="ps-pricing-cta"
-                          onClick={() => setActiveTab('Contact')}
+                          onClick={() => changeTab('Contact')}
                         >
                           Rezervă
                         </button>
@@ -504,7 +642,7 @@ export default function PhotographerSite({ previewData = null }) {
 
                 <div className="ps-social-row">
                   {instagram && (
-                    <a href={normalizeUrl(instagram)} target="_blank" rel="noopener noreferrer" className="ps-social-link">
+                    <a href={normalizeSocialUrl(instagram, 'instagram')} target="_blank" rel="noopener noreferrer" className="ps-social-link">
                       Instagram
                     </a>
                   )}
@@ -549,7 +687,7 @@ export default function PhotographerSite({ previewData = null }) {
               <div className="ps-contact-channels">
                 {contactPhone && (
                   <a
-                    href={`https://wa.me/${contactPhone.replace(/\D/g, '')}`}
+                    href={`https://wa.me/${whatsappNumber(contactPhone)}`}
                     className="ps-channel-link"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -564,12 +702,12 @@ export default function PhotographerSite({ previewData = null }) {
                 )}
                 {instagram && (
                   <a
-                    href={normalizeUrl(instagram)}
+                    href={normalizeSocialUrl(instagram, 'instagram')}
                     className="ps-channel-link"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Instagram · {instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, '@')}
+                    Instagram · {instagramLabel(instagram)}
                   </a>
                 )}
               </div>
@@ -589,9 +727,9 @@ export default function PhotographerSite({ previewData = null }) {
             <a href={normalizeUrl(website)} target="_blank" rel="noreferrer">Website</a>
           )}
           {instagram && (
-            <a href={normalizeUrl(instagram)} target="_blank" rel="noreferrer">Instagram</a>
+            <a href={normalizeSocialUrl(instagram, 'instagram')} target="_blank" rel="noreferrer">Instagram</a>
           )}
-          <button className="ps-footer-btn" onClick={() => setActiveTab('Contact')}>
+          <button className="ps-footer-btn" onClick={() => changeTab('Contact')}>
             Contact
           </button>
         </div>

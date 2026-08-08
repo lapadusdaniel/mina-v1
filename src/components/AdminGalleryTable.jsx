@@ -6,11 +6,9 @@ import {
   Pin,
   Trash2,
   Link2,
-  Share2,
   Archive,
   ArchiveRestore,
   ImagePlus,
-  Users,
   Heart,
 } from 'lucide-react'
 import GallerySettingsModal from './GallerySettingsModal'
@@ -24,7 +22,6 @@ const { auth: authService, galleries: galleriesService, media: mediaService } = 
 
 const PINNED_STORAGE_KEY = 'mina-pinned-galleries'
 const LEGACY_PINNED_STORAGE_KEY = 'fotolio-pinned-galleries'
-const PLAN_LIMITS_GB = { Free: 15, 'Esențial': 100, Esential: 100, Starter: 100, Plus: 500, Pro: 1000, Studio: 2000, Unlimited: 2000 }
 const TRASH_AUTO_DELETE_DAYS = 30
 
 function readPinnedIdsFromStorage() {
@@ -58,6 +55,12 @@ function getDaysUntilAutoDelete(deletedAt) {
   return Math.max(0, TRASH_AUTO_DELETE_DAYS - daysSince)
 }
 
+function timestampToMillis(value) {
+  if (!value) return 0
+  const date = value?.toDate ? value.toDate() : new Date(value)
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime()
+}
+
 function computeShareTtlHours(dataExpirareRaw) {
   if (!dataExpirareRaw) return 24 * 30
   const expiresAt = new Date(dataExpirareRaw)
@@ -66,19 +69,6 @@ function computeShareTtlHours(dataExpirareRaw) {
   return Math.max(1, Math.min(24 * 365, hours))
 }
 
-const IconViews = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-)
-const IconDownloads = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-)
 const IconSearch = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="11" cy="11" r="8" />
@@ -128,17 +118,6 @@ function GalleryRow({
       navigator.clipboard.writeText(secureUrl)
       setCopyTooltip(true)
       setTimeout(() => setCopyTooltip(false), 1500)
-    }
-  }
-
-  const handleShare = async (e) => {
-    e.stopPropagation()
-    if (!galleryUrl) return
-    const secureUrl = await buildSecureShareUrl()
-    if (navigator.share) {
-      navigator.share({ url: secureUrl, title: galerie?.nume || 'Galerie' }).catch(() => {})
-    } else if (galleryUrl) {
-      window.open(secureUrl, '_blank')
     }
   }
 
@@ -220,21 +199,39 @@ function GalleryRow({
   }, [galerie.id, galerie.coverKey, galerie.storageBytes, shouldLoadCover, user.uid])
 
   const fileCount = galerie?.poze ?? 0
-  const metaText = `${fileCount} fișiere • ${formatBytes(totalSize)}`
+  const viewCount = Number(galerie?.vizualizari || 0)
+  const downloadCount = Number(galerie?.descarcari || 0)
+  const selectionClientsCount = Number(galerie?.selectionClientsCount ?? Object.keys(galerie?.selectii || {}).length ?? 0)
+  const selectionTotalCount = Number(galerie?.selectionTotalCount ?? galerie?.favorite?.length ?? 0)
+  const metaBits = [`${fileCount} fișiere`, formatBytes(totalSize)]
+  if (viewCount > 0) metaBits.push(`${viewCount} vizualizări`)
+  if (downloadCount > 0) metaBits.push(`${downloadCount} descărcări`)
+  const metaText = metaBits.join(' · ')
   const dataEvenimentFormatted = galerie?.dataEveniment ? formatDateRO(galerie.dataEveniment) : null
   const dataExpirareRaw = galerie?.dataExpirare ?? galerie?.expiresAt ?? galerie?.dataExpirarii
   const dataExpirareFormatted = dataExpirareRaw ? formatDateRO(dataExpirareRaw) : null
-  const isExpired = dataExpirareRaw ? new Date(dataExpirareRaw) < new Date() : false
+  const expiryMillis = timestampToMillis(dataExpirareRaw)
+  const isExpired = expiryMillis > 0 && expiryMillis < Date.now()
   const daysUntilAutoDelete = isTrashView ? getDaysUntilAutoDelete(galerie?.deletedAt) : null
 
-  const showArchiveBtn = !isTrashView && !isArchivedView && onArchive
+  const activityText = selectionTotalCount > 0
+    ? `${selectionClientsCount || 1} ${selectionClientsCount === 1 ? 'client' : 'clienți'} · ${selectionTotalCount} selectate`
+    : 'Nicio selecție încă'
+  const statusLabel = isExpired
+    ? 'Expirat'
+    : fileCount === 0
+      ? 'În pregătire'
+      : selectionTotalCount > 0
+        ? 'Selecții primite'
+        : 'Activ'
+
   const showArchiveInMenu = !isTrashView && !isArchivedView && onArchive
   const showUnarchiveInMenu = isArchivedView && onUnarchive
 
   return (
     <div
       ref={rowRef}
-      className={`gallery-row ${isTrashView ? 'gallery-row-trash' : ''}`}
+      className={`gallery-row ${isTrashView ? 'gallery-row-trash' : ''} ${isSelected ? 'is-selected' : ''}`}
       style={{
         position: 'relative',
         zIndex: isMenuOpen ? 200 : 1,
@@ -276,34 +273,16 @@ function GalleryRow({
           <p className="gallery-row-meta">{metaText}</p>
         </div>
       </div>
-      <div className="gallery-row-col gallery-row-col-stat" data-label="Vizualizări">
-        <div className="gallery-stat">
-          <IconViews />
-          <span>{galerie?.vizualizari ?? 0}</span>
-        </div>
-      </div>
-      <div className="gallery-row-col gallery-row-col-stat" data-label="Descărcări">
-        <div className="gallery-stat">
-          <IconDownloads />
-          <span>{galerie?.descarcari ?? 0}</span>
-        </div>
-      </div>
       <div className="gallery-row-col gallery-row-col-stat gallery-row-col-activitate" data-label="Activitate">
-        <div className="gallery-activity-stats">
-          <span className="gallery-activity-item" title="Clienți cu selecție">
-            <Users size={12} className="gallery-activity-icon" />
-            {Number(galerie?.selectionClientsCount ?? Object.keys(galerie?.selectii || {}).length ?? 0)}
-          </span>
-          <span className="gallery-activity-item" title="Total favorite">
-            <Heart size={12} className="gallery-activity-icon" />
-            {Number(galerie?.selectionTotalCount ?? galerie?.favorite?.length ?? 0)}
-          </span>
-        </div>
+        <span className={`gallery-activity-summary ${selectionTotalCount > 0 ? 'has-activity' : ''}`}>
+          <Heart size={13} className="gallery-activity-icon" />
+          {activityText}
+        </span>
       </div>
       <div className="gallery-row-col gallery-row-col-stat gallery-row-col-date" data-label="Data Eveniment">
         <span className="gallery-stat-label">{dataEvenimentFormatted ? `📅 ${dataEvenimentFormatted}` : '—'}</span>
       </div>
-      <div className="gallery-row-col gallery-row-col-stat gallery-row-col-date" data-label={isTrashView ? 'Ștergere' : 'Status'}>
+      <div className="gallery-row-col gallery-row-col-stat gallery-row-col-date gallery-row-col-status" data-label={isTrashView ? 'Ștergere' : 'Status'}>
         {isTrashView && daysUntilAutoDelete != null ? (
           <span className="gallery-stat-label gallery-trash-days" title="Zile rămase până la ștergere automată recomandată">
             {daysUntilAutoDelete > 0
@@ -312,8 +291,8 @@ function GalleryRow({
           </span>
         ) : (
           <>
-            <span className={`gallery-stat-status ${isExpired ? 'gallery-stat-status-expirat' : 'gallery-stat-status-activ'}`}>
-              {isExpired ? 'Expirat' : 'Activ'}
+            <span className={`gallery-stat-status ${isExpired ? 'gallery-stat-status-expirat' : fileCount === 0 ? 'gallery-stat-status-pregatire' : 'gallery-stat-status-activ'}`}>
+              {statusLabel}
             </span>
             {dataExpirareFormatted && (
               <span className="gallery-stat-label" style={{ display: 'block', fontSize: '11px', color: '#86868b', marginTop: 2 }}>
@@ -330,19 +309,6 @@ function GalleryRow({
               <Link2 size={16} />
               {copyTooltip && <span className="gallery-row-copy-tooltip">Copiat!</span>}
             </button>
-            <button type="button" className="gallery-row-quick-btn" onClick={handleShare} title="Share">
-              <Share2 size={16} />
-            </button>
-            {showArchiveBtn && (
-              <button
-                type="button"
-                className="gallery-row-quick-btn"
-                onClick={(e) => { e.stopPropagation(); onArchive(galerie?.id); }}
-                title="Arhivează"
-              >
-                <Archive size={16} />
-              </button>
-            )}
           </div>
         )}
         {isTrashView && (
@@ -442,8 +408,6 @@ export default function AdminGalleryTable({
   galerii,
   loading,
   activeTab,
-  userPlan: userPlanProp,
-  storageLimit: storageLimitProp,
   onDeschideGalerie,
   onGalleryCreated,
   onMoveToTrash,
@@ -456,6 +420,7 @@ export default function AdminGalleryTable({
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('Toate categoriile')
   const [statusFilter, setStatusFilter] = useState('active')
+  const [sortOrder, setSortOrder] = useState('recent')
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [createModalFiles, setCreateModalFiles] = useState([])
   const [selectedGaleriiIds, setSelectedGaleriiIds] = useState([])
@@ -464,7 +429,6 @@ export default function AdminGalleryTable({
   const [pinnedGaleriiIds, setPinnedGaleriiIds] = useState(() => readPinnedIdsFromStorage())
   const [settingsGalerie, setSettingsGalerie] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [storageDetailsOpen, setStorageDetailsOpen] = useState(false)
 
   useEffect(() => {
     // One-time migration from old key name to the Mina key name.
@@ -484,7 +448,7 @@ export default function AdminGalleryTable({
 
   const handleArchive = async (id) => {
     try {
-      await galleriesService.updateGallery(id, { status: 'archived' })
+      await galleriesService.setGalleryStatus(id, 'archived')
       onGalleryArchived?.(id)
     } catch (error) {
       console.error('Error:', error)
@@ -494,7 +458,7 @@ export default function AdminGalleryTable({
 
   const handleUnarchive = async (id) => {
     try {
-      await galleriesService.updateGallery(id, { status: 'active' })
+      await galleriesService.setGalleryStatus(id, 'active')
       onGalleryUnarchived?.(id)
     } catch (error) {
       console.error('Error:', error)
@@ -555,7 +519,6 @@ export default function AdminGalleryTable({
 
   const filteredGalerii = useMemo(() => {
     let list = galerii
-    console.log('FILTER DEBUG', { activeTab, statusFilter, galerii: list.map(g => ({ id: g.id, status: g.status })) })
     if (activeTab === 'trash') {
       list = list.filter(g => g?.status === 'trash')
     } else if (activeTab === 'galerii') {
@@ -574,17 +537,19 @@ export default function AdminGalleryTable({
     if (activeTab === 'galerii' && statusFilter === 'active' && categoryFilter && categoryFilter !== 'Toate categoriile') {
       list = list.filter(g => g?.categoria === categoryFilter)
     }
-    return list
-  }, [galerii, searchTerm, activeTab, categoryFilter, statusFilter])
-
-  useEffect(() => {
-    console.log('[AdminGalleryTable] openMenuId changed', {
-      openMenuId,
-      activeTab,
-      galeriiCount: galerii.length,
-      filteredCount: filteredGalerii.length,
+    const sorted = [...list]
+    sorted.sort((a, b) => {
+      if (sortOrder === 'name') return String(a?.nume || '').localeCompare(String(b?.nume || ''), 'ro')
+      if (sortOrder === 'event') return timestampToMillis(b?.dataEveniment) - timestampToMillis(a?.dataEveniment)
+      if (sortOrder === 'expiry') {
+        const aExpiry = timestampToMillis(a?.dataExpirare ?? a?.expiresAt) || Number.MAX_SAFE_INTEGER
+        const bExpiry = timestampToMillis(b?.dataExpirare ?? b?.expiresAt) || Number.MAX_SAFE_INTEGER
+        return aExpiry - bExpiry
+      }
+      return timestampToMillis(b?.updatedAt ?? b?.createdAt) - timestampToMillis(a?.updatedAt ?? a?.createdAt)
     })
-  }, [openMenuId, activeTab, galerii.length, filteredGalerii.length])
+    return sorted
+  }, [galerii, searchTerm, activeTab, categoryFilter, statusFilter, sortOrder])
 
   const { pinnedGalerii, restGalerii } = useMemo(() => {
     if (activeTab !== 'galerii') return { pinnedGalerii: [], restGalerii: filteredGalerii }
@@ -638,36 +603,7 @@ export default function AdminGalleryTable({
     }
   }, [activeTab])
 
-  const statsGalerii = galerii.filter((g) => g?.status !== 'trash' && g?.status !== 'archived')
   const trashGalerii = galerii.filter((g) => g?.status === 'trash')
-  const totalPoze = statsGalerii.reduce((sum, g) => sum + (g?.poze || 0), 0)
-  const storageBreakdown = useMemo(() => {
-    const bytesByStatus = galerii.reduce((acc, gallery) => {
-      const bytes = Math.max(0, Number(gallery?.storageBytes || 0))
-      const status = String(gallery?.status || '').trim().toLowerCase()
-
-      if (status === 'trash') acc.trash += bytes
-      else if (status === 'archived') acc.archived += bytes
-      else acc.active += bytes
-
-      return acc
-    }, { active: 0, archived: 0, trash: 0 })
-
-    return {
-      activeBytes: bytesByStatus.active,
-      archivedBytes: bytesByStatus.archived,
-      trashBytes: bytesByStatus.trash,
-      totalBytes: bytesByStatus.active + bytesByStatus.archived + bytesByStatus.trash,
-      activeGb: Number((bytesByStatus.active / (1024 * 1024 * 1024)).toFixed(2)),
-      archivedGb: Number((bytesByStatus.archived / (1024 * 1024 * 1024)).toFixed(2)),
-      trashGb: Number((bytesByStatus.trash / (1024 * 1024 * 1024)).toFixed(2)),
-    }
-  }, [galerii])
-  const totalStorageBytes = storageBreakdown.totalBytes
-  const planName = userPlanProp ?? user?.plan ?? 'Free'
-  const planLimitGB = storageLimitProp ?? PLAN_LIMITS_GB[planName] ?? 30
-  const storageUsedGB = Number((totalStorageBytes / (1024 * 1024 * 1024)).toFixed(2))
-  const storagePercent = Math.min(100, (storageUsedGB / planLimitGB) * 100)
 
   const isArchivedView = activeTab === 'galerii' && statusFilter === 'archived'
   const showStatusToggle = activeTab === 'galerii'
@@ -714,6 +650,19 @@ export default function AdminGalleryTable({
               {CATEGORII_FILTRU.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
+            </select>
+          )}
+          {activeTab === 'galerii' && (
+            <select
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+              className="dashboard-category-select dashboard-sort-select"
+              aria-label="Sortează galeriile"
+            >
+              <option value="recent">Activitate recentă</option>
+              <option value="event">Data evenimentului</option>
+              <option value="expiry">Expiră cel mai curând</option>
+              <option value="name">Nume A–Z</option>
             </select>
           )}
         </div>

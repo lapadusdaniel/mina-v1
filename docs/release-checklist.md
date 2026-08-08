@@ -78,4 +78,4 @@ npm run qa:worker
 ## 10) Dupa deploy
 1. Refa rapid `qa:public` pe URL-ul live.
 2. Verifica manual cel putin o galerie reala cap-coada.
-3. Verifica un delete de galerie: nu raman fisiere orfane in R2.
+3. Verifică un delete de galerie: nu rămân fișiere orfane în Backblaze B2.

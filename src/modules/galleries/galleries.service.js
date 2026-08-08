@@ -26,6 +26,46 @@ import { createFoldersService } from './folders.service'
 
 const DEFAULT_SELECTION_LIST_ID = 'default'
 const DEFAULT_SELECTION_LIST_NAME = 'Favorite'
+const SELECTION_ACCESS_TOKEN_PREFIX = 'mina_selection_access_v1'
+const selectionAccessTokenCache = new Map()
+
+function selectionAccessTokenKey(galleryId, clientId) {
+  return `${SELECTION_ACCESS_TOKEN_PREFIX}:${galleryId}:${clientId}`
+}
+
+function createSelectionAccessToken() {
+  if (globalThis.crypto?.randomUUID) {
+    return `${globalThis.crypto.randomUUID()}${globalThis.crypto.randomUUID()}`
+  }
+
+  const bytes = new Uint8Array(32)
+  globalThis.crypto?.getRandomValues?.(bytes)
+  const token = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+  return token || `${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`.padEnd(40, '0')
+}
+
+function getOrCreateSelectionAccessToken(galleryId, clientId) {
+  const storageKey = selectionAccessTokenKey(galleryId, clientId)
+  const cached = selectionAccessTokenCache.get(storageKey)
+  if (cached) return cached
+
+  try {
+    const stored = window.localStorage.getItem(storageKey)
+    if (stored && stored.length >= 32) {
+      selectionAccessTokenCache.set(storageKey, stored)
+      return stored
+    }
+  } catch (_) {
+  }
+
+  const token = createSelectionAccessToken()
+  selectionAccessTokenCache.set(storageKey, token)
+  try {
+    window.localStorage.setItem(storageKey, token)
+  } catch (_) {
+  }
+  return token
+}
 
 function mapDoc(snap) {
   return { id: snap.id, ...snap.data() }
@@ -245,25 +285,10 @@ export function createGalleriesModule({ db }) {
     },
 
     async createGallery(data) {
-      const normalizedSlug = String(data?.slug || '').trim().toLowerCase()
       const sanitizedData = stripLegacyGalleryPasswordHash(data)
-      const payload = normalizedSlug ? { ...sanitizedData, slug: normalizedSlug } : { ...sanitizedData }
-
-      const docRef = await addDoc(collection(db, 'galerii'), payload)
-
-      if (normalizedSlug) {
-        await setDoc(
-          doc(db, 'slugs', normalizedSlug),
-          {
-            galleryId: docRef.id,
-            uid: String(payload?.userId || ''),
-            updatedAt: new Date(),
-          },
-          { merge: true }
-        )
-      }
-
-      return { id: docRef.id, slug: normalizedSlug }
+      const callable = httpsCallable(functions, 'createGallery')
+      const response = await callable({ gallery: sanitizedData })
+      return response?.data || {}
     },
 
     async updateGallery(galleryId, data) {
@@ -290,11 +315,18 @@ export function createGalleriesModule({ db }) {
     },
 
     async moveToTrash(galleryId, deletedAt = new Date()) {
-      await updateDoc(doc(db, 'galerii', galleryId), { status: 'trash', deletedAt })
+      void deletedAt
+      return this.setGalleryStatus(galleryId, 'trash')
     },
 
     async restoreGallery(galleryId) {
-      await updateDoc(doc(db, 'galerii', galleryId), { status: 'active' })
+      return this.setGalleryStatus(galleryId, 'active')
+    },
+
+    async setGalleryStatus(galleryId, status) {
+      const callable = httpsCallable(functions, 'setGalleryStatus')
+      const response = await callable({ galleryId, status })
+      return response?.data || { ok: true, status }
     },
 
     async setSelectionTitle(galleryId, title) {
@@ -333,6 +365,9 @@ export function createGalleriesModule({ db }) {
           keys,
           count: Number(data?.count || keys.length),
           selectionTitle: data?.selectionTitle || '',
+          status: String(data?.status || 'draft') === 'finalized' ? 'finalized' : 'draft',
+          finalizedAt: data?.finalizedAt || null,
+          reopenedAt: data?.reopenedAt || null,
           updatedAt: data?.updatedAt || null,
           source: 'new',
         }
@@ -360,6 +395,9 @@ export function createGalleriesModule({ db }) {
         keys: legacyKeys,
         count: legacyKeys.length,
         selectionTitle: gallerySnap.data()?.numeSelectieClient || '',
+        status: 'draft',
+        finalizedAt: null,
+        reopenedAt: null,
         updatedAt: null,
         source: 'legacy',
       }
@@ -386,6 +424,9 @@ export function createGalleriesModule({ db }) {
             keys,
             count: Number(data?.count || keys.length),
             selectionTitle: data?.selectionTitle || '',
+            status: String(data?.status || 'draft') === 'finalized' ? 'finalized' : 'draft',
+            finalizedAt: data?.finalizedAt || null,
+            reopenedAt: data?.reopenedAt || null,
             updatedAt: data?.updatedAt || null,
             source: 'new',
           }
@@ -426,6 +467,9 @@ export function createGalleriesModule({ db }) {
             keys: normalizedKeys,
             count: normalizedKeys.length,
             selectionTitle: galleryData?.numeSelectieClient || '',
+            status: 'draft',
+            finalizedAt: null,
+            reopenedAt: null,
             updatedAt: null,
             source: 'legacy',
           }
@@ -470,6 +514,7 @@ export function createGalleriesModule({ db }) {
       const normalizedLists = sanitizeSelectionLists(lists)
       const cleanKeys = aggregateSelectionKeysFromLists(normalizedLists)
       const cleanMeta = sanitizeClientMeta(clientMeta)
+      const clientAccessToken = getOrCreateSelectionAccessToken(galleryId, clientId)
       await setDoc(
         doc(db, 'gallerySelections', galleryId, 'clients', clientId),
         {
@@ -480,6 +525,7 @@ export function createGalleriesModule({ db }) {
           keys: cleanKeys,
           count: cleanKeys.length,
           selectionTitle: selectionTitle || '',
+          clientAccessToken,
           updatedAt: new Date(),
         },
         { merge: true }
@@ -498,6 +544,41 @@ export function createGalleriesModule({ db }) {
         lists: normalizedLists,
         keys: cleanKeys,
       }
+    },
+
+    async getClientSelectionAccess(galleryId, clientName) {
+      const normalizedName = normalizeClientName(clientName)
+      const clientId = toClientSelectionId(normalizedName)
+      if (!galleryId || !clientId) return null
+
+      const callable = httpsCallable(functions, 'getGallerySelectionAccess')
+      const response = await callable({
+        galleryId,
+        clientName: normalizedName,
+        accessToken: getOrCreateSelectionAccessToken(galleryId, clientId),
+      })
+      return response?.data || null
+    },
+
+    async finalizeClientSelection(galleryId, clientName) {
+      const normalizedName = normalizeClientName(clientName)
+      const clientId = toClientSelectionId(normalizedName)
+      if (!galleryId || !clientId) throw new Error('Selecția este invalidă.')
+
+      const callable = httpsCallable(functions, 'finalizeGallerySelection')
+      const response = await callable({
+        galleryId,
+        clientName: normalizedName,
+        accessToken: getOrCreateSelectionAccessToken(galleryId, clientId),
+      })
+      return response?.data || null
+    },
+
+    async reopenClientSelection(galleryId, clientId) {
+      if (!galleryId || !clientId) throw new Error('Selecția este invalidă.')
+      const callable = httpsCallable(functions, 'reopenGallerySelection')
+      const response = await callable({ galleryId, clientId })
+      return response?.data || null
     },
 
     async migrateLegacySelections(galleryId, { selectionTitle = '' } = {}) {

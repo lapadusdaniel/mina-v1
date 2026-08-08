@@ -44,6 +44,18 @@ function createMemoryBucket(seed = {}) {
   }
 }
 
+function createWorkerEnv(overrides = {}) {
+  return {
+    FIREBASE_API_KEY: 'fake-key',
+    FIREBASE_PROJECT_ID: 'fake-project',
+    B2_ENDPOINT: 's3.test.example',
+    B2_BUCKET_NAME: 'fake-bucket',
+    B2_KEY_ID: 'fake-key-id',
+    B2_APPLICATION_KEY: 'fake-application-key',
+    ...overrides,
+  }
+}
+
 function toFirestoreValue(value) {
   if (value === null || value === undefined) return { nullValue: null }
   if (typeof value === 'string') return { stringValue: value }
@@ -79,14 +91,89 @@ function toFirestoreDoc(name, data) {
 
 function createFirebaseFetchStub({
   tokenToUid = {},
+  tokenEmailVerified = {},
   galleryOwnerById = {},
+  galleryDataById = {},
   adminOverridesByUid = {},
   usersByUid = {},
   subscriptionsByUid = {},
+  b2Store = new Map(),
 } = {}) {
   return async function fetchStub(url, options = {}) {
     const u = String(url)
     const method = String(options.method || 'GET').toUpperCase()
+
+    if (u.includes('cloudfunctions.net/updateStorageUsed') && method === 'POST') {
+      const requestHeaders = new Headers(options.headers || {})
+      const forwardedToken = requestHeaders.get('X-Firebase-Auth') || ''
+      const authHeader = requestHeaders.get('Authorization') || ''
+      const idToken = forwardedToken || (authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '')
+      const payload = JSON.parse(options.body || '{}')
+      if (!idToken || tokenToUid[idToken] !== payload.uid) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (u.startsWith('https://fake-bucket.s3.test.example')) {
+      const parsedUrl = new URL(u)
+      const isList = parsedUrl.searchParams.get('list-type') === '2'
+
+      if (method === 'GET' && isList) {
+        const prefix = parsedUrl.searchParams.get('prefix') || ''
+        const contents = [...b2Store.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, value]) => {
+            const size = value.body?.byteLength || value.body?.length || 0
+            return `<Contents><Key>${key}</Key><LastModified>2026-01-01T00:00:00.000Z</LastModified><Size>${size}</Size></Contents>`
+          })
+          .join('')
+        return new Response(
+          `<ListBucketResult>${contents}<IsTruncated>false</IsTruncated></ListBucketResult>`,
+          { status: 200, headers: { 'Content-Type': 'application/xml' } }
+        )
+      }
+
+      const key = decodeURIComponent(parsedUrl.pathname.slice(1))
+      const existing = b2Store.get(key)
+
+      if (method === 'GET') {
+        if (!existing) return new Response('Not found', { status: 404 })
+        return new Response(existing.body, {
+          status: 200,
+          headers: { 'Content-Type': existing.contentType || 'application/octet-stream' },
+        })
+      }
+      if (method === 'HEAD') {
+        if (!existing) return new Response(null, { status: 404 })
+        const size = existing.body?.byteLength || existing.body?.length || 0
+        return new Response(null, {
+          status: 200,
+          headers: {
+            'Content-Length': String(size),
+            'Content-Type': existing.contentType || 'application/octet-stream',
+          },
+        })
+      }
+      if (method === 'PUT') {
+        const body = new Uint8Array(await new Response(options.body).arrayBuffer())
+        b2Store.set(key, {
+          body,
+          contentType: options.headers?.['content-type'] || options.headers?.get?.('content-type') || 'application/octet-stream',
+        })
+        return new Response('', { status: 200 })
+      }
+      if (method === 'DELETE') {
+        b2Store.delete(key)
+        return new Response('', { status: 204 })
+      }
+    }
 
     if (u.includes('identitytoolkit.googleapis.com') && u.includes('accounts:lookup')) {
       const parsed = JSON.parse(options.body || '{}')
@@ -94,7 +181,12 @@ function createFirebaseFetchStub({
       if (!uid) {
         return new Response(JSON.stringify({ users: [] }), { status: 400, headers: { 'Content-Type': 'application/json' } })
       }
-      return new Response(JSON.stringify({ users: [{ localId: uid }] }), {
+      return new Response(JSON.stringify({
+        users: [{
+          localId: uid,
+          emailVerified: tokenEmailVerified[parsed.idToken] !== false,
+        }],
+      }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -154,12 +246,22 @@ function createFirebaseFetchStub({
     if (u.includes('firestore.googleapis.com') && u.includes('/documents/galerii/')) {
       const galleryId = decodeURIComponent((u.match(/\/documents\/galerii\/([^/?]+)/) || [])[1] || '')
       const ownerUid = galleryOwnerById[galleryId]
-      if (!ownerUid) {
+      const galleryData = galleryDataById[galleryId]
+      const authHeader = new Headers(options.headers || {}).get('Authorization') || ''
+      const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : ''
+      const requesterUid = tokenToUid[idToken]
+      if (ownerUid && requesterUid && requesterUid !== ownerUid) {
+        return new Response('Forbidden', { status: 403 })
+      }
+      if (!ownerUid && !galleryData) {
         return new Response('Not found', { status: 404 })
       }
       return new Response(
         JSON.stringify(
-          toFirestoreDoc(`projects/fake-project/databases/(default)/documents/galerii/${galleryId}`, { userId: ownerUid })
+          toFirestoreDoc(`projects/fake-project/databases/(default)/documents/galerii/${galleryId}`, {
+            ...(ownerUid ? { userId: ownerUid } : {}),
+            ...(galleryData || {}),
+          })
         ),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
@@ -175,20 +277,27 @@ async function sha256Hex(value) {
 }
 
 test('GET list allows public gallery originals prefix', async () => {
-  const env = {
-    R2_BUCKET: createMemoryBucket({
-      'galerii/g1/originals/a.jpg': { body: new Uint8Array([1, 2, 3]), contentType: 'image/jpeg' },
-    }),
+  const originalFetch = globalThis.fetch
+  const galleryId = 'g-public'
+  const key = `galerii/${galleryId}/originals/a.jpg`
+  const b2Store = new Map([[key, { body: new Uint8Array([1, 2, 3]), contentType: 'image/jpeg' }]])
+  globalThis.fetch = createFirebaseFetchStub({
+    galleryDataById: { [galleryId]: { statusActiv: true, publicShareRequired: false } },
+    b2Store,
+  })
+
+  try {
+    const req = new Request(`https://worker.example/?prefix=${encodeURIComponent(`galerii/${galleryId}/originals/`)}`)
+    const res = await worker.fetch(req, createWorkerEnv())
+
+    assert.equal(res.status, 200)
+    const json = await res.json()
+    assert.equal(Array.isArray(json), true)
+    assert.equal(json.length, 1)
+    assert.equal(json[0].key, key)
+  } finally {
+    globalThis.fetch = originalFetch
   }
-
-  const req = new Request('https://worker.example/?prefix=galerii%2Fg1%2Foriginals%2F')
-  const res = await worker.fetch(req, env)
-
-  assert.equal(res.status, 200)
-  const json = await res.json()
-  assert.equal(Array.isArray(json), true)
-  assert.equal(json.length, 1)
-  assert.equal(json[0].key, 'galerii/g1/originals/a.jpg')
 })
 
 test('GET is blocked with 429 when READ_RATE_LIMITER rejects the request', async () => {
@@ -253,11 +362,7 @@ test('PUT with non-owner token is rejected with 403', async () => {
   })
 
   try {
-    const env = {
-      FIREBASE_API_KEY: 'fake-key',
-      FIREBASE_PROJECT_ID: 'fake-project',
-      R2_BUCKET: createMemoryBucket(),
-    }
+    const env = createWorkerEnv()
 
     const req = new Request('https://worker.example/galerii/g1/originals/new.jpg', {
       method: 'PUT',
@@ -275,20 +380,46 @@ test('PUT with non-owner token is rejected with 403', async () => {
   }
 })
 
-test('PUT with owner token succeeds and writes object', async () => {
+test('PUT with unverified email is rejected with 403 before upload', async () => {
   const originalFetch = globalThis.fetch
+  const b2Store = new Map()
   globalThis.fetch = createFirebaseFetchStub({
-    tokenToUid: { ownerToken: 'owner-uid' },
+    tokenToUid: { unverifiedToken: 'owner-uid' },
+    tokenEmailVerified: { unverifiedToken: false },
     galleryOwnerById: { g1: 'owner-uid' },
+    b2Store,
   })
 
   try {
-    const bucket = createMemoryBucket()
-    const env = {
-      FIREBASE_API_KEY: 'fake-key',
-      FIREBASE_PROJECT_ID: 'fake-project',
-      R2_BUCKET: bucket,
-    }
+    const req = new Request('https://worker.example/galerii/g1/originals/new.jpg', {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer unverifiedToken',
+        'Content-Type': 'image/jpeg',
+      },
+      body: new Uint8Array([1, 2, 3]),
+    })
+
+    const res = await worker.fetch(req, createWorkerEnv())
+    assert.equal(res.status, 403)
+    assert.match(await res.text(), /Confirmă adresa de email/)
+    assert.equal(b2Store.size, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('PUT with owner token succeeds and writes object', async () => {
+  const originalFetch = globalThis.fetch
+  const b2Store = new Map()
+  globalThis.fetch = createFirebaseFetchStub({
+    tokenToUid: { ownerToken: 'owner-uid' },
+    galleryOwnerById: { g1: 'owner-uid' },
+    b2Store,
+  })
+
+  try {
+    const env = createWorkerEnv()
 
     const req = new Request('https://worker.example/galerii/g1/originals/new.jpg', {
       method: 'PUT',
@@ -301,7 +432,7 @@ test('PUT with owner token succeeds and writes object', async () => {
 
     const res = await worker.fetch(req, env)
     assert.equal(res.status, 200)
-    assert.equal(bucket._store.has('galerii/g1/originals/new.jpg'), true)
+    assert.equal(b2Store.has('galerii/g1/originals/new.jpg'), true)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -311,24 +442,20 @@ test('PUT is rejected with 403 when storage quota is exceeded', async () => {
   const originalFetch = globalThis.fetch
   const quotaUid = 'owner-uid-quota'
   const quotaGalleryId = 'g-quota'
+  const b2Store = new Map()
   globalThis.fetch = createFirebaseFetchStub({
     tokenToUid: { ownerTokenQuota: quotaUid },
     galleryOwnerById: { [quotaGalleryId]: quotaUid },
     usersByUid: {
       [quotaUid]: { plan: 'Free' },
     },
+    b2Store,
   })
 
   try {
-    const bucket = createMemoryBucket({
-      [`galerii/${quotaGalleryId}/originals/already-there.jpg`]: { body: new Uint8Array([1, 2, 3, 4]), contentType: 'image/jpeg' },
-    })
-    const env = {
-      FIREBASE_API_KEY: 'fake-key',
-      FIREBASE_PROJECT_ID: 'fake-project',
+    const env = createWorkerEnv({
       STORAGE_LIMIT_FREE_GB: '0.000000001',
-      R2_BUCKET: bucket,
-    }
+    })
 
     const req = new Request(`https://worker.example/galerii/${quotaGalleryId}/originals/new.jpg`, {
       method: 'PUT',
@@ -342,7 +469,7 @@ test('PUT is rejected with 403 when storage quota is exceeded', async () => {
     const res = await worker.fetch(req, env)
     assert.equal(res.status, 403)
     assert.equal(await res.text(), 'Quota Exceeded')
-    assert.equal(bucket._store.has(`galerii/${quotaGalleryId}/originals/new.jpg`), false)
+    assert.equal(b2Store.has(`galerii/${quotaGalleryId}/originals/new.jpg`), false)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -350,42 +477,34 @@ test('PUT is rejected with 403 when storage quota is exceeded', async () => {
 
 test('GET list enforces share token when gallery is protected', async () => {
   const originalFetch = globalThis.fetch
+  const galleryId = 'g-protected'
   const token = 'public-token-123'
   const tokenHash = await sha256Hex(token)
-
-  globalThis.fetch = async (url) => {
-    const u = String(url)
-    if (u.includes('firestore.googleapis.com') && u.includes('/documents/galerii/')) {
-      return new Response(
-        JSON.stringify({
-          fields: {
-            publicShareRequired: { booleanValue: true },
-            publicShareTokenHash: { stringValue: tokenHash },
-          },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-    return new Response('Unhandled URL', { status: 500 })
-  }
+  const key = `galerii/${galleryId}/originals/a.jpg`
+  const b2Store = new Map([[key, { body: new Uint8Array([1, 2, 3]), contentType: 'image/jpeg' }]])
+  globalThis.fetch = createFirebaseFetchStub({
+    galleryDataById: {
+      [galleryId]: {
+        statusActiv: true,
+        publicShareRequired: true,
+        publicShareTokenHash: tokenHash,
+      },
+    },
+    b2Store,
+  })
 
   try {
-    const env = {
-      FIREBASE_API_KEY: 'fake-key',
-      FIREBASE_PROJECT_ID: 'fake-project',
-      R2_BUCKET: createMemoryBucket({
-        'galerii/g1/originals/a.jpg': { body: new Uint8Array([1, 2, 3]), contentType: 'image/jpeg' },
-      }),
-    }
+    const env = createWorkerEnv()
+    const prefix = `galerii/${galleryId}/originals/`
 
     const withoutToken = await worker.fetch(
-      new Request('https://worker.example/?prefix=galerii%2Fg1%2Foriginals%2F'),
+      new Request(`https://worker.example/?prefix=${encodeURIComponent(prefix)}`),
       env
     )
     assert.equal(withoutToken.status, 403)
 
     const withToken = await worker.fetch(
-      new Request(`https://worker.example/?prefix=galerii%2Fg1%2Foriginals%2F&st=${encodeURIComponent(token)}`),
+      new Request(`https://worker.example/?prefix=${encodeURIComponent(prefix)}&st=${encodeURIComponent(token)}`),
       env
     )
     assert.equal(withToken.status, 200)
@@ -429,11 +548,7 @@ test('POST /share-token creates token for owner', async () => {
   }
 
   try {
-    const env = {
-      FIREBASE_API_KEY: 'fake-key',
-      FIREBASE_PROJECT_ID: 'fake-project',
-      R2_BUCKET: createMemoryBucket(),
-    }
+    const env = createWorkerEnv()
 
     const req = new Request('https://worker.example/share-token?galleryId=g1&ttlHours=12', {
       method: 'POST',

@@ -16,15 +16,14 @@
  *   DRY_RUN=true node scripts/migrate-gallery-passwords.js
  */
 
-'use strict'
+import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
-const admin = require('firebase-admin')
-
-if (!admin.apps.length) {
-  admin.initializeApp()
+if (!getApps().length) {
+  initializeApp({ credential: applicationDefault() })
 }
 
-const db = admin.firestore()
+const db = getFirestore()
 const DRY_RUN = process.env.DRY_RUN === 'true'
 
 async function main() {
@@ -57,7 +56,7 @@ async function main() {
         const secretRef = db.collection('gallerySecrets').doc(galleryId)
         batch.set(secretRef, {
           passwordHash: passwordHash.toLowerCase().trim(),
-          migratedAt: admin.firestore.FieldValue.serverTimestamp(),
+          migratedAt: FieldValue.serverTimestamp(),
           galleryId,
         }, { merge: true })
 
@@ -65,7 +64,7 @@ async function main() {
         // Use FieldValue.delete() via a plain update on the nested field.
         const galleryRef = db.collection('galerii').doc(galleryId)
         batch.update(galleryRef, {
-          'settings.privacy.passwordHash': admin.firestore.FieldValue.delete(),
+          'settings.privacy.passwordHash': FieldValue.delete(),
         })
 
         await batch.commit()

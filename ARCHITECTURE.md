@@ -44,11 +44,19 @@
 - GALLERY_VERIFY_SECRET — secret HMAC pentru tokenuri de deblocare galerie protejată cu parolă
 
 ## Planuri Stripe Live
-- Free: 0 lei, 15GB
-- Esențial: 29lei/lună, 100GB — price_1TAzSw1ax2jGrLZHiihltxme
-- Plus: 49lei/lună, 500GB — price_1TAzSx1ax2jGrLZH9zPBW4PW
-- Pro: 79lei/lună, 1TB — price_1T6a4F1ax2jGrLZH92vUsGzE
-- Studio: 129lei/lună, 2TB — price_1T6a501ax2jGrLZHgLBbkzT4
+- Free: 0 lei, 15 GB, maximum 3 galerii active
+- Esențial: 100 GB — Fondator 29/289 lei; Standard 39/390 lei
+- Plus: 500 GB — Fondator 49/489 lei; Standard 69/690 lei
+- Pro: 1 TB — Fondator 79/789 lei; Standard 99/990 lei
+- Studio: 2 TB — Fondator 129/1.289 lei; Standard 149/1.490 lei
+- Oferta Fondator este disponibilă pentru prima plată confirmată până la 30 septembrie 2026, ora 23:59 România; tariful rămâne activ cât timp abonamentul nu este întrerupt
+- Checkout-ul selectează Price ID-ul pe server după `planId` și dată; ID-urile istorice rămân acceptate numai pentru rezolvarea entitlement-ului
+- Customer Portal are configurații separate Fondator și Standard, astfel încât schimbarea planului nu pierde eligibilitatea și nu creează un abonament paralel
+
+## Source Of Truth abonament UI
+- Pentru UI-ul de abonament/storage (`Dashboard`, `SubscriptionSection`, `Settings`), planul curent se rezolvă în aceeași ordine: `adminOverrides/{uid}.plan` → abonamente active din `customers/{uid}/subscriptions/*` → `Free`
+- `users/{uid}.plan` și `users/{uid}.subscriptionStatus` rămân metadata legacy/denormalizate și nu mai sunt sursă pentru limita de storage afișată
+- `users/{uid}.addonActive` rămâne sursa pentru bonusul de +500 GB pe Studio add-on
 
 ## Securitate
 

@@ -1,4 +1,6 @@
-import { addDoc, collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../../firebase'
 
 function firstOrNull(snapshot) {
   if (!snapshot || snapshot.empty) return null
@@ -49,7 +51,9 @@ export function createSitesModule({ db }) {
 
     async saveSiteByOwnerUid(uid, data, { merge = true } = {}) {
       if (!uid) throw new Error('saveSiteByOwnerUid: uid este obligatoriu')
-      await setDoc(doc(db, 'photographerSites', uid), data, { merge })
+      const callable = httpsCallable(functions, 'savePhotographerSite')
+      const response = await callable({ site: data, merge })
+      return response?.data || { ok: true }
     },
 
     async getProfile(uid) {
@@ -95,15 +99,17 @@ export function createSitesModule({ db }) {
       return snaps.filter((s) => s.exists()).map((s) => ({ id: s.id, ...s.data() }))
     },
 
-    async submitContactMessage({ name, email, phone, message, photographerUid }) {
-      return addDoc(collection(db, 'contactMessages'), {
+    async submitContactMessage({ name, email, phone, message, photographerUid, websiteConfirm }) {
+      const callable = httpsCallable(functions, 'submitContactMessage')
+      const response = await callable({
         name: name || '',
         email: email || '',
         phone: phone || '',
         message: message || '',
         photographerUid: photographerUid || null,
-        createdAt: new Date(),
+        websiteConfirm: websiteConfirm || '',
       })
+      return response?.data || { ok: true }
     },
   }
 }

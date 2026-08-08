@@ -69,6 +69,10 @@ service cloud.firestore {
           'keys',
           'count',
           'selectionTitle',
+          'clientAccessToken',
+          'status',
+          'finalizedAt',
+          'reopenedAt',
           'updatedAt',
         ])
         && request.resource.data.clientId == clientId
@@ -122,68 +126,57 @@ service cloud.firestore {
           !('selectionTitle' in request.resource.data)
           || request.resource.data.selectionTitle is string
         )
+        && (
+          !('clientAccessToken' in request.resource.data)
+          || (
+            request.resource.data.clientAccessToken is string
+            && request.resource.data.clientAccessToken.size() >= 32
+            && request.resource.data.clientAccessToken.size() <= 200
+          )
+        )
+        && (
+          !('status' in request.resource.data)
+          || request.resource.data.status in ['draft', 'finalized']
+        )
+        && (
+          !('finalizedAt' in request.resource.data)
+          || request.resource.data.finalizedAt is timestamp
+        )
+        && (
+          !('reopenedAt' in request.resource.data)
+          || request.resource.data.reopenedAt is timestamp
+        )
         && request.resource.data.updatedAt is timestamp;
     }
 
-    function validContactCreate() {
-      return request.resource.data.keys().hasOnly([
-          'name',
-          'nume',
-          'email',
-          'phone',
-          'message',
-          'mesaj',
-          'photographerUid',
-          'createdAt',
-          'read',
-        ])
-        && (
+    function validPublicSelectionCreate() {
+      return ('clientAccessToken' in request.resource.data)
+        && (!('status' in request.resource.data) || request.resource.data.status == 'draft')
+        && !('finalizedAt' in request.resource.data)
+        && !('reopenedAt' in request.resource.data);
+    }
+
+    function validPublicSelectionUpdate() {
+      return (
           (
-            ('name' in request.resource.data)
-            && request.resource.data.name is string
-            && request.resource.data.name.size() > 0
-            && request.resource.data.name.size() <= 120
+            !('status' in resource.data)
+            && !('status' in request.resource.data)
           )
           || (
-            ('nume' in request.resource.data)
-            && request.resource.data.nume is string
-            && request.resource.data.nume.size() > 0
-            && request.resource.data.nume.size() <= 120
+            ('status' in resource.data)
+            && resource.data.status == 'draft'
+            && ('status' in request.resource.data)
+            && request.resource.data.status == 'draft'
           )
         )
-        && request.resource.data.email is string
-        && request.resource.data.email.size() <= 190
         && (
-          !('phone' in request.resource.data)
-          || request.resource.data.phone is string
+          !('clientAccessToken' in resource.data)
+          || request.resource.data.clientAccessToken == resource.data.clientAccessToken
         )
+        && !('finalizedAt' in request.resource.data)
         && (
-          !('phone' in request.resource.data)
-          || request.resource.data.phone.size() <= 40
-        )
-        && (
-          (
-            ('message' in request.resource.data)
-            && request.resource.data.message is string
-            && request.resource.data.message.size() > 0
-            && request.resource.data.message.size() <= 5000
-          )
-          || (
-            ('mesaj' in request.resource.data)
-            && request.resource.data.mesaj is string
-            && request.resource.data.mesaj.size() > 0
-            && request.resource.data.mesaj.size() <= 5000
-          )
-        )
-        && request.resource.data.createdAt is timestamp
-        && (
-          !('photographerUid' in request.resource.data)
-          || request.resource.data.photographerUid == null
-          || request.resource.data.photographerUid is string
-        )
-        && (
-          !('read' in request.resource.data)
-          || request.resource.data.read == false
+          !('reopenedAt' in resource.data)
+          || request.resource.data.reopenedAt == resource.data.reopenedAt
         );
     }
 
@@ -364,7 +357,12 @@ service cloud.firestore {
     // Public photographer site data (resolved by slug)
     match /photographerSites/{userId} {
       allow read: if true;
-      allow create, update, delete: if isOwner(userId) || isAdmin();
+      // Site writes go through savePhotographerSite so plan limits cannot be bypassed.
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /siteSlugs/{slug} {
+      allow read, write: if false;
     }
 
     // Public gallery slug registry for /g/:slug links
@@ -399,9 +397,25 @@ service cloud.firestore {
       allow read: if isAdmin()
         || isOwner(resource.data.userId)
         || isGalleryPublic(resource.data);
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      // Gallery creation goes through createGallery so Free limits are enforced server-side.
+      allow create: if isAdmin();
       allow update: if isAdmin()
-        || isOwner(resource.data.userId);
+        || (
+          isOwner(resource.data.userId)
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'statusActiv'])
+            || (
+              request.resource.data.status in ['archived', 'trash']
+              && (
+                (
+                  !('statusActiv' in resource.data)
+                  && !('statusActiv' in request.resource.data)
+                )
+                || request.resource.data.statusActiv == resource.data.statusActiv
+              )
+            )
+          )
+        );
       allow delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
@@ -420,8 +434,18 @@ service cloud.firestore {
     // Client selections per gallery (new scalable structure)
     match /gallerySelections/{galleryId}/clients/{clientId} {
       allow read: if isGalleryOwnerById(galleryId) || isAdmin();
-      allow create, update: if (isGalleryOwnerById(galleryId) || isAdmin() || isGalleryPublicById(galleryId))
-        && validGallerySelectionWrite(clientId);
+      allow create: if validGallerySelectionWrite(clientId)
+        && (
+          isGalleryOwnerById(galleryId)
+          || isAdmin()
+          || (isGalleryPublicById(galleryId) && validPublicSelectionCreate())
+        );
+      allow update: if validGallerySelectionWrite(clientId)
+        && (
+          isGalleryOwnerById(galleryId)
+          || isAdmin()
+          || (isGalleryPublicById(galleryId) && validPublicSelectionUpdate())
+        );
       allow delete: if isGalleryOwnerById(galleryId) || isAdmin();
     }
 
@@ -469,8 +493,13 @@ service cloud.firestore {
 
     // Contact form messages
     match /contactMessages/{messageId} {
-      allow create: if validContactCreate();
+      // Public contact writes go through submitContactMessage for validation and rate limiting.
+      allow create: if false;
       allow read, update, delete: if isAdmin();
+    }
+
+    match /contactRateLimits/{rateKey} {
+      allow read, write: if false;
     }
 
     // Public review submissions on gallery pages

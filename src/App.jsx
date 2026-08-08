@@ -8,6 +8,7 @@ import { useTheme } from './hooks/useTheme'
 import Termeni from './pages/Termeni'
 import Confidentialitate from './pages/Confidentialitate'
 import Refund from './pages/Refund'
+import VerifyEmail from './pages/VerifyEmail'
 
 const Dashboard = lazy(() => import('./components/Dashboard.jsx'))
 const ClientGallery = lazy(() => import('./components/ClientGallery.jsx'))
@@ -168,7 +169,17 @@ function App() {
   }, [])
 
   const handleLogin = (userData) => { setUser(userData); navigate('/dashboard') }
-  const handleRegister = (userData) => { setUser(userData); navigate('/dashboard') }
+  const handleRegister = (userData) => {
+    setUser(userData)
+    const registrationParams = new URLSearchParams(window.location.search)
+    const selectedPlan = String(registrationParams.get('plan') || '').trim().toLowerCase()
+    const selectedCycle = registrationParams.get('cycle') === 'yearly' ? 'yearly' : 'monthly'
+    if (selectedPlan && selectedPlan !== 'free') {
+      navigate(`/dashboard?tab=abonament&cycle=${selectedCycle}&plan=${encodeURIComponent(selectedPlan)}`)
+      return
+    }
+    navigate('/dashboard')
+  }
   const handleLogout = async () => {
     if (!window.confirm('Sigur vrei să te deconectezi?')) return
     try { await authService.logout() } catch (e) { console.error(e) }
@@ -208,6 +219,7 @@ function App() {
         <Route path="/termeni" element={<Termeni />} />
         <Route path="/confidentialitate" element={<Confidentialitate />} />
         <Route path="/refund" element={<Refund />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/g/:slug" element={<GallerySlugRouter />} />
         <Route path="/gallery/:id" element={<ClientGallery />} />
         <Route path="/card/:uid" element={<PhotographerCard />} />

@@ -1,16 +1,18 @@
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, limit as limitTo } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth } from '../../firebase'
+import {
+  FOUNDER_STRIPE_PRICES,
+  REGULAR_STRIPE_PRICES,
+  isFounderOfferActive,
+  resolvePlanFromConfiguredPriceId,
+} from './pricing.config'
 
 export const STRIPE_PRICES = {
-  esential_monthly: (import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_MONTHLY || '').trim(),
-  esential_yearly:  (import.meta.env.VITE_STRIPE_PRICE_ESENTIAL_YEARLY  || '').trim(),
-  plus_monthly:     (import.meta.env.VITE_STRIPE_PRICE_PLUS_MONTHLY     || '').trim(),
-  plus_yearly:      (import.meta.env.VITE_STRIPE_PRICE_PLUS_YEARLY      || '').trim(),
-  pro_monthly:      (import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY      || '').trim(),
-  pro_yearly:       (import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY       || '').trim(),
-  studio_monthly:   (import.meta.env.VITE_STRIPE_PRICE_STUDIO_MONTHLY   || '').trim(),
-  studio_yearly:    (import.meta.env.VITE_STRIPE_PRICE_STUDIO_YEARLY    || '').trim(),
+  ...FOUNDER_STRIPE_PRICES,
+  ...Object.fromEntries(
+    Object.entries(REGULAR_STRIPE_PRICES).map(([key, value]) => [`${key}_regular`, value])
+  ),
   addon:            (import.meta.env.VITE_STRIPE_PRICE_ADDON || 'price_1T6a5e1ax2jGrLZHbnDNHkwM').trim(),
 }
 
@@ -23,6 +25,14 @@ export const PLAN_PRICES = {
   PRO_YEARLY:       STRIPE_PRICES.pro_yearly,
   STUDIO_MONTHLY:   STRIPE_PRICES.studio_monthly,
   STUDIO_YEARLY:    STRIPE_PRICES.studio_yearly,
+  ESENTIAL_REGULAR_MONTHLY: REGULAR_STRIPE_PRICES.esential_monthly,
+  ESENTIAL_REGULAR_YEARLY:  REGULAR_STRIPE_PRICES.esential_yearly,
+  PLUS_REGULAR_MONTHLY:     REGULAR_STRIPE_PRICES.plus_monthly,
+  PLUS_REGULAR_YEARLY:      REGULAR_STRIPE_PRICES.plus_yearly,
+  PRO_REGULAR_MONTHLY:      REGULAR_STRIPE_PRICES.pro_monthly,
+  PRO_REGULAR_YEARLY:       REGULAR_STRIPE_PRICES.pro_yearly,
+  STUDIO_REGULAR_MONTHLY:   REGULAR_STRIPE_PRICES.studio_monthly,
+  STUDIO_REGULAR_YEARLY:    REGULAR_STRIPE_PRICES.studio_yearly,
   ADDON:            STRIPE_PRICES.addon,
 }
 
@@ -52,6 +62,13 @@ export const DEFAULT_BILLING_DETAILS = {
 
 const VALID_STATUSES = ['active', 'trialing']
 const STUDIO_ADDON_STORAGE_BONUS_GB = 500
+const PLAN_PRIORITY = {
+  Free: 0,
+  Esential: 1,
+  Plus: 2,
+  Pro: 3,
+  Studio: 4,
+}
 
 function sanitizeText(value, maxLen) {
   return String(value || '').trim().slice(0, maxLen)
@@ -98,10 +115,8 @@ function validateBillingDetails(details) {
 
 function priceIdToPlan(priceId) {
   if (!priceId) return 'Free'
-  if (priceId === PLAN_PRICES.STUDIO_MONTHLY || priceId === PLAN_PRICES.STUDIO_YEARLY) return 'Studio'
-  if (priceId === PLAN_PRICES.PRO_MONTHLY    || priceId === PLAN_PRICES.PRO_YEARLY)    return 'Pro'
-  if (priceId === PLAN_PRICES.PLUS_MONTHLY   || priceId === PLAN_PRICES.PLUS_YEARLY)   return 'Plus'
-  if (priceId === PLAN_PRICES.ESENTIAL_MONTHLY || priceId === PLAN_PRICES.ESENTIAL_YEARLY) return 'Esential'
+  const configuredPlan = resolvePlanFromConfiguredPriceId(priceId)
+  if (configuredPlan) return configuredPlan
   if (priceId === PLAN_PRICES.ADDON) return 'Studio'
   return 'Free'
 }
@@ -218,7 +233,11 @@ function normalizeInvoice(docSnap) {
 }
 
 function normalizePlanName(value) {
-  const raw = String(value || '').trim().toLowerCase()
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
   if (raw === 'studio' || raw === 'unlimited') return 'Studio'
   if (raw === 'pro') return 'Pro'
   if (raw === 'plus') return 'Plus'
@@ -233,6 +252,27 @@ function getEffectiveStorageLimit(plan, addonActive = false) {
     return baseLimit + STUDIO_ADDON_STORAGE_BONUS_GB
   }
   return baseLimit
+}
+
+function resolvePlanFromSubscriptions(subscriptions = []) {
+  return subscriptions.reduce((currentPlan, subscription) => {
+    const status = toStripeStatus(subscription?.status)
+    if (!VALID_STATUSES.includes(status)) return currentPlan
+
+    const derivedPlan = normalizePlanName(
+      subscription?.plan
+      ?? priceIdToPlan(subscription?.priceId ?? getPriceIdFromSubscription(subscription))
+    )
+
+    return (PLAN_PRIORITY[derivedPlan] || 0) > (PLAN_PRIORITY[currentPlan] || 0)
+      ? derivedPlan
+      : currentPlan
+  }, 'Free')
+}
+
+function resolveDisplayedPlan({ overridePlan, subscriptions = [] } = {}) {
+  if (overridePlan) return normalizePlanName(overridePlan)
+  return resolvePlanFromSubscriptions(subscriptions)
 }
 
 function getAddonCheckoutFunctionUrl() {
@@ -259,16 +299,29 @@ export function createBillingModule({ db, functions }) {
       planId,
       successUrl,
       cancelUrl,
-      allowPromotionCodes = true,
+      allowPromotionCodes = false,
+      termsAccepted = false,
     }) {
       if (!uid) throw new Error('billing.startCheckout: uid este obligatoriu')
       if (!planId || planId === 'free') return null
 
-      const price = STRIPE_PRICES[planId]
-      if (!price) {
+      const allowedPlanIds = new Set([
+        'esential_monthly', 'esential_yearly',
+        'plus_monthly', 'plus_yearly',
+        'pro_monthly', 'pro_yearly',
+        'studio_monthly', 'studio_yearly',
+      ])
+      if (!allowedPlanIds.has(planId)) {
+        throw new Error(`Plan invalid pentru checkout: "${planId}".`)
+      }
+
+      const configuredPrice = isFounderOfferActive()
+        ? FOUNDER_STRIPE_PRICES[planId]
+        : REGULAR_STRIPE_PRICES[planId]
+      if (!configuredPrice) {
         throw new Error(
           `Config Stripe lipsa pentru planul "${planId}". ` +
-          'Seteaza in .env: VITE_STRIPE_PRICE_STARTER, VITE_STRIPE_PRICE_PRO, VITE_STRIPE_PRICE_STUDIO, apoi rebuild + deploy.'
+          'Verifică Price ID-urile Fondator și Standard, apoi fă rebuild și deploy.'
         )
       }
       if (!createCheckoutSessionCallable) {
@@ -276,10 +329,11 @@ export function createBillingModule({ db, functions }) {
       }
 
       const result = await createCheckoutSessionCallable({
-        priceId: price,
+        planId,
         successUrl,
         cancelUrl,
         allowPromotionCodes,
+        termsAccepted,
       })
 
       const url = String(result?.data?.url || '').trim()
@@ -388,21 +442,9 @@ export function createBillingModule({ db, functions }) {
         if (!unsubStripe) {
           const subsRef = collection(db, 'customers', uid, 'subscriptions')
           unsubStripe = onSnapshot(subsRef, (snapshot) => {
-            let nextPlan = 'Free'
-            snapshot.docs.forEach((docSnap) => {
-              const data = docSnap.data()
-              const status = (data?.status || '').toLowerCase()
-              if (!VALID_STATUSES.includes(status)) return
-
-              const priceId = getPriceIdFromSubscription(data)
-              const derived = priceIdToPlan(priceId)
-              if (derived === 'Studio') nextPlan = 'Studio'
-              else if (derived === 'Pro' && nextPlan !== 'Studio') nextPlan = 'Pro'
-              else if (derived === 'Plus' && nextPlan !== 'Studio' && nextPlan !== 'Pro') nextPlan = 'Plus'
-              else if (derived === 'Esential' && nextPlan !== 'Studio' && nextPlan !== 'Pro' && nextPlan !== 'Plus') nextPlan = 'Esential'
+            currentPlan = resolveDisplayedPlan({
+              subscriptions: snapshot.docs.map(normalizeSubscription),
             })
-
-            currentPlan = nextPlan
             emitChange()
           })
         }
@@ -457,10 +499,11 @@ export function createBillingModule({ db, functions }) {
       const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
       const addonActive = Boolean(userData.addonActive)
       const addonPriceId = sanitizeText(userData.addonPriceId || PLAN_PRICES.ADDON, 120) || PLAN_PRICES.ADDON
-      const resolvedPlan = activeSubscription?.plan
-        || (overrideSnap.exists() ? normalizePlanName(overrideSnap.data()?.plan) : null)
-        || normalizePlanName(userData.plan)
-        || 'Free'
+      const overridePlan = overrideSnap.exists() ? overrideSnap.data()?.plan : null
+      const resolvedPlan = resolveDisplayedPlan({
+        overridePlan,
+        subscriptions,
+      })
       const effectiveStorageLimit = getEffectiveStorageLimit(resolvedPlan, addonActive)
 
       const subscriptionFallback = subscriptions
@@ -473,7 +516,7 @@ export function createBillingModule({ db, functions }) {
           : subscriptionFallback
 
       return {
-        overridePlan: overrideSnap.exists() ? normalizePlanName(overrideSnap.data()?.plan) : null,
+        overridePlan: overridePlan ? normalizePlanName(overridePlan) : null,
         addonActive,
         addonPriceId: addonPriceId || null,
         activeAddonSubscription,

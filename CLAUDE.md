@@ -2,7 +2,7 @@
 
 > Ultima actualizare: 28 Februarie 2026
 > Proiect activ: `/Users/daniellapadus/Desktop/mina-v1`
-> Referință (neatinsă): `fotolio`
+> Legacy/backup istoric (neatins): `fotolio`
 
 ---
 
@@ -63,7 +63,7 @@ Mina este o platformă SaaS dedicată fotografilor de eveniment din România. Co
 - `stripe ^18.5.0`
 
 ### Storage / Media
-- Cloudflare Worker + R2 (`r2-worker.js`, `wrangler.toml`)
+- Cloudflare Worker + Backblaze B2 (`r2-worker.js`, `wrangler.toml`)
 - Firestore pentru date business
 
 ### Billing
@@ -200,7 +200,7 @@ mina-v1/
 |------|--------|------|
 | `billing.getCurrentPlan()` | ❌ Neimplementat | Aruncă eroare explicită |
 | Formular contact Landing Page | ❌ Nefuncțional | Doar `preventDefault()` |
-| Prețuri în UI | ⚠️ Greșite | Afișează valori vechi, corect: 39/79/129 lei |
+| Prețuri în UI | ✅ Aliniate | Fondator 29/49/79/129; Standard 39/69/99/149 lei |
 | Domeniu `cloudbymina.com` | ⚠️ Neconectat | Cumpărat, nepublicat |
 | Email tranzacțional | ❌ Lipsă | Niciun fotograf nu primește confirmare sau link galerie |
 | GDPR / T&C | ❌ Lipsă | Obligatoriu pentru lansare |
@@ -310,7 +310,7 @@ profiles/{uid}
   - tema curentă
 ```
 
-### Storage R2:
+### Storage Backblaze B2:
 ```
 galerii/{galleryId}/originals/{file}
 galerii/{galleryId}/medium/{file}
@@ -323,7 +323,7 @@ galerii/{galleryId}/thumbnails/{file}
 
 ### Blocker pentru lansare:
 1. Implementează `billing.getCurrentPlan()`
-2. Actualizează prețurile în UI: 39 / 79 / 129 lei
+2. Menține sincronizate prețurile Fondator și Standard între UI, Stripe, Functions și Worker
 3. Adaugă email tranzacțional (confirmare înregistrare + link galerie)
 4. GDPR — Termeni și Condiții
 5. Conectează domeniul `cloudbymina.com`
@@ -356,7 +356,7 @@ Variabile necesare (verifică `appBootstrap.js` pentru lista completă):
 
 ## 📝 NOTE IMPORTANTE
 
-- **Proiect de referință `fotolio`** — există ca backup, nu se atinge
+- **Proiect activ: Mina** — `fotolio` este doar backup istoric/legacy și nu se atinge
 - **Worklog** — modificările sunt urmărite în `WORKLOG.md` cu commit hash + rezultat QA
 - **Teste:** `npm run test` → 20/20 PASS, `npm run qa:worker` → PASS
 - **Stripe API version:** `2024-06-20` — monitorizează drift-ul față de cont

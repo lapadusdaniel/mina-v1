@@ -26,3 +26,9 @@ dist-ssr
 tmp/
 serviceAccount.json
 mina-service-account.json
+service-account.json
+serviceAccount.json
+
+# Generated marketing duplicates and distributable archive
+marketing/marketing*/
+marketing/mina-social-launch-kit.zip

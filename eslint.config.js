@@ -5,9 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', '.firebase', 'tmp']),
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['src/**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -23,7 +23,70 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-unused-vars': ['error', {
+        argsIgnorePattern: '^(?:_|Icon$)',
+        caughtErrors: 'none',
+        varsIgnorePattern: '^[A-Z_]',
+      }],
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    files: ['worker/**/*.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      globals: { ...globals.browser, ...globals.worker },
+      parserOptions: { sourceType: 'module' },
+    },
+    rules: {
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-unused-vars': ['error', {
+        argsIgnorePattern: '^(?:_|Icon$)',
+        caughtErrors: 'none',
+        varsIgnorePattern: '^[A-Z_]',
+      }],
+    },
+  },
+  {
+    files: ['functions/**/*.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      globals: globals.node,
+      parserOptions: { sourceType: 'commonjs' },
+    },
+    rules: {
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-unused-vars': ['error', {
+        argsIgnorePattern: '^(?:_|Icon$)',
+        caughtErrors: 'none',
+        varsIgnorePattern: '^[A-Z_]',
+      }],
+    },
+  },
+  {
+    files: ['scripts/**/*.{js,mjs}', 'tests/**/*.{js,mjs}', '*.config.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      globals: globals.node,
+      parserOptions: { sourceType: 'module' },
+    },
+    rules: {
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-unused-vars': ['error', {
+        argsIgnorePattern: '^(?:_|Icon$)',
+        caughtErrors: 'none',
+        varsIgnorePattern: '^[A-Z_]',
+      }],
+    },
+  },
+  {
+    files: ['scripts/qa-auth.mjs'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 ])

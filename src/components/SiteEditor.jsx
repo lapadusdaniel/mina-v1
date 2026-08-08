@@ -8,6 +8,7 @@ import {
   Upload,
   X,
   ExternalLink,
+  ChevronRight,
 } from 'lucide-react'
 import PhotographerSite from './PhotographerSite'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
@@ -25,6 +26,53 @@ const generateSlug = (brandName) =>
     .replace(/^-+|-+$/g, '') || null
 
 const uid = () => Math.random().toString(36).slice(2, 10)
+
+const loadBrandingPhotos = async (photos = [], batchSize = 6) => {
+  const validPhotos = photos.filter((photo) => photo?.key)
+  const resolved = []
+
+  for (let start = 0; start < validPhotos.length; start += batchSize) {
+    const batch = await Promise.all(
+      validPhotos.slice(start, start + batchSize).map(async (photo) => {
+        try {
+          return { url: await mediaService.getBrandingAsset(photo.key), key: photo.key }
+        } catch {
+          return null
+        }
+      })
+    )
+    resolved.push(...batch.filter(Boolean))
+  }
+
+  return resolved
+}
+
+const optimizePortfolioImage = async (file, maxDimension = 2400, quality = 0.86) => {
+  if (!file?.type?.startsWith('image/') || file.type === 'image/gif') return file
+
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
+    if (scale === 1 && file.size <= 2_500_000) {
+      bitmap.close()
+      return file
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const context = canvas.getContext('2d')
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+    if (!blob) return file
+    const baseName = file.name.replace(/\.[^.]+$/, '')
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
+  } catch {
+    return file
+  }
+}
 
 const EDITOR_TABS = ['Acasă', 'Portofoliu', 'Prețuri', 'Despre']
 
@@ -184,7 +232,7 @@ const Divider = () => (
 // ═══════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════
-export default function SiteEditor({ user }) {
+export default function SiteEditor({ user, userPlan = 'Free', planLoading = false }) {
   const [activeTab, setActiveTab] = useState('Acasă')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -267,15 +315,9 @@ export default function SiteEditor({ user }) {
             const loadCatPhotos = async () => {
               const result = {}
               for (const cat of portfolio) {
-                const photos = []
-                for (const photo of (cat.photos || [])) {
-                  if (!photo.key) continue
-                  try {
-                    const url = await mediaService.getBrandingAsset(photo.key)
-                    photos.push({ url, key: photo.key })
-                  } catch { /* skip */ }
-                }
+                const photos = await loadBrandingPhotos(cat.photos || [])
                 result[cat.id] = photos
+                setCategoryPhotoUrls((current) => ({ ...current, [cat.id]: photos }))
               }
               setCategoryPhotoUrls(result)
             }
@@ -302,11 +344,12 @@ export default function SiteEditor({ user }) {
   const handleCoverUpload = async (file) => {
     setUploadingCover(true)
     try {
+      const optimizedFile = await optimizePortfolioImage(file, 2800, 0.88)
       const idToken = await getIdToken()
-      const ext = file.name.split('.').pop() || 'jpg'
+      const ext = optimizedFile.name.split('.').pop() || 'jpg'
       const path = `branding/${user.uid}/cover.${ext}`
-      await mediaService.uploadFileToPath(file, path, null, idToken)
-      setCoverPreviewUrl(URL.createObjectURL(file))
+      await mediaService.uploadFileToPath(optimizedFile, path, null, idToken)
+      setCoverPreviewUrl(URL.createObjectURL(optimizedFile))
       setForm((p) => ({ ...p, coverPhotoPath: path, heroImagePath: path }))
     } catch (err) {
       console.error(err)
@@ -320,11 +363,12 @@ export default function SiteEditor({ user }) {
   const handleProfileUpload = async (file) => {
     setUploadingProfile(true)
     try {
+      const optimizedFile = await optimizePortfolioImage(file, 1600, 0.88)
       const idToken = await getIdToken()
-      const ext = file.name.split('.').pop() || 'jpg'
+      const ext = optimizedFile.name.split('.').pop() || 'jpg'
       const path = `branding/${user.uid}/profile-photo.${ext}`
-      await mediaService.uploadFileToPath(file, path, null, idToken)
-      setProfilePreviewUrl(URL.createObjectURL(file))
+      await mediaService.uploadFileToPath(optimizedFile, path, null, idToken)
+      setProfilePreviewUrl(URL.createObjectURL(optimizedFile))
       setForm((p) => ({ ...p, profilePhotoPath: path, aboutImagePath: path }))
     } catch (err) {
       console.error(err)
@@ -349,11 +393,12 @@ export default function SiteEditor({ user }) {
   const handleCategoryPhotoUpload = async (file, catId) => {
     setUploadingCategory(catId)
     try {
+      const optimizedFile = await optimizePortfolioImage(file)
       const idToken = await getIdToken()
-      const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const safeName = `${Date.now()}-${optimizedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
       const path = `branding/${user.uid}/portfolio/${catId}/${safeName}`
-      await mediaService.uploadFileToPath(file, path, null, idToken)
-      const previewUrl = URL.createObjectURL(file)
+      await mediaService.uploadFileToPath(optimizedFile, path, null, idToken)
+      const previewUrl = URL.createObjectURL(optimizedFile)
       setForm((p) => ({
         ...p,
         portfolio: (p.portfolio || []).map((c) =>
@@ -470,7 +515,7 @@ export default function SiteEditor({ user }) {
     setSaving(true)
     try {
       const sl = generateSlug(brandName)
-      await sitesService.saveSiteByOwnerUid(user.uid, {
+      const saved = await sitesService.saveSiteByOwnerUid(user.uid, {
         ...form,
         uid: user.uid,
         brandName,
@@ -483,7 +528,7 @@ export default function SiteEditor({ user }) {
         websiteUrl: form.socialLinks?.website || form.websiteUrl,
         updatedAt: new Date(),
       })
-      setSlug(sl)
+      setSlug(saved?.slug || sl)
     } catch (err) {
       console.error(err)
       alert('Eroare la salvare.')
@@ -511,10 +556,29 @@ export default function SiteEditor({ user }) {
     socialLinks: form.socialLinks || {},
   }
 
-  if (loading) {
+  if (loading || planLoading) {
     return (
       <div style={{ padding: '60px', textAlign: 'center', fontFamily: "'DM Sans', sans-serif", color: '#a1a1a6', fontSize: '13px' }}>
         Se încarcă...
+      </div>
+    )
+  }
+
+  if (userPlan === 'Free') {
+    return (
+      <div style={{ minHeight: '65vh', display: 'grid', placeItems: 'center', padding: '32px 20px', fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ width: 'min(520px, 100%)', padding: '42px 34px', border: '1px solid #e7e4df', borderRadius: 18, background: '#fff', textAlign: 'center', boxShadow: '0 16px 50px rgba(20,20,20,0.06)' }}>
+          <Globe size={28} strokeWidth={1.5} style={{ marginBottom: 16, color: '#1a1a1f' }} />
+          <h2 style={{ margin: '0 0 10px', fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#1a1a1f' }}>
+            Site-ul tău de prezentare
+          </h2>
+          <p style={{ margin: '0 auto 24px', maxWidth: 410, color: '#77777f', fontSize: 14, lineHeight: 1.65 }}>
+            Editorul de site este inclus în toate abonamentele plătite. Alege planul potrivit și publică-ți portofoliul pe un link Mina.
+          </p>
+          <a href="/dashboard?tab=abonament" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 999, background: '#1a1a1f', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 500 }}>
+            Vezi abonamentele <ChevronRight size={14} />
+          </a>
+        </div>
       </div>
     )
   }
@@ -558,9 +622,8 @@ export default function SiteEditor({ user }) {
         position: 'sticky',
         top: 52,
         zIndex: 100,
-        background: 'rgba(255,255,255,0.96)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(0,0,0,0.07)',
+        background: '#fff',
+        borderBottom: '1px solid rgba(0,0,0,0.06)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -725,7 +788,7 @@ export default function SiteEditor({ user }) {
                         value={cat.name}
                         onChange={(e) => updateCategory(cat.id, 'name', e.target.value)}
                         style={{ ...S.input, flex: 1, background: '#fff', padding: '7px 10px', fontSize: '13px' }}
-                        placeholder="Nome categorie"
+                        placeholder="Nume categorie"
                         onFocus={onFocus}
                         onBlur={onBlur}
                       />

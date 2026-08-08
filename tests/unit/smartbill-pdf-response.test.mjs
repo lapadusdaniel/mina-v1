@@ -90,3 +90,28 @@ test('SmartBill PDF parser retries query variants and succeeds on second request
   }
 })
 
+test('SmartBill omits VAT fields by default for a non-VAT-registered issuer', () => {
+  const service = new SmartBillService()
+  const [item] = service.normalizeLineItems({
+    amount: 49,
+    description: 'Abonament Mina Plus',
+  })
+
+  assert.equal(item.price, 49)
+  assert.equal('isTaxIncluded' in item, false)
+  assert.equal('taxName' in item, false)
+  assert.equal('taxPercentage' in item, false)
+})
+
+test('SmartBill includes configured VAT fields only when the issuer is marked as VAT payer', () => {
+  const service = new SmartBillService({
+    issuerIsTaxPayer: true,
+    taxName: 'Normala',
+    taxPercentage: 21,
+  })
+  const [item] = service.normalizeLineItems({ amount: 49 })
+
+  assert.equal(item.isTaxIncluded, true)
+  assert.equal(item.taxName, 'Normala')
+  assert.equal(item.taxPercentage, 21)
+})

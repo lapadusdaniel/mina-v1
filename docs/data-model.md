@@ -36,4 +36,4 @@
 - documente create de extensia Stripe
 
 ## `adminOverrides/{uid}` (optional)
-- `plan` (`Free` | `Pro` | `Unlimited`)
+- `plan` (`Free` | `Esential` | `Plus` | `Pro` | `Studio`; valorile legacy `Starter` și `Unlimited` sunt normalizate la citire)

@@ -40,6 +40,10 @@ function inferPlanFromSubscriptionData(data, {
   stripePricePlusMonthly, stripePricePlusYearly,
   stripePriceProMonthly, stripePriceProYearly,
   stripePriceStudioMonthly, stripePriceStudioYearly,
+  stripePriceEsentialRegularMonthly, stripePriceEsentialRegularYearly,
+  stripePricePlusRegularMonthly, stripePricePlusRegularYearly,
+  stripePriceProRegularMonthly, stripePriceProRegularYearly,
+  stripePriceStudioRegularMonthly, stripePriceStudioRegularYearly,
   // legacy fallbacks
   stripePriceStarter, stripePricePro, stripePriceStudio,
 } = {}) {
@@ -54,10 +58,10 @@ function inferPlanFromSubscriptionData(data, {
   const priceId = data?.items?.data?.[0]?.price?.id || data?.price?.id || ''
   if (!priceId) return 'Free'
 
-  if (priceId === stripePriceStudioMonthly || priceId === stripePriceStudioYearly || priceId === stripePriceStudio) return 'Studio'
-  if (priceId === stripePriceProMonthly    || priceId === stripePriceProYearly    || priceId === stripePricePro)    return 'Pro'
-  if (priceId === stripePricePlusMonthly   || priceId === stripePricePlusYearly)                                    return 'Plus'
-  if (priceId === stripePriceEsentialMonthly || priceId === stripePriceEsentialYearly || priceId === stripePriceStarter) return 'Esențial'
+  if ([stripePriceStudioMonthly, stripePriceStudioYearly, stripePriceStudioRegularMonthly, stripePriceStudioRegularYearly, stripePriceStudio].includes(priceId)) return 'Studio'
+  if ([stripePriceProMonthly, stripePriceProYearly, stripePriceProRegularMonthly, stripePriceProRegularYearly, stripePricePro].includes(priceId)) return 'Pro'
+  if ([stripePricePlusMonthly, stripePricePlusYearly, stripePricePlusRegularMonthly, stripePricePlusRegularYearly].includes(priceId)) return 'Plus'
+  if ([stripePriceEsentialMonthly, stripePriceEsentialYearly, stripePriceEsentialRegularMonthly, stripePriceEsentialRegularYearly, stripePriceStarter].includes(priceId)) return 'Esențial'
 
   return 'Free'
 }
@@ -110,6 +114,10 @@ export function createAdminModule({ db }) {
       stripePricePlusMonthly, stripePricePlusYearly,
       stripePriceProMonthly, stripePriceProYearly,
       stripePriceStudioMonthly, stripePriceStudioYearly,
+      stripePriceEsentialRegularMonthly, stripePriceEsentialRegularYearly,
+      stripePricePlusRegularMonthly, stripePricePlusRegularYearly,
+      stripePriceProRegularMonthly, stripePriceProRegularYearly,
+      stripePriceStudioRegularMonthly, stripePriceStudioRegularYearly,
       // legacy
       stripePriceStarter, stripePricePro, stripePriceStudio,
     } = {}) {
@@ -178,6 +186,10 @@ export function createAdminModule({ db }) {
           stripePricePlusMonthly, stripePricePlusYearly,
           stripePriceProMonthly, stripePriceProYearly,
           stripePriceStudioMonthly, stripePriceStudioYearly,
+          stripePriceEsentialRegularMonthly, stripePriceEsentialRegularYearly,
+          stripePricePlusRegularMonthly, stripePricePlusRegularYearly,
+          stripePriceProRegularMonthly, stripePriceProRegularYearly,
+          stripePriceStudioRegularMonthly, stripePriceStudioRegularYearly,
           stripePriceStarter, stripePricePro, stripePriceStudio,
         })
 

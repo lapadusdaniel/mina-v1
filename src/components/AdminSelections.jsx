@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Eye, Copy } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { CheckCircle2, Copy, Eye, ListChecks, RotateCcw, X } from 'lucide-react'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 
 const { media: mediaService, galleries: galleriesService } = getAppServices()
@@ -12,8 +13,9 @@ export default function AdminSelections({ galerie, userId }) {
   const [selectionPreviewClient, setSelectionPreviewClient] = useState(null)
   const [selectionPreviewUrls, setSelectionPreviewUrls] = useState([])
   const [selectionDownloading, setSelectionDownloading] = useState(null)
+  const [selectionReopening, setSelectionReopening] = useState(null)
   const [selectionItems, setSelectionItems] = useState([])
-  const [selectionLoading, setSelectionLoading] = useState(false)
+  const [selectionsOpen, setSelectionsOpen] = useState(false)
 
   useEffect(() => {
     if (!galerie?.id) {
@@ -23,7 +25,6 @@ export default function AdminSelections({ galerie, userId }) {
     let cancelled = false
 
     const loadSelections = async () => {
-      setSelectionLoading(true)
       try {
         const selections = await galleriesService.listGallerySelections(galerie.id)
         if (cancelled) return
@@ -33,6 +34,7 @@ export default function AdminSelections({ galerie, userId }) {
             selections
               .filter((item) => Array.isArray(item?.keys) && item.keys.length > 0)
               .map((item) => ({
+                clientId: item.id,
                 clientName: item.clientName,
                 clientEmail: item.clientEmail || '',
                 clientPhone: item.clientPhone || '',
@@ -40,6 +42,8 @@ export default function AdminSelections({ galerie, userId }) {
                 clientComment: item.clientComment || '',
                 keys: item.keys,
                 selectionTitle: item.selectionTitle || galerie?.numeSelectieClient || 'Selecție',
+                status: item.status === 'finalized' ? 'finalized' : 'draft',
+                finalizedAt: item.finalizedAt || null,
               }))
           )
           return
@@ -54,6 +58,7 @@ export default function AdminSelections({ galerie, userId }) {
           const legacyItems = Object.entries(legacyMap)
             .filter(([, keys]) => Array.isArray(keys) && keys.length > 0)
             .map(([clientName, keys]) => ({
+              clientId: clientName,
               clientName,
               clientEmail: '',
               clientPhone: '',
@@ -61,11 +66,11 @@ export default function AdminSelections({ galerie, userId }) {
               clientComment: '',
               keys,
               selectionTitle: galerie?.numeSelectieClient || 'Selecție',
+              status: 'draft',
+              finalizedAt: null,
             }))
           setSelectionItems(legacyItems)
         }
-      } finally {
-        if (!cancelled) setSelectionLoading(false)
       }
     }
 
@@ -77,6 +82,19 @@ export default function AdminSelections({ galerie, userId }) {
     () => new Map(selectionItems.map((item) => [item.clientName, item.keys])),
     [selectionItems]
   )
+  const totalSelectedPhotos = useMemo(
+    () => selectionItems.reduce((total, item) => total + (item.keys?.length || 0), 0),
+    [selectionItems]
+  )
+
+  useEffect(() => {
+    if (!selectionsOpen) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setSelectionsOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectionsOpen])
 
   const extractFilenamesForLightroom = (keys) => {
     if (!keys || !Array.isArray(keys)) return ''
@@ -127,6 +145,26 @@ export default function AdminSelections({ galerie, userId }) {
     }
   }
 
+  const handleReopenSelection = async (clientId, clientName) => {
+    if (!galerie?.id || !clientId) return
+    if (!window.confirm(`Redeschizi selecția pentru ${clientName}? Clientul va putea modifica din nou fotografiile alese.`)) return
+
+    setSelectionReopening(clientId)
+    try {
+      await galleriesService.reopenClientSelection(galerie.id, clientId)
+      setSelectionItems((current) => current.map((item) => (
+        item.clientId === clientId
+          ? { ...item, status: 'draft', finalizedAt: null }
+          : item
+      )))
+    } catch (err) {
+      console.error(err)
+      alert(err?.message || 'Selecția nu a putut fi redeschisă.')
+    } finally {
+      setSelectionReopening(null)
+    }
+  }
+
   const closeSelectionPreview = () => {
     selectionPreviewUrls.forEach(({ url }) => { try { URL.revokeObjectURL(url); } catch (_) {} })
     setSelectionPreviewClient(null)
@@ -157,69 +195,109 @@ export default function AdminSelections({ galerie, userId }) {
 
   return (
     <>
-      <div className="dashboard-selections-section dashboard-selections-section-top">
-        <h3 className="dashboard-selections-title">Selecții clienți</h3>
-        <div className="dashboard-selections-table-wrap">
-          <table className="dashboard-selections-table">
-            <thead>
-              <tr>
-                <th>Client</th>
-                <th>Titlu selecție</th>
-                  <th>Poze</th>
-                  <th>Email</th>
-                  <th>Telefon</th>
-                  <th>Detalii</th>
-                  <th>Comentariu</th>
-                  <th>Acțiuni</th>
-                </tr>
-              </thead>
-              <tbody>
-              {selectionItems.map(({ clientName, clientEmail, clientPhone, clientAdditionalInfo, clientComment, keys, selectionTitle }) => (
-                <tr key={clientName}>
-                  <td>{clientName}</td>
-                  <td>{selectionTitle || 'Selecție'}</td>
-                  <td>{keys?.length ?? 0}</td>
-                  <td>{clientEmail || '—'}</td>
-                  <td>{clientPhone || '—'}</td>
-                  <td>{clientAdditionalInfo || '—'}</td>
-                  <td>{clientComment || '—'}</td>
-                  <td>
-                    <div className="dashboard-selections-actions">
-                      <button
-                        type="button"
-                        className="dashboard-selections-btn dashboard-selections-btn-preview"
-                        onClick={() => handlePreviewSelection(clientName)}
-                        title="Preview"
-                      >
-                        <Eye size={14} /> Preview
-                      </button>
-                      <button
-                        type="button"
-                        className="dashboard-selections-btn"
-                        onClick={() => handleCopyLightroomString(clientName)}
-                        title="Copiază șir pentru Lightroom"
-                      >
-                        <Copy size={12} /> Lightroom
-                      </button>
-                      <button
-                        type="button"
-                        className="dashboard-selections-btn dashboard-selections-btn-download"
-                        onClick={() => handleDownloadOriginalSelection(clientName)}
-                        disabled={selectionDownloading === clientName}
-                        title="Descarcă original în rezoluție mare"
-                      >
-                        {selectionDownloading === clientName ? '...' : '↓ Original'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <button
+        type="button"
+        className="dashboard-selections-trigger"
+        onClick={() => setSelectionsOpen(true)}
+        title="Vezi selecțiile clienților"
+      >
+        <ListChecks size={15} />
+        <span>Selecții</span>
+        <span className="dashboard-selections-trigger-count">{selectionItems.length}</span>
+      </button>
 
-      {selectionPreviewClient && (
+      {selectionsOpen && createPortal((
+        <div className="dashboard-selections-overlay" onClick={() => setSelectionsOpen(false)}>
+          <aside
+            className="dashboard-selections-drawer"
+            aria-label="Selecții clienți"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="dashboard-selections-drawer-header">
+              <div>
+                <p className="dashboard-selections-eyebrow">Galeria curentă</p>
+                <h3>Selecții clienți</h3>
+                <p>
+                  {selectionItems.length} {selectionItems.length === 1 ? 'client' : 'clienți'} · {totalSelectedPhotos} {totalSelectedPhotos === 1 ? 'fotografie' : 'fotografii'} selectate
+                </p>
+              </div>
+              <button type="button" onClick={() => setSelectionsOpen(false)} aria-label="Închide selecțiile">
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="dashboard-selections-list">
+              {selectionItems.map(({ clientId, clientName, clientEmail, clientPhone, clientAdditionalInfo, clientComment, keys, selectionTitle, status }, index) => (
+                <article className="dashboard-selection-card" key={`${clientName}-${index}`}>
+                  <div className="dashboard-selection-card-main">
+                    <div className="dashboard-selection-card-identity">
+                      <span className="dashboard-selection-avatar" aria-hidden="true">
+                        {String(clientName || '?').trim().charAt(0).toUpperCase() || '?'}
+                      </span>
+                      <div>
+                        <h4>{clientName}</h4>
+                        <p>{selectionTitle || 'Selecție fotografii'}</p>
+                        <span className={`dashboard-selection-status dashboard-selection-status--${status}`}>
+                          {status === 'finalized' ? <><CheckCircle2 size={12} /> Finalizată</> : 'În lucru'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="dashboard-selection-photo-count">{keys?.length ?? 0} poze</span>
+                  </div>
+
+                  {(clientEmail || clientPhone || clientAdditionalInfo || clientComment) && (
+                    <div className="dashboard-selection-card-details">
+                      {clientEmail && <span><strong>Email</strong>{clientEmail}</span>}
+                      {clientPhone && <span><strong>Telefon</strong>{clientPhone}</span>}
+                      {clientAdditionalInfo && <span><strong>Detalii</strong>{clientAdditionalInfo}</span>}
+                      {clientComment && <span><strong>Comentariu</strong>{clientComment}</span>}
+                    </div>
+                  )}
+
+                  <div className="dashboard-selections-actions">
+                    <button
+                      type="button"
+                      className="dashboard-selections-btn dashboard-selections-btn-preview"
+                      onClick={() => handlePreviewSelection(clientName)}
+                    >
+                      <Eye size={14} /> Vezi fotografiile
+                    </button>
+                    <button
+                      type="button"
+                      className="dashboard-selections-btn"
+                      onClick={() => handleCopyLightroomString(clientName)}
+                      title="Copiază șir pentru Lightroom"
+                    >
+                      <Copy size={13} /> Copiază pentru Lightroom
+                    </button>
+                    <button
+                      type="button"
+                      className="dashboard-selections-btn dashboard-selections-btn-download"
+                      onClick={() => handleDownloadOriginalSelection(clientName)}
+                      disabled={selectionDownloading === clientName}
+                    >
+                      {selectionDownloading === clientName ? 'Se descarcă…' : '↓ Descarcă originalele'}
+                    </button>
+                    {status === 'finalized' && (
+                      <button
+                        type="button"
+                        className="dashboard-selections-btn dashboard-selections-btn-reopen"
+                        onClick={() => handleReopenSelection(clientId, clientName)}
+                        disabled={selectionReopening === clientId}
+                      >
+                        <RotateCcw size={13} />
+                        {selectionReopening === clientId ? 'Se redeschide…' : 'Redeschide selecția'}
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </aside>
+        </div>
+      ), document.body)}
+
+      {selectionPreviewClient && createPortal((
         <div
           className="dashboard-selection-preview-overlay"
           onClick={closeSelectionPreview}
@@ -237,7 +315,7 @@ export default function AdminSelections({ galerie, userId }) {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
     </>
   )
 }
