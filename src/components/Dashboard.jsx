@@ -26,6 +26,7 @@ import SiteEditor from './SiteEditor'
 import LaunchChecklist from './LaunchChecklist'
 import MinaHelpAssistant from './MinaHelpAssistant'
 import { getGalleryPublicUrl } from '../utils/publicLinks'
+import { hasNamedDefaultFolder } from '../modules/galleries/folder-visibility'
 
 const {
   auth: authService,
@@ -338,6 +339,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     const hasDefaultPhotos = pozeGalerie.some(
       (photo) => normalizePhotoFolderId(photo?.folderId) === DEFAULT_FOLDER_ID
     )
+    const keepNamedDefaultFolder = hasNamedDefaultFolder(galerieActiva)
 
     if (!galleryFolders.length) {
       if (activeFolderId !== DEFAULT_FOLDER_ID) {
@@ -346,7 +348,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
       return
     }
 
-    if (activeFolderId === DEFAULT_FOLDER_ID && !hasDefaultPhotos) {
+    if (activeFolderId === DEFAULT_FOLDER_ID && !hasDefaultPhotos && !keepNamedDefaultFolder) {
       setActiveFolderId(galleryFolders[0]?.id || DEFAULT_FOLDER_ID)
       return
     }
@@ -354,7 +356,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     if (!galleryFolders.some((folder) => folder.id === activeFolderId)) {
       setActiveFolderId(hasDefaultPhotos ? DEFAULT_FOLDER_ID : (galleryFolders[0]?.id || DEFAULT_FOLDER_ID))
     }
-  }, [activeFolderId, galleryFolders, normalizePhotoFolderId, pozeGalerie])
+  }, [activeFolderId, galerieActiva, galleryFolders, normalizePhotoFolderId, pozeGalerie])
   const closeActiveGallery = useCallback(() => {
     suppressAutoReopenRef.current = true
     setGalerieActiva(null)

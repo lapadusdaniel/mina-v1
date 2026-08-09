@@ -7,6 +7,7 @@ import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { functions as firebaseFunctions } from '../firebase'
 import { getGalleryPublicPath, getGalleryPublicUrl } from '../utils/publicLinks'
+import { shouldShowDefaultFolderTab } from '../modules/galleries/folder-visibility'
 
 const { media: mediaService } = getAppServices()
 const sendGalleryLinkCallable = httpsCallable(firebaseFunctions, 'sendGalleryLink')
@@ -512,7 +513,12 @@ export default function GalleryDetailView({
   // Keep "Galeria mea" visible during an active upload: newly-uploaded photos
   // aren't in allPozeGalerie yet, so defaultPhotosCount may be 0 even when
   // the upload is targeting the default folder.
-  const showDefaultTab = !hasExplicitFolders || defaultPhotosCount > 0 || uploading
+  const showDefaultTab = shouldShowDefaultFolderTab({
+    gallery: galerie,
+    hasExplicitFolders,
+    defaultPhotosCount,
+    uploading,
+  })
   const defaultFolder = useMemo(
     () => ({ id: DEFAULT_FOLDER_ID, name: defaultFolderName, photoCount: defaultPhotosCount }),
     [defaultFolderName, defaultPhotosCount]
