@@ -109,7 +109,29 @@ async function createGalleryDoc({ adminDb, galleryId, ownerUid }) {
 }
 
 async function deleteGalleryDoc({ adminDb, galleryId }) {
-  await adminDb.collection('galerii').doc(galleryId).delete()
+  const galleryRef = adminDb.collection('galerii').doc(galleryId)
+  const gallerySnap = await galleryRef.get().catch(() => null)
+  const slug = String(gallerySnap?.data()?.slug || '').trim()
+
+  await adminDb.recursiveDelete(adminDb.collection('gallerySelections').doc(galleryId)).catch(() => {})
+  await adminDb.recursiveDelete(adminDb.collection('gallerySecrets').doc(galleryId)).catch(() => {})
+  await adminDb.recursiveDelete(galleryRef).catch(() => {})
+  if (slug) await adminDb.collection('slugs').doc(slug).delete().catch(() => {})
+}
+
+async function deleteQaUserData({ adminDb, uid }) {
+  if (!uid) return
+  const directCollections = [
+    'users',
+    'profiles',
+    'setariFotografi',
+    'photographerSites',
+    'adminOverrides',
+    'customers',
+  ]
+  for (const collectionName of directCollections) {
+    await adminDb.recursiveDelete(adminDb.collection(collectionName).doc(uid)).catch(() => {})
+  }
 }
 
 async function main() {
@@ -255,6 +277,17 @@ async function main() {
     console.log(`Other UID: ${userB.uid}`)
     console.log(`Gallery ID: ${galleryId}`)
   } finally {
+    try {
+      await deleteGalleryDoc({ adminDb, galleryId })
+    } catch (err) {
+      console.warn(`Cleanup gallery failed: ${err.message || err}`)
+    }
+    try {
+      if (cleanup.userA?.uid) await deleteQaUserData({ adminDb, uid: cleanup.userA.uid })
+      if (cleanup.userB?.uid) await deleteQaUserData({ adminDb, uid: cleanup.userB.uid })
+    } catch (err) {
+      console.warn(`Cleanup Firestore users failed: ${err.message || err}`)
+    }
     try {
       if (cleanup.userA?.uid) await deleteAuthUser(adminAuth, cleanup.userA.uid)
     } catch (err) {

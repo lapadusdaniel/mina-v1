@@ -1667,6 +1667,34 @@ function requireVerifiedCallableUser(request) {
   return uid
 }
 
+async function requireAdminCallableUser(request) {
+  const uid = requireVerifiedCallableUser(request)
+  const userSnap = await db.collection('users').doc(uid).get()
+  const userData = userSnap.exists ? (userSnap.data() || {}) : {}
+  if (userData.isAdmin !== true && String(userData.role || '').trim().toLowerCase() !== 'admin') {
+    throw new HttpsError('permission-denied', 'Acces permis doar administratorilor.')
+  }
+  return uid
+}
+
+exports.getAdminAuthUserIds = onCall(
+  {
+    region: 'us-central1',
+    maxInstances: 10,
+  },
+  async (request) => {
+    await requireAdminCallableUser(request)
+    const uids = []
+    let pageToken
+    do {
+      const page = await admin.auth().listUsers(1000, pageToken)
+      uids.push(...page.users.map((user) => user.uid))
+      pageToken = page.pageToken
+    } while (pageToken)
+    return { uids }
+  }
+)
+
 function sanitizeCallablePayload(value, maxBytes, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new HttpsError('invalid-argument', `${label} invalid.`)

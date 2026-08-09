@@ -12,6 +12,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 
 function mapDoc(snap) {
   return { id: snap.id, ...snap.data() }
@@ -66,7 +67,7 @@ function inferPlanFromSubscriptionData(data, {
   return 'Free'
 }
 
-export function createAdminModule({ db }) {
+export function createAdminModule({ db, functions }) {
   return {
     async listUsers() {
       const snap = await getDocs(collection(db, 'users'))
@@ -121,10 +122,21 @@ export function createAdminModule({ db }) {
       // legacy
       stripePriceStarter, stripePricePro, stripePriceStudio,
     } = {}) {
+      if (!functions) throw new Error('Serviciul Functions lipsește din modulul Admin.')
       let usersSnap = null
       let galleriesSnap = null
       let overridesSnap = null
       let subscriptionsSnap = null
+      let authUserIds = null
+
+      try {
+        const callable = httpsCallable(functions, 'getAdminAuthUserIds')
+        const response = await callable()
+        authUserIds = new Set(Array.isArray(response?.data?.uids) ? response.data.uids : [])
+      } catch (err) {
+        console.error('[getAdminSnapshot] Query failed: Firebase Auth users', err)
+        throw err
+      }
 
       try {
         usersSnap = await getDocs(collection(db, 'users'))
@@ -150,7 +162,9 @@ export function createAdminModule({ db }) {
         console.error('[getAdminSnapshot] Query failed: collectionGroup(subscriptions)', err)
       }
 
-      const users = (usersSnap?.docs ?? []).map((d) => ({ uid: d.id, ...d.data() }))
+      const users = (usersSnap?.docs ?? [])
+        .filter((d) => authUserIds.has(d.id))
+        .map((d) => ({ uid: d.id, ...d.data() }))
 
       const galleryCountByUid = {}
       ;(galleriesSnap?.docs ?? []).forEach((d) => {

@@ -13,6 +13,6 @@ export function createAppServices() {
     media: createMediaModule(),
     billing: createBillingModule({ db, functions }),
     sites: createSitesModule({ db }),
-    admin: createAdminModule({ db }),
+    admin: createAdminModule({ db, functions }),
   }
 }

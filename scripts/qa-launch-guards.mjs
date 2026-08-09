@@ -160,6 +160,18 @@ async function main() {
       if (siteSlug) await adminDb.collection('siteSlugs').doc(siteSlug).delete().catch(() => {})
       await adminDb.collection('adminOverrides').doc(verifiedUid).delete().catch(() => {})
     }
+    for (const uid of createdUids) {
+      for (const collectionName of [
+        'users',
+        'profiles',
+        'setariFotografi',
+        'photographerSites',
+        'adminOverrides',
+        'customers',
+      ]) {
+        await adminDb.recursiveDelete(adminDb.collection(collectionName).doc(uid)).catch(() => {})
+      }
+    }
     await Promise.all(createdUids.map((uid) => adminAuth.deleteUser(uid).catch(() => {})))
     await deleteApp(clientApp).catch(() => {})
   }

@@ -4,6 +4,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { chromium } from 'playwright'
+import { cert, getApps, initializeApp } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
 
 const baseUrl = (process.argv[2] || 'http://127.0.0.1:5180').replace(/\/+$/, '')
 const outputDir = process.argv[3]
@@ -77,6 +79,36 @@ async function deleteAuthUser(apiKey, idToken) {
   }
 }
 
+function loadAdminDb() {
+  const candidates = [
+    process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    path.resolve(process.cwd(), 'service-account.json'),
+    path.resolve(process.cwd(), 'serviceAccount.json'),
+    path.resolve(process.cwd(), 'mina-service-account.json'),
+  ].filter(Boolean)
+  const credentialsPath = candidates.find((candidate) => fs.existsSync(candidate))
+  if (!credentialsPath) {
+    throw new Error('Lipsește cheia service account necesară pentru cleanup-ul complet QA Auth.')
+  }
+  const serviceAccount = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'))
+  const app = getApps()[0] || initializeApp({ credential: cert(serviceAccount) })
+  return getFirestore(app)
+}
+
+async function deleteQaUserData(adminDb, uid) {
+  if (!adminDb || !uid) return
+  for (const collectionName of [
+    'users',
+    'profiles',
+    'setariFotografi',
+    'photographerSites',
+    'adminOverrides',
+    'customers',
+  ]) {
+    await adminDb.recursiveDelete(adminDb.collection(collectionName).doc(uid)).catch(() => {})
+  }
+}
+
 async function resolveCredentials() {
   const envEmail = (process.env.QA_EMAIL || '').trim()
   const envPassword = (process.env.QA_PASSWORD || '').trim()
@@ -97,11 +129,12 @@ async function resolveCredentials() {
   const stamp = Date.now()
   const email = `qa-auth-${stamp}@example.com`
   const password = `Qa!${stamp}Ab`
+  const adminDb = loadAdminDb()
   const user = await createAuthUser(apiKey, email, password)
   return {
     email,
     password,
-    cleanup: { apiKey, idToken: user.idToken, uid: user.uid, email },
+    cleanup: { apiKey, idToken: user.idToken, uid: user.uid, email, adminDb },
   }
 }
 
@@ -237,6 +270,7 @@ async function main() {
 
     if (credentials.cleanup) {
       await deleteAuthUser(credentials.cleanup.apiKey, credentials.cleanup.idToken)
+      await deleteQaUserData(credentials.cleanup.adminDb, credentials.cleanup.uid)
     }
 
     console.log(`QA Auth - baseUrl: ${baseUrl}`)
@@ -249,6 +283,9 @@ async function main() {
     if (credentials.cleanup) {
       await deleteAuthUser(credentials.cleanup.apiKey, credentials.cleanup.idToken).catch((cleanupErr) => {
         console.warn(`Cleanup auth user failed: ${cleanupErr.message || cleanupErr}`)
+      })
+      await deleteQaUserData(credentials.cleanup.adminDb, credentials.cleanup.uid).catch((cleanupErr) => {
+        console.warn(`Cleanup Firestore user failed: ${cleanupErr.message || cleanupErr}`)
       })
     }
     console.error(`QA Auth FAILED: ${err.message || err}`)
