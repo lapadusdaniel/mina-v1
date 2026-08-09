@@ -28,7 +28,7 @@ SELECȚII
 - Fotograful poate vedea fotografiile, copia șirul pentru Lightroom, descărca originalele sau redeschide selecția.
 
 CONT ȘI PLANURI
-- Free: 15 GB și maximum 3 galerii active.
+- Free: 5 GB și maximum 3 galerii active.
 - Esențial: 100 GB.
 - Plus: 500 GB.
 - Pro: 1 TB.

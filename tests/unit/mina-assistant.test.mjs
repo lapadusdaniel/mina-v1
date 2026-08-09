@@ -31,7 +31,7 @@ test('assistant instructions stay grounded in Mina and include safe context', ()
   assert.match(instructions, /exclusiv informațiile din ghid/i)
   assert.match(instructions, /Context interfață: galerii/)
   assert.match(instructions, /Plan afișat: Plus/)
-  assert.match(instructions, /Free: 15 GB/)
+  assert.match(instructions, /Free: 5 GB/)
 })
 
 test('assistant extracts Responses API output text', () => {

@@ -31,10 +31,10 @@ export const PRICING_PLANS = Object.freeze([
   {
     key: 'free',
     name: 'Free',
-    storage: '15 GB',
+    storage: '5 GB',
     monthly: { founder: '0 lei', regular: '0 lei', founderEquiv: null, regularEquiv: null },
     yearly: { founder: '0 lei', regular: '0 lei', founderEquiv: null, regularEquiv: null },
-    features: ['15 GB stocare', '3 galerii active', 'Galerii cu parolă', 'Selecții favorite'],
+    features: ['5 GB stocare', '3 galerii active', 'Galerii cu parolă', 'Selecții favorite'],
     lockedFeatures: ['Fără site de prezentare'],
     desc: 'Pentru început, fără card.',
     cta: 'Începe gratuit',

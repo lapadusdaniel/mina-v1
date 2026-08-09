@@ -37,7 +37,7 @@ export const PLAN_PRICES = {
 }
 
 export const STORAGE_LIMITS = {
-  Free:    15,
+  Free:    5,
   Esential: 100,
   Plus:    500,
   Pro:     1000,

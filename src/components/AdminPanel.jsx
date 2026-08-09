@@ -120,7 +120,7 @@ function ChangePlanModal({ user, onClose, onSave }) {
           <div className="ap-modal-field">
             <label>Plan nou</label>
             <select className="ap-modal-select" value={plan} onChange={e => setPlan(e.target.value)}>
-              <option value="Free">Free (15 GB)</option>
+              <option value="Free">Free (5 GB)</option>
               <option value="Esențial">Esențial (100 GB)</option>
               <option value="Plus">Plus (500 GB)</option>
               <option value="Pro">Pro (1 TB)</option>
@@ -291,7 +291,7 @@ function UsersSection({ users, loading, onChangePlan, onToggleSuspend, onToggleA
   const [selectedUser, setSelectedUser] = useState(null)
   const [changePlanUser, setChangePlanUser] = useState(null)
   const PLAN_STORAGE_LIMITS_GB = {
-    free: 15,
+    free: 5,
     esential: 100,
     'esențial': 100,
     plus: 500,

@@ -1181,7 +1181,7 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
     const galeriiActive = galerii.filter((g) => g?.status !== 'trash' && g?.status !== 'archived')
     const totalBytes = galerii.reduce((sum, g) => sum + Math.max(0, Number(g?.storageBytes || 0)), 0)
     const usedGB = (totalBytes / (1024 ** 3)).toFixed(1)
-    const limitGB = storageLimit ?? 15
+    const limitGB = storageLimit ?? 5
     const limitGbNumber = Math.max(0, Number(limitGB) || 0)
     const storagePercent = limitGbNumber > 0
       ? Math.min(100, (totalBytes / (1024 ** 3) / limitGbNumber) * 100)

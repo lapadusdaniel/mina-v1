@@ -120,7 +120,14 @@ async function main() {
       'permission-denied'
     )
 
-    await adminDb.collection('adminOverrides').doc(verifiedUid).set({ plan: 'Esential' })
+    await adminDb.collection('adminOverrides').doc(verifiedUid).set({ plan: 'Esențial' })
+    const paidGallery = await createGallery({
+      gallery: { nume: 'QA Paid Gallery', slug: `qa-paid-gallery-${stamp}`, settings: {} },
+    })
+    assert(
+      paidGallery?.data?.id,
+      'Override-ul Esențial nu a eliminat limita de 3 galerii active.'
+    )
     const savedSite = await savePhotographerSite({
       site: { brandName: 'QA Paid Site', slug: `qa-paid-site-${stamp}`, tagline: 'Test' },
     })
@@ -141,7 +148,7 @@ async function main() {
 
     console.log('QA Launch Guards PASSED')
     console.log('Free: 3 galerii active, a patra blocată; creare permisă după arhivare.')
-    console.log('Site: Free blocat; Esențial permis.')
+    console.log('Esențial: a patra galerie și site-ul sunt permise prin override Admin.')
     console.log('Email: contul neverificat este blocat la creare.')
   } finally {
     await signOut(clientAuth).catch(() => {})

@@ -18,7 +18,7 @@ test('catalogul păstrează cele cinci trepte și cotele publice', () => {
   assert.deepEqual(
     PRICING_PLANS.map((plan) => [plan.name, plan.storage]),
     [
-      ['Free', '15 GB'],
+      ['Free', '5 GB'],
       ['Esențial', '100 GB'],
       ['Plus', '500 GB'],
       ['Pro', '1 TB'],

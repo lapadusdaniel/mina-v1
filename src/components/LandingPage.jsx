@@ -141,7 +141,7 @@ function LandingPage({ user }) {
             </a>
           </div>
           <div className="fl-hero-trust" aria-label="Avantajele planului gratuit">
-            <span>15 GB gratuit</span>
+            <span>5 GB gratuit</span>
             <span>Fără card</span>
             <span>Galerii cu parolă</span>
           </div>
@@ -382,7 +382,7 @@ function LandingPage({ user }) {
           <div className="fl-faq-list fl-reveal">
             <details>
               <summary>Pot încerca Mina fără card?</summary>
-              <p>Da. Planul Free include 15 GB de stocare, trei galerii active, parole și selecții favorite.</p>
+              <p>Da. Planul Free include 5 GB de stocare, trei galerii active, parole și selecții favorite.</p>
             </details>
             <details>
               <summary>Cum funcționează selecțiile clienților?</summary>
