@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Masonry from 'react-masonry-css'
 import { httpsCallable } from 'firebase/functions'
-import { Check, Eye, FolderPlus, Link as LinkIcon, MessageCircle, Pencil, Settings, Trash2, X } from 'lucide-react'
+import { Check, Eye, FolderPlus, Link as LinkIcon, MessageCircle, MoreHorizontal, Pencil, Settings, Trash2, X } from 'lucide-react'
 import AdminSelections from './AdminSelections'
 import GallerySettingsModal from './GallerySettingsModal'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
@@ -435,6 +435,8 @@ export default function GalleryDetailView({
   const [renamingFolderId, setRenamingFolderId] = useState(null)
   const [draggedFolderId, setDraggedFolderId] = useState(null)
   const [dragOverDropIndex, setDragOverDropIndex] = useState(null)
+  const [folderMenuId, setFolderMenuId] = useState(null)
+  const [folderMenuPosition, setFolderMenuPosition] = useState(null)
   const [selectedKeys, setSelectedKeys] = useState(new Set())
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [sendLinkOpen, setSendLinkOpen] = useState(false)
@@ -445,6 +447,7 @@ export default function GalleryDetailView({
   const [sendLinkTab, setSendLinkTab] = useState('link')
   const [copyLinkSuccess, setCopyLinkSuccess] = useState(false)
   const copyLinkTimeoutRef = useRef(null)
+  const folderMenuRef = useRef(null)
 
   const selectionMode = selectedKeys.size > 0
 
@@ -565,6 +568,33 @@ export default function GalleryDetailView({
       window.clearTimeout(copyLinkTimeoutRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!folderMenuId) return undefined
+
+    const closeOnOutsideClick = (event) => {
+      if (!folderMenuRef.current?.contains(event.target)) setFolderMenuId(null)
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setFolderMenuId(null)
+    }
+    const closeOnViewportChange = () => setFolderMenuId(null)
+
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('resize', closeOnViewportChange)
+    window.addEventListener('scroll', closeOnViewportChange, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('resize', closeOnViewportChange)
+      window.removeEventListener('scroll', closeOnViewportChange, true)
+    }
+  }, [folderMenuId])
+
+  useEffect(() => {
+    setFolderMenuId(null)
+  }, [activeFolderId])
 
   const startFolderRename = (event, folder) => {
     event?.preventDefault?.()
@@ -907,15 +937,81 @@ export default function GalleryDetailView({
               <span className="dashboard-folder-chip-count">{count}</span>
             </button>
             {isActive && (
-              <button
-                type="button"
-                onClick={(event) => startFolderRename(event, folder)}
-                className="dashboard-folder-rename-btn"
-                aria-label={`Redenumește folderul ${folder.name}`}
-                title="Redenumește folderul"
-              >
-                <Pencil size={12} />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={(event) => startFolderRename(event, folder)}
+                  className="dashboard-folder-rename-btn"
+                  aria-label={`Redenumește folderul ${folder.name}`}
+                  title="Redenumește folderul"
+                >
+                  <Pencil size={12} />
+                </button>
+                {folder.id !== DEFAULT_FOLDER_ID && (
+                  <div
+                    className="dashboard-folder-menu-wrap"
+                    ref={folderMenuId === folder.id ? folderMenuRef : null}
+                  >
+                    <button
+                      type="button"
+                      className="dashboard-folder-menu-trigger"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        if (folderMenuId === folder.id) {
+                          setFolderMenuId(null)
+                          return
+                        }
+                        const rect = event.currentTarget.getBoundingClientRect()
+                        const menuWidth = 178
+                        setFolderMenuPosition({
+                          top: rect.bottom + 6,
+                          left: Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12)),
+                        })
+                        setFolderMenuId(folder.id)
+                      }}
+                      aria-label={`Mai multe acțiuni pentru ${folder.name}`}
+                      aria-expanded={folderMenuId === folder.id}
+                      title="Mai multe acțiuni"
+                    >
+                      <MoreHorizontal size={15} />
+                    </button>
+                    {folderMenuId === folder.id && (
+                      <div
+                        className="dashboard-folder-menu"
+                        role="menu"
+                        style={folderMenuPosition || undefined}
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={(event) => {
+                            setFolderMenuId(null)
+                            startFolderRename(event, folder)
+                          }}
+                        >
+                          <Pencil size={14} />
+                          <span>Redenumește</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="is-danger"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setFolderMenuId(null)
+                            onDeleteFolder?.(folder.id)
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          <span>Șterge folderul</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -1011,31 +1107,17 @@ export default function GalleryDetailView({
             </>
           )}
 
-          {loadingFolders && (
-            <span className="dashboard-folder-loading">Se încarcă foldere...</span>
-          )}
-        </div>
-
-        <div className="dashboard-folders-actions">
           <button
             type="button"
             className="dashboard-folder-add-btn"
             onClick={() => onCreateFolder?.()}
           >
-            <FolderPlus size={16} />
+            <FolderPlus size={15} />
             <span>Folder nou</span>
           </button>
 
-          {hasExplicitFolders && (
-            <button
-              type="button"
-              className="dashboard-folder-delete-btn"
-              onClick={() => onDeleteFolder?.(activeFolderId)}
-              title="Șterge folderul curent"
-              aria-label="Șterge folderul curent"
-            >
-              <Trash2 size={16} />
-            </button>
+          {loadingFolders && (
+            <span className="dashboard-folder-loading">Se încarcă foldere...</span>
           )}
         </div>
       </div>

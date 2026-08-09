@@ -1777,8 +1777,7 @@
 .dashboard-folders-section {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  justify-content: flex-start;
   padding: 0 40px;
   height: 44px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
@@ -1790,6 +1789,8 @@
   align-items: center;
   gap: 0;
   height: 100%;
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1927,26 +1928,19 @@
   padding: 0 14px;
 }
 
-.dashboard-folders-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.dashboard-folder-add-btn,
-.dashboard-folder-delete-btn {
+.dashboard-folder-add-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 100%;
+  flex: 0 0 auto;
   border-radius: 6px;
-  border: 1px solid var(--theme-border);
+  border: none;
   background: transparent;
   color: var(--theme-text-muted);
   font-family: var(--theme-font-body);
   font-size: 12px;
-  padding: 0 10px;
+  padding: 0 12px;
   cursor: pointer;
   white-space: nowrap;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
@@ -1954,22 +1948,75 @@
 
 .dashboard-folder-add-btn:hover {
   color: var(--theme-text);
-  border-color: var(--theme-text-muted);
+  background: rgba(0, 0, 0, 0.04);
 }
 
-.dashboard-folder-delete-btn {
-  width: 30px;
+.dashboard-folder-menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  margin-left: -5px;
+}
+
+.dashboard-folder-menu-trigger {
+  width: 26px;
+  height: 26px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  color: #b32929;
-  border-color: transparent;
-  opacity: 0.5;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #8e8e93;
+  cursor: pointer;
 }
 
-.dashboard-folder-delete-btn:hover {
-  opacity: 1;
-  background: rgba(179, 41, 41, 0.06);
-  border-color: rgba(179, 41, 41, 0.28);
+.dashboard-folder-menu-trigger:hover,
+.dashboard-folder-menu-trigger[aria-expanded="true"] {
+  color: #1a1a1f;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-folder-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 178px;
+  padding: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.14);
+}
+
+.dashboard-folder-menu button {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #343439;
+  font-family: var(--theme-font-body);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-folder-menu button:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.dashboard-folder-menu button.is-danger {
+  color: #b32929;
+}
+
+.dashboard-folder-menu button.is-danger:hover {
+  background: rgba(179, 41, 41, 0.07);
 }
 
 /* ── Progress Bar ── */
