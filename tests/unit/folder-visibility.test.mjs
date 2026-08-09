@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   hasNamedDefaultFolder,
+  resolveActiveFolderId,
   shouldShowDefaultFolderTab,
 } from '../../src/modules/galleries/folder-visibility.js'
 
@@ -38,4 +39,22 @@ test('tabul implicit rămâne vizibil când are fotografii sau primește upload'
     hasExplicitFolders: true,
     uploading: true,
   }), true)
+})
+
+test('tabul implicit redenumit rămâne selectat chiar dacă nu este document explicit', () => {
+  assert.equal(resolveActiveFolderId({
+    activeFolderId: 'default',
+    gallery: { defaultFolderName: 'Pregătiri' },
+    folders: [{ id: 'cununie', name: 'Cununie civilă' }],
+    hasDefaultPhotos: false,
+  }), 'default')
+})
+
+test('un folder explicit selectat rămâne activ', () => {
+  assert.equal(resolveActiveFolderId({
+    activeFolderId: 'cununie',
+    gallery: { defaultFolderName: 'Pregătiri' },
+    folders: [{ id: 'cununie', name: 'Cununie civilă' }],
+    hasDefaultPhotos: false,
+  }), 'cununie')
 })
