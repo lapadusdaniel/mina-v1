@@ -10,6 +10,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import Masonry from 'react-masonry-css';
 import { CheckCircle2, ChevronDown, ChevronUp, Download, Heart, Instagram, Loader2, LockKeyhole, MessageCircle, Send, Share2 } from 'lucide-react';
+import { trackEvent } from '../services/analytics';
 
 const VALID_THEMES = ['minimal'];
 const BATCH_SIZE = 24;
@@ -1279,6 +1280,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       setSelectionFinalizedAt(result?.finalizedAt || new Date().toISOString());
       setShowFinalizeSelectionModal(false);
       closeFavoriteMenus();
+      trackEvent('selection_completed', { photo_count: favCount });
     } catch (error) {
       console.error(error);
       const message = String(error?.message || 'Selecția nu a putut fi trimisă. Încearcă din nou.')

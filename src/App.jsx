@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import './App.css'
 import Login from './components/login.jsx'
 import Register from './components/Register.jsx'
@@ -9,6 +9,8 @@ import Termeni from './pages/Termeni'
 import Confidentialitate from './pages/Confidentialitate'
 import Refund from './pages/Refund'
 import VerifyEmail from './pages/VerifyEmail'
+import AnalyticsConsent from './components/AnalyticsConsent'
+import { ANALYTICS_CONSENT_EVENT, trackEvent, trackPageView } from './services/analytics'
 
 const Dashboard = lazy(() => import('./components/Dashboard.jsx'))
 const ClientGallery = lazy(() => import('./components/ClientGallery.jsx'))
@@ -158,6 +160,7 @@ function App() {
   const [user, setUser] = useState(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
   const navigate = useNavigate()
+  const location = useLocation()
   const { theme, setTheme } = useTheme(user?.uid)
 
   useEffect(() => {
@@ -168,8 +171,27 @@ function App() {
     return () => unsubscribe()
   }, [])
 
-  const handleLogin = (userData) => { setUser(userData); navigate('/dashboard') }
+  useEffect(() => {
+    trackPageView({ pathname: location.pathname, search: location.search })
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
+    const trackCurrentPageAfterConsent = (event) => {
+      if (event.detail?.granted === true) {
+        trackPageView({ pathname: location.pathname, search: location.search })
+      }
+    }
+    window.addEventListener(ANALYTICS_CONSENT_EVENT, trackCurrentPageAfterConsent)
+    return () => window.removeEventListener(ANALYTICS_CONSENT_EVENT, trackCurrentPageAfterConsent)
+  }, [location.pathname, location.search])
+
+  const handleLogin = (userData) => {
+    trackEvent('login', { method: 'email' })
+    setUser(userData)
+    navigate('/dashboard')
+  }
   const handleRegister = (userData) => {
+    trackEvent('sign_up', { method: 'email' })
     setUser(userData)
     const registrationParams = new URLSearchParams(window.location.search)
     const selectedPlan = String(registrationParams.get('plan') || '').trim().toLowerCase()
@@ -209,8 +231,9 @@ function App() {
   }
 
   return (
-    <Suspense fallback={<FullscreenLoader />}>
-      <Routes>
+    <>
+      <Suspense fallback={<FullscreenLoader />}>
+        <Routes>
         <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthLayout><Login onLogin={handleLogin} onSwitchToRegister={() => navigate('/register')} /></AuthLayout>} />
         <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <AuthLayout><Register onRegister={handleRegister} onSwitchToLogin={() => navigate('/login')} /></AuthLayout>} />
         <Route path="/dashboard" element={<ProtectedDashboard user={user} onLogout={handleLogout} theme={theme} setTheme={setTheme} />} />
@@ -226,8 +249,10 @@ function App() {
         <Route path="/" element={<LandingPage user={user} />} />
         <Route path="/:slug" element={<SlugRouter />} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+      <AnalyticsConsent />
+    </>
   )
 }
 

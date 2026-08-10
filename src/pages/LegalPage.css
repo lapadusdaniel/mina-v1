@@ -85,6 +85,19 @@
   margin-top: 12px;
 }
 
+.legal-inline-button {
+  padding: 9px 13px;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  border-radius: 8px;
+  background: #fff;
+  color: #1d1d1f;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.legal-inline-button:hover { background: #f5f5f7; }
+
 .legal-footer {
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   padding: 24px;
@@ -100,11 +113,21 @@
   font-size: 14px;
 }
 
-.legal-footer-links a {
+.legal-footer-links a,
+.legal-footer-cookie-btn {
   color: #1d1d1f;
   text-decoration: none;
 }
 
-.legal-footer-links a:hover {
+.legal-footer-cookie-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.legal-footer-links a:hover,
+.legal-footer-cookie-btn:hover {
   text-decoration: underline;
 }

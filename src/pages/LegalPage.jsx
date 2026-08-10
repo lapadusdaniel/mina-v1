@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import './LegalPage.css'
+import { openCookieSettings } from '../services/analytics'
 
 export default function LegalPage({ title, updatedAt, children }) {
   useEffect(() => {
@@ -35,6 +36,8 @@ export default function LegalPage({ title, updatedAt, children }) {
           <Link to="/confidentialitate">Confidențialitate</Link>
           <span>·</span>
           <Link to="/refund">Refund</Link>
+          <span>·</span>
+          <button type="button" className="legal-footer-cookie-btn" onClick={openCookieSettings}>Preferințe cookie</button>
           <span>·</span>
           <Link to="/">Acasă</Link>
         </nav>

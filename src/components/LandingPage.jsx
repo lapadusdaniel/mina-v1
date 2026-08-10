@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import { openCookieSettings } from '../services/analytics'
 import {
   FOUNDER_OFFER,
   PRICING_PLANS,
@@ -511,6 +512,8 @@ function LandingPage({ user }) {
               <Link to="/confidentialitate">Confidențialitate</Link>
               <span>·</span>
               <Link to="/refund">Refund</Link>
+              <span>·</span>
+              <button type="button" className="fl-footer-cookie-btn" onClick={openCookieSettings}>Cookie-uri</button>
             </div>
           </div>
         </div>

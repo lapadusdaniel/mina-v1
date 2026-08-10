@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import imageCompression from 'browser-image-compression'
 import { UploadCloud, X, Trash2 } from 'lucide-react'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
+import { trackEvent } from '../services/analytics'
 import {
   buildGalleryFormState,
   buildGalleryPayload,
@@ -387,6 +388,12 @@ export default function GallerySettingsModal({
         if (payload.settings?.privacy?.passwordProtected && privacyPassword) {
           await galleriesService.saveGalleryPassword(createdGalleryId, privacyPassword)
         }
+
+        trackEvent('gallery_created', {
+          category: payload.categoria || 'other',
+          password_protected: payload.settings?.privacy?.passwordProtected === true,
+          storage_duration: payload.storageDuration || 'unspecified',
+        })
 
         onCreated?.({
           id: createdGalleryId,

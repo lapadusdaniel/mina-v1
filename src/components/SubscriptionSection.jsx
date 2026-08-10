@@ -11,6 +11,7 @@ import {
 import BillingSettings from './BillingSettings';
 import BillingHistory from './BillingHistory';
 import './SubscriptionSection.css';
+import { trackEvent } from '../services/analytics'
 
 const {
   billing: billingService,
@@ -113,6 +114,11 @@ const SubscriptionSection = ({ user, userPlan: userPlanProp, storageLimit, mode 
       });
 
       if (url) {
+        trackEvent('begin_checkout', {
+          currency: 'RON',
+          plan_id: String(planId).replace(/_(monthly|yearly)$/, ''),
+          billing_cycle: String(planId).endsWith('_yearly') ? 'yearly' : 'monthly',
+        })
         window.location.assign(url);
       } else {
         setLoadingPlan(null);

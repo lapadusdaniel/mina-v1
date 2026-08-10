@@ -24,6 +24,7 @@ import Settings from '../pages/Settings'
 import SubscriptionSection from './SubscriptionSection'
 import SiteEditor from './SiteEditor'
 import LaunchChecklist from './LaunchChecklist'
+import { trackEvent } from '../services/analytics'
 import MinaHelpAssistant from './MinaHelpAssistant'
 import { getGalleryPublicUrl } from '../utils/publicLinks'
 import { resolveActiveFolderId } from '../modules/galleries/folder-visibility'
@@ -716,6 +717,13 @@ function Dashboard({ user, onLogout, initialTab, theme, setTheme }) {
         storageBytes: currentBytes + uploadedStorageBytes,
         coverKey: galerieActiva?.coverKey || firstUploadedOriginal || '',
       })
+      if (uploadedStorageBytes > 0 && !cancelUploadRef.current) {
+        trackEvent('photos_uploaded', {
+          photo_count: files.length,
+          total_megabytes: Math.round((uploadedStorageBytes / (1024 * 1024)) * 10) / 10,
+          folder_type: uploadFolderId === DEFAULT_FOLDER_ID ? 'default' : 'custom',
+        })
+      }
       await handleDeschideGalerie(galerieActiva)
       if (uploadFolderId) {
         setActiveFolderId(uploadFolderId)

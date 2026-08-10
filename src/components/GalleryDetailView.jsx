@@ -8,6 +8,7 @@ import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { functions as firebaseFunctions } from '../firebase'
 import { getGalleryPublicPath, getGalleryPublicUrl } from '../utils/publicLinks'
 import { shouldShowDefaultFolderTab } from '../modules/galleries/folder-visibility'
+import { trackEvent } from '../services/analytics'
 
 const { media: mediaService } = getAppServices()
 const sendGalleryLinkCallable = httpsCallable(firebaseFunctions, 'sendGalleryLink')
@@ -772,6 +773,7 @@ export default function GalleryDetailView({
         throw new Error('Clipboard API unavailable')
       }
       setCopyLinkSuccess(true)
+      trackEvent('share', { method: 'copy_link', content_type: 'gallery' })
       if (copyLinkTimeoutRef.current) {
         window.clearTimeout(copyLinkTimeoutRef.current)
       }
@@ -796,12 +798,14 @@ export default function GalleryDetailView({
       : `Bună! Găsești galeria ta foto aici: ${shareUrl}`
 
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+    trackEvent('share', { method: 'whatsapp', content_type: 'gallery' })
   }
 
   const handleShareMessenger = () => {
     const shareUrl = ensureGalleryShareUrl()
     if (!shareUrl) return
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`, '_blank', 'noopener,noreferrer')
+    trackEvent('share', { method: 'messenger', content_type: 'gallery' })
   }
 
   const handleSendGalleryLink = async () => {
@@ -830,6 +834,7 @@ export default function GalleryDetailView({
         clientName,
         galleryPassword: isPasswordProtected ? galleryPassword : '',
       })
+      trackEvent('share', { method: 'email', content_type: 'gallery' })
       setSendLinkOpen(false)
       setSendLinkEmail('')
       setSendLinkName('')

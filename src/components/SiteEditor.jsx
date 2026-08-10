@@ -13,6 +13,7 @@ import {
 import PhotographerSite from './PhotographerSite'
 import { getAppServices } from '../core/bootstrap/appBootstrap'
 import { auth } from '../firebase'
+import { trackEvent } from '../services/analytics'
 
 const { sites: sitesService, media: mediaService } = getAppServices()
 
@@ -546,6 +547,7 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
   // ── Save ──
   const handleSave = async () => {
     if (!user?.uid) return
+    const wasPublished = Boolean(slug)
     setSaving(true)
     try {
       const sl = generateSlug(brandName)
@@ -563,6 +565,7 @@ export default function SiteEditor({ user, userPlan = 'Free', planLoading = fals
         updatedAt: new Date(),
       })
       setSlug(saved?.slug || sl)
+      trackEvent(wasPublished ? 'site_updated' : 'site_published')
     } catch (err) {
       console.error(err)
       alert('Eroare la salvare.')

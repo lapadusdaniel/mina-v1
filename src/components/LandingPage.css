@@ -1283,6 +1283,19 @@
   align-items: center;
 }
 
+.fl-footer-cookie-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.fl-footer-cookie-btn:hover {
+  color: var(--black);
+}
+
 .fl-footer-legal-links span {
   color: var(--gray-4);
   font-weight: 300;
