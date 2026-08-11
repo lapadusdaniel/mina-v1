@@ -17,6 +17,10 @@ import {
   visibleCountForFolder,
 } from '../modules/galleries/client-folder-flow';
 import { centerTabHorizontally } from '../modules/galleries/horizontal-tab-scroll';
+import {
+  getLightboxWindowKeys,
+  partitionLightboxUrls,
+} from '../modules/galleries/lightbox-memory-window';
 
 const VALID_THEMES = ['minimal'];
 const BATCH_SIZE = 24;
@@ -24,7 +28,7 @@ const INITIAL_VISIBLE = 24;
 const SELECTION_NAME_STORAGE_KEY = 'mina_nume_client';
 const LEGACY_SELECTION_NAME_STORAGE_KEY = 'fotolio_nume_client';
 const GALLERY_UNLOCK_STORAGE_KEY_PREFIX = 'mina_gallery_unlock_';
-const LIGHTBOX_PRELOAD_OFFSETS_DESKTOP = [0, -1, 1, -2, 2];
+const LIGHTBOX_PRELOAD_OFFSETS_DESKTOP = [0, -1, 1];
 const LIGHTBOX_PRELOAD_OFFSETS_MOBILE = [0, -1, 1];
 const MAX_URL_CACHE_ENTRIES = 400;
 const DEFAULT_FOLDER_ID = 'default';
@@ -593,6 +597,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const newFavoriteListHandledRef = useRef(false);
   const clientFolderSectionRefs = useRef(new Map());
   const clientFolderTabRefs = useRef(new Map());
+  const lightboxMediumUrlsRef = useRef({});
+  const lightboxOwnedMediumUrlsRef = useRef(new Map());
+  const lightboxMediumRequestsRef = useRef(new Map());
+  const lightboxKeepKeysRef = useRef(new Set());
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
   const effectiveActiveClientFolderId = useMemo(() => {
@@ -752,28 +760,76 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     ));
   }, [canEditSelection, resetNewFavoriteListFlow]);
 
+  const releaseOwnedLightboxUrl = useCallback((photoKey, url) => {
+    const ownedUrl = lightboxOwnedMediumUrlsRef.current.get(photoKey);
+    if (!ownedUrl || ownedUrl !== url) return;
+    lightboxOwnedMediumUrlsRef.current.delete(photoKey);
+    if (isBlobUrl(url)) URL.revokeObjectURL(url);
+  }, []);
+
+  const setLightboxMemoryWindow = useCallback((centerIndex) => {
+    const keepKeys = getLightboxWindowKeys(pozeAfisate, centerIndex, 1);
+    lightboxKeepKeysRef.current = keepKeys;
+
+    const { kept, removed } = partitionLightboxUrls(lightboxMediumUrlsRef.current, keepKeys);
+    removed.forEach(([photoKey, url]) => releaseOwnedLightboxUrl(photoKey, url));
+    lightboxMediumUrlsRef.current = kept;
+    setLightboxMediumUrls(kept);
+  }, [pozeAfisate, releaseOwnedLightboxUrl]);
+
+  const clearLightboxMemory = useCallback(() => {
+    lightboxKeepKeysRef.current = new Set();
+    for (const [photoKey, url] of lightboxOwnedMediumUrlsRef.current.entries()) {
+      releaseOwnedLightboxUrl(photoKey, url);
+    }
+    lightboxMediumUrlsRef.current = {};
+    setLightboxMediumUrls({});
+  }, [releaseOwnedLightboxUrl]);
+
   const closeLightbox = useCallback(() => {
+    clearLightboxMemory();
     setSelectedImage(null);
     setLightboxDownloading(false);
-  }, []);
+  }, [clearLightboxMemory]);
 
   const preloadMediumForLightbox = useCallback(async (photoKey) => {
     if (!photoKey) return null;
 
+    const alreadyResolved = lightboxMediumUrlsRef.current[photoKey];
+    if (alreadyResolved) return alreadyResolved;
+
     const cached = getCachedUrl(`medium:${photoKey}`);
     if (cached) {
-      setLightboxMediumUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: cached }));
+      if (!lightboxKeepKeysRef.current.has(photoKey)) return cached;
+      const next = { ...lightboxMediumUrlsRef.current, [photoKey]: cached };
+      lightboxMediumUrlsRef.current = next;
+      setLightboxMediumUrls(next);
       return cached;
     }
 
-    try {
-      const medium = await mediaService.getPhotoUrl(photoKey, 'medium');
-      cacheUrl(`medium:${photoKey}`, medium);
-      setLightboxMediumUrls((prev) => (prev[photoKey] ? prev : { ...prev, [photoKey]: medium }));
-      return medium;
-    } catch (_) {
-      return null;
-    }
+    const pending = lightboxMediumRequestsRef.current.get(photoKey);
+    if (pending) return pending;
+
+    const request = mediaService.getPhotoUrl(photoKey, 'medium')
+      .then((medium) => {
+        if (!lightboxKeepKeysRef.current.has(photoKey)) {
+          if (isBlobUrl(medium)) URL.revokeObjectURL(medium);
+          return null;
+        }
+
+        lightboxOwnedMediumUrlsRef.current.set(photoKey, medium);
+        const next = { ...lightboxMediumUrlsRef.current, [photoKey]: medium };
+        lightboxMediumUrlsRef.current = next;
+        setLightboxMediumUrls(next);
+        return medium;
+      })
+      .catch(() => null)
+      .finally(() => {
+        lightboxMediumRequestsRef.current.delete(photoKey);
+      });
+
+    lightboxMediumRequestsRef.current.set(photoKey, request);
+    return request;
   }, []);
   const seedLightboxSources = useCallback((centerIndex) => {
     if (!Number.isInteger(centerIndex) || centerIndex < 0 || !pozeAfisate.length) return;
@@ -1193,7 +1249,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   }, [galerie?.nume]);
 
   useEffect(() => {
+    const ownedMediumUrls = lightboxOwnedMediumUrlsRef.current;
     return () => {
+      for (const url of ownedMediumUrls.values()) {
+        if (isBlobUrl(url)) URL.revokeObjectURL(url);
+      }
+      ownedMediumUrls.clear();
+      lightboxMediumUrlsRef.current = {};
+      lightboxKeepKeysRef.current = new Set();
       clearAllCachedUrls();
     };
   }, []);
@@ -1217,6 +1280,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
   useEffect(() => {
     if (!lightboxOpen || !pozeAfisate.length) return;
+    setLightboxMemoryWindow(lightboxIndex);
     seedLightboxSources(lightboxIndex);
     const preloadOffsets = isMobile ? LIGHTBOX_PRELOAD_OFFSETS_MOBILE : LIGHTBOX_PRELOAD_OFFSETS_DESKTOP;
     const indices = preloadOffsets
@@ -1226,7 +1290,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       const key = pozeAfisate[i].key;
       void preloadMediumForLightbox(key);
     });
-  }, [isMobile, lightboxOpen, lightboxIndex, pozeAfisate, preloadMediumForLightbox, seedLightboxSources]);
+  }, [isMobile, lightboxOpen, lightboxIndex, pozeAfisate, preloadMediumForLightbox, seedLightboxSources, setLightboxMemoryWindow]);
 
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -2065,6 +2129,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                           onClick={() => {
                             const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
                             if (nextIndex < 0) return;
+                            setLightboxMemoryWindow(nextIndex);
                             setSelectedImage(nextIndex);
                             setLightboxDownloading(false);
                             seedLightboxSources(nextIndex);
@@ -2114,6 +2179,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                 index={lightboxIndex}
                 on={{
                   view: ({ index }) => {
+                    setLightboxMemoryWindow(index);
                     seedLightboxSources(index);
                     setSelectedImage(index);
                   },
@@ -2135,7 +2201,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                   },
                   container: { position: 'fixed', inset: 0, backgroundColor: '#000' },
                 }}
-                carousel={{ finite: false }}
+                carousel={{ finite: false, preload: 1 }}
                 render={{
                   buttonPrev: isMobile ? () => null : undefined,
                   buttonNext: isMobile ? () => null : undefined,
