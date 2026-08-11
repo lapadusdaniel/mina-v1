@@ -1093,14 +1093,6 @@ export default function GalleryDetailView({
           </button>
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="dashboard-settings-btn"
-            title="Setări galerie"
-            aria-label="Setări galerie"
-          >
-            <Settings size={16} />
-          </button>
-          <button
             onClick={() => {
               if (onPreview) onPreview(galerie)
               else {
@@ -1108,11 +1100,20 @@ export default function GalleryDetailView({
                 if (previewPath) window.open(previewPath, '_blank')
               }
             }}
-            className="dashboard-settings-btn"
-            title="Preview client"
-            aria-label="Preview client"
+            className="dashboard-preview-btn dashboard-preview-btn--client"
+            title="Deschide galeria așa cum o vede clientul"
           >
-            <Eye size={16} />
+            <Eye size={15} />
+            Preview client
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="dashboard-settings-btn"
+            title="Setări galerie"
+            aria-label="Setări galerie"
+          >
+            <Settings size={16} />
           </button>
         </div>
       </div>

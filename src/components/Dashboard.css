@@ -1686,6 +1686,10 @@
 }
 
 .dashboard-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   font-family: 'DM Sans', sans-serif;
   font-size: 13px;
   font-weight: 400;
@@ -1697,6 +1701,10 @@
   cursor: pointer;
   transition: background 0.15s, box-shadow 0.15s;
   letter-spacing: 0.01em;
+}
+
+.dashboard-preview-btn--client {
+  background: #f7f7f7;
 }
 
 .dashboard-preview-btn:hover {

@@ -11,6 +11,11 @@ import { functions } from '../firebase';
 import Masonry from 'react-masonry-css';
 import { CheckCircle2, ChevronDown, ChevronUp, Download, Heart, Instagram, Loader2, LockKeyhole, MessageCircle, Send, Share2 } from 'lucide-react';
 import { trackEvent } from '../services/analytics';
+import {
+  buildVisibleFolderSections,
+  orderPhotosByFolders,
+  visibleCountForFolder,
+} from '../modules/galleries/client-folder-flow';
 
 const VALID_THEMES = ['minimal'];
 const BATCH_SIZE = 24;
@@ -585,6 +590,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const reviewSectionRef = useRef(null);
   const newFavoriteListInputRef = useRef(null);
   const newFavoriteListHandledRef = useRef(false);
+  const clientFolderSectionRefs = useRef(new Map());
+  const clientFolderTabRefs = useRef(new Map());
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
   const effectiveActiveClientFolderId = useMemo(() => {
@@ -593,34 +600,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       ? activeClientFolderId
       : clientFolders[0].id;
   }, [activeClientFolderId, clientFolders]);
-  const pozeFiltratePeFolder = useMemo(() => {
-    if (!clientFolders.length || effectiveActiveClientFolderId === 'all') return poze;
-
-    const selectedFolderIndex = clientFolders.findIndex((folder) => folder.id === effectiveActiveClientFolderId);
-    const visibleFolders = selectedFolderIndex >= 0
-      ? clientFolders.slice(selectedFolderIndex)
-      : clientFolders;
-    const visibleFolderIds = new Set(visibleFolders.map((folder) => folder.id));
-    const validFolderIds = new Set(clientFolders.map((folder) => folder.id));
-    const photosByFolder = new Map(visibleFolders.map((folder) => [folder.id, []]));
-    const orphanPhotos = [];
-
-    poze.forEach((photo) => {
-      if (visibleFolderIds.has(photo.folderId)) {
-        photosByFolder.get(photo.folderId)?.push(photo);
-        return;
-      }
-
-      if (!photo.folderId || !validFolderIds.has(photo.folderId)) {
-        orphanPhotos.push(photo);
-      }
-    });
-
-    return [
-      ...visibleFolders.flatMap((folder) => photosByFolder.get(folder.id) || []),
-      ...orphanPhotos,
-    ];
-  }, [clientFolders, effectiveActiveClientFolderId, poze]);
+  const pozeOrdonatePeFoldere = useMemo(() => {
+    return orderPhotosByFolders(poze, clientFolders);
+  }, [clientFolders, poze]);
 
   const normalizedSelectionLists = useMemo(
     () => normalizeSelectionLists(selectionLists, galerie?.favorite || []),
@@ -644,11 +626,31 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const pozeAfisate = useMemo(
     () => (galerie
       ? (doarFavorite
-          ? pozeFiltratePeFolder.filter((p) => activeFavoriteKeySet.has(p.key))
-          : pozeFiltratePeFolder)
+          ? pozeOrdonatePeFoldere.filter((p) => activeFavoriteKeySet.has(p.key))
+          : pozeOrdonatePeFoldere)
       : []),
-    [activeFavoriteKeySet, galerie, doarFavorite, pozeFiltratePeFolder]
+    [activeFavoriteKeySet, galerie, doarFavorite, pozeOrdonatePeFoldere]
   );
+
+  const handleClientFolderTabClick = useCallback((folderId) => {
+    setActiveClientFolderId(folderId);
+    setVisibleCount((current) => visibleCountForFolder({
+      photos: pozeAfisate,
+      folders: clientFolders,
+      folderId,
+      current,
+      batchSize: BATCH_SIZE,
+    }));
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        clientFolderSectionRefs.current.get(folderId)?.scrollIntoView({
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+          block: 'start',
+        });
+      });
+    });
+  }, [clientFolders, pozeAfisate]);
   const gallerySettings = galerie?.settings || {};
   const mainSettings = gallerySettings.main || {};
   const favoritesSettings = gallerySettings.favorites || {};
@@ -1076,7 +1078,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   useEffect(() => {
     setVisibleCount(INITIAL_VISIBLE);
     setActiveTouchActionKey(null);
-  }, [doarFavorite, activeClientFolderId]);
+  }, [doarFavorite]);
 
   useEffect(() => {
     if (!normalizedSelectionLists.some((list) => list.id === activeSelectionListId)) {
@@ -1131,6 +1133,52 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
       setActiveClientFolderId(clientFolders[0]?.id || 'all');
     }
   }, [activeClientFolderId, clientFolders]);
+
+  useEffect(() => {
+    if (!clientFolders.length || coverVisible) return undefined;
+
+    let frameId = null;
+    const updateActiveFolderFromScroll = () => {
+      frameId = null;
+      const activationLine = 76;
+      let nextFolderId = clientFolders[0]?.id || 'all';
+
+      for (const folder of clientFolders) {
+        const section = clientFolderSectionRefs.current.get(folder.id);
+        if (!section) continue;
+        if (section.getBoundingClientRect().top <= activationLine) {
+          nextFolderId = folder.id;
+        } else {
+          break;
+        }
+      }
+
+      setActiveClientFolderId((current) => (current === nextFolderId ? current : nextFolderId));
+    };
+
+    const handleScroll = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(updateActiveFolderFromScroll);
+    };
+
+    updateActiveFolderFromScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
+  }, [clientFolders, coverVisible, doarFavorite, visibleCount]);
+
+  useEffect(() => {
+    if (activeClientFolderId === 'all') return;
+    clientFolderTabRefs.current.get(activeClientFolderId)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+  }, [activeClientFolderId]);
 
   useEffect(() => {
     const coverKey = poze[0]?.key;
@@ -1674,6 +1722,12 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     ? Math.max(0, Math.min(100, Number(coverFocalPoint.x))) + '% ' + Math.max(0, Math.min(100, Number(coverFocalPoint.y))) + '%'
     : 'center';
   const pozeVizibile = pozeAfisate.slice(0, visibleCount);
+  const clientGallerySections = buildVisibleFolderSections({
+    folders: clientFolders,
+    allPhotos: pozeAfisate,
+    visiblePhotos: pozeVizibile,
+    visibleCount,
+  });
   const favCount = allFavoriteKeys.length;
   const selectionFinalizedDate = selectionFinalizedAt?.toDate?.() || (selectionFinalizedAt ? new Date(selectionFinalizedAt) : null);
   const selectionFinalizedLabel = selectionFinalizedDate && !Number.isNaN(selectionFinalizedDate.getTime())
@@ -1767,9 +1821,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
               {clientFolders.map((folder) => (
                 <button
                   key={folder.id}
+                  ref={(node) => {
+                    if (node) clientFolderTabRefs.current.set(folder.id, node);
+                    else clientFolderTabRefs.current.delete(folder.id);
+                  }}
                   type="button"
                   className={`cg-tab-all ${effectiveActiveClientFolderId === folder.id ? 'is-active' : ''}`}
-                  onClick={() => setActiveClientFolderId(folder.id)}
+                  onClick={() => handleClientFolderTabClick(folder.id)}
                   aria-pressed={effectiveActiveClientFolderId === folder.id}
                 >
                   {folder.name}
@@ -1940,62 +1998,87 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
             </div>
           ) : (
             <>
-              <Masonry
-                breakpointCols={
-                  gridLayout === '3col'
-                    ? { default: 3, 900: 2, 640: 1 }
-                    : gridLayout === '4col'
-                      ? { default: 4, 1200: 3, 900: 2, 640: 1 }
-                      : { default: 4, 1320: 3, 900: 2, 640: 2, 340: 1 }
-                }
-                className="cg-masonry"
-                columnClassName="cg-masonry-col"
-              >
-                {pozeVizibile.map((poza) => (
-                  <LazyGalleryImage
-                    key={poza.key}
-                    pozaKey={poza.key}
-                    quality={gridLayout === '4col' ? 'thumb' : 'medium'}
-                    isFav={allFavoriteKeySet.has(poza.key)}
-                    onFavoriteClick={handleFavoriteClick}
-                    accentColor={profile.accentColor}
-                    allowPhotoSelection={canEditSelection}
-                    allowOriginalDownloads={allowOriginalDownloads}
-                    watermarkEnabled={watermarkEnabled}
-                    watermarkLabel={watermarkLabel}
-                    isTouchLayout={isMobile}
-                    touchActionsOpen={activeTouchActionKey === poza.key}
-                    onTouchReveal={setActiveTouchActionKey}
-                    favoritePicker={favoriteMenuState?.source === 'grid' && favoriteMenuState?.photoKey === poza.key ? {
-                      isOpen: true,
-                      lists: normalizedSelectionLists,
-                      activeListId: activeSelectionList?.id || DEFAULT_SELECTION_LIST_ID,
-                      newListName: newFavoriteListName,
-                      creatingNewList: creatingFavoriteList,
-                      inputRef: newFavoriteListInputRef,
-                      onListClick: (listId) => executeFavoriteToggle(poza.key, numeSelectie, {
-                        clientEmail: emailInputValue,
-                        clientPhone: phoneInputValue,
-                        clientAdditionalInfo: additionalInfoInputValue,
-                        clientComment: commentInputValue,
-                      }, listId),
-                      onCreateNewListClick: handleStartFavoriteListCreation,
-                      onNewListNameChange: setNewFavoriteListName,
-                      onNewListConfirm: () => handleConfirmFavoriteListCreation(poza.key),
-                      onNewListBlur: () => handleBlurFavoriteListCreation(poza.key),
-                      onNewListCancel: handleCancelFavoriteListCreation,
-                    } : null}
-                    onClick={() => {
-                      const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
-                      if (nextIndex < 0) return;
-                      setSelectedImage(nextIndex >= 0 ? nextIndex : 0);
-                      setLightboxDownloading(false);
-                      seedLightboxSources(nextIndex);
-                      void preloadMediumForLightbox(poza.key);
-                    }}
-                  />
-                ))}
-              </Masonry>
+              {clientGallerySections.map((section) => (
+                <section
+                  key={section.id}
+                  ref={(node) => {
+                    if (node) clientFolderSectionRefs.current.set(section.id, node);
+                    else clientFolderSectionRefs.current.delete(section.id);
+                  }}
+                  className="cg-folder-section"
+                  data-folder-id={section.id}
+                >
+                  {section.id !== 'all' && (
+                    <div className="cg-folder-section-header">
+                      <h2>{section.name}</h2>
+                      <span>{section.totalCount} {section.totalCount === 1 ? 'fotografie' : 'fotografii'}</span>
+                    </div>
+                  )}
+
+                  {section.photos.length > 0 ? (
+                    <Masonry
+                      breakpointCols={
+                        gridLayout === '3col'
+                          ? { default: 3, 900: 2, 640: 1 }
+                          : gridLayout === '4col'
+                            ? { default: 4, 1200: 3, 900: 2, 640: 1 }
+                            : { default: 4, 1320: 3, 900: 2, 640: 2, 340: 1 }
+                      }
+                      className="cg-masonry"
+                      columnClassName="cg-masonry-col"
+                    >
+                      {section.photos.map((poza) => (
+                        <LazyGalleryImage
+                          key={poza.key}
+                          pozaKey={poza.key}
+                          quality={gridLayout === '4col' ? 'thumb' : 'medium'}
+                          isFav={allFavoriteKeySet.has(poza.key)}
+                          onFavoriteClick={handleFavoriteClick}
+                          accentColor={profile.accentColor}
+                          allowPhotoSelection={canEditSelection}
+                          allowOriginalDownloads={allowOriginalDownloads}
+                          watermarkEnabled={watermarkEnabled}
+                          watermarkLabel={watermarkLabel}
+                          isTouchLayout={isMobile}
+                          touchActionsOpen={activeTouchActionKey === poza.key}
+                          onTouchReveal={setActiveTouchActionKey}
+                          favoritePicker={favoriteMenuState?.source === 'grid' && favoriteMenuState?.photoKey === poza.key ? {
+                            isOpen: true,
+                            lists: normalizedSelectionLists,
+                            activeListId: activeSelectionList?.id || DEFAULT_SELECTION_LIST_ID,
+                            newListName: newFavoriteListName,
+                            creatingNewList: creatingFavoriteList,
+                            inputRef: newFavoriteListInputRef,
+                            onListClick: (listId) => executeFavoriteToggle(poza.key, numeSelectie, {
+                              clientEmail: emailInputValue,
+                              clientPhone: phoneInputValue,
+                              clientAdditionalInfo: additionalInfoInputValue,
+                              clientComment: commentInputValue,
+                            }, listId),
+                            onCreateNewListClick: handleStartFavoriteListCreation,
+                            onNewListNameChange: setNewFavoriteListName,
+                            onNewListConfirm: () => handleConfirmFavoriteListCreation(poza.key),
+                            onNewListBlur: () => handleBlurFavoriteListCreation(poza.key),
+                            onNewListCancel: handleCancelFavoriteListCreation,
+                          } : null}
+                          onClick={() => {
+                            const nextIndex = pozeAfisate.findIndex((p) => p.key === poza.key);
+                            if (nextIndex < 0) return;
+                            setSelectedImage(nextIndex);
+                            setLightboxDownloading(false);
+                            seedLightboxSources(nextIndex);
+                            void preloadMediumForLightbox(poza.key);
+                          }}
+                        />
+                      ))}
+                    </Masonry>
+                  ) : section.totalCount === 0 ? (
+                    <p className="cg-folder-section-empty">
+                      {doarFavorite ? 'Nicio fotografie din acest folder nu este în lista curentă.' : 'Acest folder nu are fotografii încă.'}
+                    </p>
+                  ) : null}
+                </section>
+              ))}
               {visibleCount < pozeAfisate.length && (
                 <div ref={loadMoreRef} style={{ height: 1, marginTop: 20 }} aria-hidden="true" />
               )}
@@ -2910,6 +2993,44 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
         /* ── Gallery ── */
         .cg-gallery { padding: 48px 40px 0; }
+        .cg-folder-section {
+          scroll-margin-top: 68px;
+        }
+        .cg-folder-section + .cg-folder-section {
+          margin-top: 72px;
+        }
+        .cg-folder-section-header {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 18px;
+          margin: 0 0 20px;
+          padding-bottom: 12px;
+          border-bottom: 1px solid rgba(0,0,0,0.08);
+        }
+        .cg-folder-section-header h2 {
+          margin: 0;
+          font-family: 'Cormorant Garamond', Georgia, serif;
+          font-size: clamp(25px, 2.3vw, 34px);
+          line-height: 1;
+          font-weight: 500;
+          letter-spacing: -0.015em;
+          color: #1d1d1f;
+        }
+        .cg-folder-section-header span {
+          flex: 0 0 auto;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 11px;
+          font-weight: 400;
+          color: #99989b;
+        }
+        .cg-folder-section-empty {
+          margin: 0;
+          padding: 22px 0 8px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 13px;
+          color: #a1a1a6;
+        }
         .cg-empty {
           text-align: center;
           padding: 80px 24px;
@@ -3452,6 +3573,14 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-favorite-list-tab { padding: 7px 10px; }
           .cg-favorite-list-menu-toggle { width: 26px; height: 26px; }
           .cg-gallery { padding: 20px 8px 0; }
+          .cg-folder-section { scroll-margin-top: 62px; }
+          .cg-folder-section + .cg-folder-section { margin-top: 48px; }
+          .cg-folder-section-header {
+            margin: 0 4px 12px;
+            padding-bottom: 9px;
+          }
+          .cg-folder-section-header h2 { font-size: 24px; }
+          .cg-folder-section-header span { font-size: 10px; }
           .cg-masonry { margin-left: -6px; }
           .cg-masonry-col { padding-left: 6px; }
           .cg-masonry-col > div { margin-bottom: 6px; }
