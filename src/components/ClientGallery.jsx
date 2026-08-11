@@ -16,6 +16,7 @@ import {
   orderPhotosByFolders,
   visibleCountForFolder,
 } from '../modules/galleries/client-folder-flow';
+import { centerTabHorizontally } from '../modules/galleries/horizontal-tab-scroll';
 
 const VALID_THEMES = ['minimal'];
 const BATCH_SIZE = 24;
@@ -1173,11 +1174,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
   useEffect(() => {
     if (activeClientFolderId === 'all') return;
-    clientFolderTabRefs.current.get(activeClientFolderId)?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-      inline: 'center',
-    });
+    const tab = clientFolderTabRefs.current.get(activeClientFolderId);
+    const scrollContainer = tab?.closest('.cg-toolbar-left');
+    if (!tab || !scrollContainer) return;
+
+    centerTabHorizontally(tab, scrollContainer);
   }, [activeClientFolderId]);
 
   useEffect(() => {
