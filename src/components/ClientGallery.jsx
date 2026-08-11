@@ -184,6 +184,9 @@ function LazyGalleryImage({
   watermarkLabel = 'Mina',
   quality = 'thumb',
   favoritePicker = null,
+  isTouchLayout = false,
+  touchActionsOpen = false,
+  onTouchReveal,
 }) {
   const [url, setUrl] = useState(() => getCachedUrl(`${quality}:${pozaKey}`) || null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -261,6 +264,18 @@ function LazyGalleryImage({
     }
   }, [pozaKey, isDownloading]);
 
+  const handleImageClick = useCallback((event) => {
+    if (isTouchLayout && !touchActionsOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      onTouchReveal?.(pozaKey);
+      return;
+    }
+
+    onTouchReveal?.(null);
+    onClick?.();
+  }, [isTouchLayout, onClick, onTouchReveal, pozaKey, touchActionsOpen]);
+
   return (
     <div className="cg-item" style={naturalRatio ? { aspectRatio: naturalRatio } : undefined}>
       <div className="cg-item-inner">
@@ -271,7 +286,7 @@ function LazyGalleryImage({
             alt=""
             className="cg-item-img"
             loading="lazy"
-            onClick={onClick}
+            onClick={handleImageClick}
             onLoad={handleImgLoad}
             onError={handleThumbError}
           />
@@ -283,7 +298,7 @@ function LazyGalleryImage({
             {watermarkLabel}
           </div>
         )}
-        <div className={`cg-item-overlay ${isFav ? 'cg-item-overlay--selected' : ''} ${favoritePicker?.isOpen ? 'cg-item-overlay--open' : ''}`}>
+        <div className={`cg-item-overlay ${isFav ? 'cg-item-overlay--selected' : ''} ${favoritePicker?.isOpen ? 'cg-item-overlay--open' : ''} ${touchActionsOpen ? 'cg-item-overlay--touch-open' : ''}`}>
           <div className="cg-item-actions">
             {allowPhotoSelection && (
               <button
@@ -540,6 +555,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const [favoriteListMenuId, setFavoriteListMenuId] = useState(null);
   const [editingFavoriteListId, setEditingFavoriteListId] = useState(null);
   const [editingFavoriteListName, setEditingFavoriteListName] = useState('');
+  const [activeTouchActionKey, setActiveTouchActionKey] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [lightboxDownloading, setLightboxDownloading] = useState(false);
   const [countPop, setCountPop] = useState(false);
@@ -1053,7 +1069,10 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     return () => { cancelled = true; };
   }, [applySelectionListsLocally, galerie?.id, numeSelectie]);
 
-  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [doarFavorite, activeClientFolderId]);
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE);
+    setActiveTouchActionKey(null);
+  }, [doarFavorite, activeClientFolderId]);
 
   useEffect(() => {
     if (!normalizedSelectionLists.some((list) => list.id === activeSelectionListId)) {
@@ -1906,7 +1925,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         )}
 
         {/* Gallery Grid */}
-        <div className="cg-gallery">
+        <div className="cg-gallery" onClick={() => setActiveTouchActionKey(null)}>
           {pozeAfisate.length === 0 ? (
             <div className="cg-empty">
               {doarFavorite
@@ -1940,6 +1959,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
                     allowOriginalDownloads={allowOriginalDownloads}
                     watermarkEnabled={watermarkEnabled}
                     watermarkLabel={watermarkLabel}
+                    isTouchLayout={isMobile}
+                    touchActionsOpen={activeTouchActionKey === poza.key}
+                    onTouchReveal={setActiveTouchActionKey}
                     favoritePicker={favoriteMenuState?.source === 'grid' && favoriteMenuState?.photoKey === poza.key ? {
                       isOpen: true,
                       lists: normalizedSelectionLists,
@@ -2942,8 +2964,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         }
         .cg-item:hover .cg-item-overlay,
         .cg-item:focus-within .cg-item-overlay,
-        .cg-item-overlay--selected,
-        .cg-item-overlay--open { opacity: 1; }
+        .cg-item-overlay--open,
+        .cg-item-overlay--touch-open { opacity: 1; }
         .cg-item-overlay--selected:not(.cg-item-overlay--open) {
           background: transparent;
         }
@@ -2960,7 +2982,11 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           opacity: 1;
           pointer-events: auto;
         }
-        .cg-item-actions { display: flex; gap: 8px; pointer-events: auto; }
+        .cg-item-actions { display: flex; gap: 8px; pointer-events: none; }
+        .cg-item:hover .cg-item-actions,
+        .cg-item:focus-within .cg-item-actions,
+        .cg-item-overlay--open .cg-item-actions,
+        .cg-item-overlay--touch-open .cg-item-actions { pointer-events: auto; }
         .cg-action-btn {
           display: flex;
           align-items: center;
@@ -3399,9 +3425,13 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-item { border-radius: 4px; }
           .cg-item-overlay,
           .cg-item-overlay--selected:not(.cg-item-overlay--open) {
-            opacity: 1;
+            opacity: 0;
             padding: 8px;
             background: transparent;
+          }
+          .cg-item-overlay--touch-open,
+          .cg-item-overlay--open {
+            opacity: 1;
           }
           .cg-item-overlay--selected:not(.cg-item-overlay--open) .cg-action-btn:not(.cg-action-btn--favorite) {
             opacity: 0.42;
@@ -3410,7 +3440,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           .cg-action-btn {
             width: 32px;
             height: 32px;
-            opacity: 0.42;
+            opacity: 0.88;
             background: rgba(20,20,22,0.34);
             border-color: rgba(255,255,255,0.18);
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
