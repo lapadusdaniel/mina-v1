@@ -2994,16 +2994,17 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           width: 40px;
           height: 40px;
           border-radius: 50%;
-          background: rgba(255,255,255,0.18);
+          background: rgba(10,10,12,0.72);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
-          border: 1px solid rgba(255,255,255,0.3);
+          border: 1px solid rgba(255,255,255,0.55);
+          box-shadow: 0 4px 14px rgba(0,0,0,0.28);
           cursor: pointer;
           color: rgba(255,255,255,0.9);
           transition: background 0.15s, transform 0.15s, opacity 0.2s;
           -webkit-tap-highlight-color: transparent;
         }
-        .cg-action-btn:hover { background: rgba(255,255,255,0.28); transform: scale(1.06); }
+        .cg-action-btn:hover { background: rgba(5,5,7,0.9); transform: scale(1.06); }
         .cg-action-btn--active { color: #b8965a !important; }
         .cg-fav-picker {
           width: min(210px, calc(100% - 20px));
@@ -3441,9 +3442,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
             width: 32px;
             height: 32px;
             opacity: 0.88;
-            background: rgba(20,20,22,0.34);
-            border-color: rgba(255,255,255,0.18);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            background: rgba(10,10,12,0.68);
+            border-color: rgba(255,255,255,0.48);
+            box-shadow: 0 3px 12px rgba(0,0,0,0.24);
           }
           .cg-action-btn svg { width: 16px; height: 16px; }
           .cg-action-btn--active { opacity: 1; background: rgba(20,20,22,0.58); }
