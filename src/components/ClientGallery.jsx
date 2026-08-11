@@ -192,12 +192,14 @@ function LazyGalleryImage({
   const [isDownloading, setIsDownloading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [naturalRatio, setNaturalRatio] = useState(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   const imgRef = useRef(null);
 
   // Reset when quality changes (e.g. user switches grid mode while component stays mounted).
   useEffect(() => {
     setUrl(getCachedUrl(`${quality}:${pozaKey}`) || null);
     setNaturalRatio(null);
+    setIsLoaded(false);
     setRetryCount(0);
   }, [quality, pozaKey]);
 
@@ -207,6 +209,7 @@ function LazyGalleryImage({
     const img = imgRef.current;
     if (img && img.complete && img.naturalWidth > 0) {
       setNaturalRatio(`${img.naturalWidth} / ${img.naturalHeight}`);
+      setIsLoaded(true);
     }
   }, [url]);
 
@@ -239,6 +242,7 @@ function LazyGalleryImage({
   const handleImgLoad = useCallback((e) => {
     const { naturalWidth: w, naturalHeight: h } = e.target;
     if (w && h) setNaturalRatio(`${w} / ${h}`);
+    setIsLoaded(true);
   }, []);
 
   const handleThumbError = useCallback(() => {
@@ -248,6 +252,7 @@ function LazyGalleryImage({
     if (getCachedUrl(cKey) === url) {
       urlCache.delete(cKey);
     }
+    setIsLoaded(false);
     setRetryCount((prev) => prev + 1);
     setUrl(null);
   }, [pozaKey, quality, retryCount, url]);
@@ -277,22 +282,21 @@ function LazyGalleryImage({
   }, [isTouchLayout, onClick, onTouchReveal, pozaKey, touchActionsOpen]);
 
   return (
-    <div className="cg-item" style={naturalRatio ? { aspectRatio: naturalRatio } : undefined}>
-      <div className="cg-item-inner">
-        {url ? (
+    <div className="cg-item" style={{ aspectRatio: naturalRatio || '3 / 4' }}>
+      <div className={`cg-item-inner ${isLoaded ? 'cg-item-inner--loaded' : 'cg-item-inner--loading'}`}>
+        {url && (
           <img
             ref={imgRef}
             src={url}
             alt=""
-            className="cg-item-img"
+            className={`cg-item-img ${isLoaded ? 'cg-item-img--loaded' : ''}`}
             loading="lazy"
             onClick={handleImageClick}
             onLoad={handleImgLoad}
             onError={handleThumbError}
           />
-        ) : (
-          <div className="cg-item-placeholder" />
         )}
+        {!isLoaded && <div className="cg-item-placeholder" aria-hidden="true" />}
         {watermarkEnabled && (
           <div className="cg-watermark" aria-hidden="true">
             {watermarkLabel}
@@ -2920,18 +2924,46 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
 
         /* ── Item ── */
         .cg-item { cursor: pointer; overflow: hidden; border-radius: 6px; }
-        .cg-item-inner { position: relative; overflow: hidden; }
+        .cg-item-inner {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          background: #eceae7;
+        }
         .cg-item-img {
           width: 100%;
-          height: auto;
+          height: 100%;
+          object-fit: cover;
           display: block;
-          transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          opacity: 0;
+          transform: scale(1.012);
+          transition:
+            opacity 0.42s ease,
+            transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
         }
-        .cg-item:hover .cg-item-img { transform: scale(1.025); }
+        .cg-item-img--loaded { opacity: 1; transform: scale(1); }
+        .cg-item:hover .cg-item-img--loaded { transform: scale(1.018); }
         .cg-item-placeholder {
-          width: 100%;
-          aspect-ratio: 3 / 4;
-          background: linear-gradient(135deg, #eaeaef, #d8d8de);
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          overflow: hidden;
+          background: #eceae7;
+          pointer-events: none;
+        }
+        .cg-item-placeholder::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,0.52) 50%, transparent 80%);
+          animation: cg-gallery-shimmer 1.35s ease-in-out infinite;
+        }
+        @keyframes cg-gallery-shimmer { to { transform: translateX(100%); } }
+        @media (prefers-reduced-motion: reduce) {
+          .cg-item-img { transition: none; }
+          .cg-item-placeholder::after { animation: none; }
         }
         .cg-item-overlay {
           position: absolute;
