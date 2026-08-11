@@ -178,13 +178,14 @@ function resolvePath(key, type) {
   return str
 }
 
-async function fetchBlobFromWorker(path, errorLabel, accessToken = '') {
+async function fetchBlobFromWorker(path, errorLabel, accessToken = '', options = {}) {
   ensurePublicPath(path, errorLabel)
   const shareToken = accessToken || readShareTokenFromLocation()
   const performRead = async (token = '', idToken = '') => {
     return fetch(objectUrl(path, token), {
       method: 'GET',
       headers: authHeadersFromToken(idToken),
+      signal: options.signal,
     })
   }
 
@@ -217,10 +218,10 @@ export const getPozaUrl = async (fileName, type = 'original', accessToken = '') 
 }
 
 /** Returns the raw Blob for a poza (for Web Share API, etc.). */
-export const getPozaBlob = async (fileName, type = 'original', accessToken = '') => {
+export const getPozaBlob = async (fileName, type = 'original', accessToken = '', options = {}) => {
   if (!fileName) throw new Error('getPozaBlob: fileName este obligatoriu')
   const path = resolvePath(fileName, type)
-  return fetchBlobFromWorker(path, 'Get failed', accessToken)
+  return fetchBlobFromWorker(path, 'Get failed', accessToken, options)
 }
 
 /** Returns URL for full-resolution/original image. Use for high-res downloads. */

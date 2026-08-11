@@ -21,6 +21,12 @@ import {
   getLightboxWindowKeys,
   partitionLightboxUrls,
 } from '../modules/galleries/lightbox-memory-window';
+import {
+  createDownloadQueue,
+  downloadQueueSnapshot,
+  formatDownloadBytes,
+  processDownloadQueue,
+} from '../modules/galleries/download-queue';
 
 const VALID_THEMES = ['minimal'];
 const BATCH_SIZE = 24;
@@ -35,6 +41,17 @@ const DEFAULT_FOLDER_ID = 'default';
 const DEFAULT_FOLDER_NAME = 'Galeria mea';
 const DEFAULT_SELECTION_LIST_ID = 'default';
 const DEFAULT_SELECTION_LIST_NAME = 'Favorite';
+const EMPTY_DOWNLOAD_MANAGER = {
+  visible: false,
+  collapsed: false,
+  status: 'idle',
+  totalCount: 0,
+  totalBytes: 0,
+  completedCount: 0,
+  completedBytes: 0,
+  currentName: '',
+  failures: [],
+};
 
 const urlCache = new Map();
 const { galleries: galleriesService, media: mediaService, sites: sitesService } = getAppServices();
@@ -165,8 +182,8 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
-async function downloadOriginalImage(pozaKey, filename) {
-  const blob = await mediaService.getPhotoBlob(pozaKey, 'original');
+async function downloadOriginalImage(pozaKey, filename, options = {}) {
+  const blob = await mediaService.getPhotoBlob(pozaKey, 'original', { signal: options.signal });
   const safeName = filename || pozaKey.split('/').pop() || 'image';
 
   const blobUrl = URL.createObjectURL(blob);
@@ -178,8 +195,9 @@ async function downloadOriginalImage(pozaKey, filename) {
     link.click();
     document.body.removeChild(link);
   } finally {
-    URL.revokeObjectURL(blobUrl);
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   }
+  return blob.size;
 }
 
 function LazyGalleryImage({
@@ -585,6 +603,7 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const [numeSelectie, setNumeSelectie] = useState(() => readStoredSelectionName());
   const [doarFavorite, setDoarFavorite] = useState(false);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadManager, setDownloadManager] = useState(EMPTY_DOWNLOAD_MANAGER);
   const [profile, setProfile] = useState({
     brandName: '', logoUrl: '', instagramUrl: '', whatsappNumber: '',
     websiteUrl: '', accentColor: '#b8965a', logoPreviewUrl: null
@@ -601,6 +620,9 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   const lightboxOwnedMediumUrlsRef = useRef(new Map());
   const lightboxMediumRequestsRef = useRef(new Map());
   const lightboxKeepKeysRef = useRef(new Set());
+  const downloadQueueRef = useRef(null);
+  const downloadAbortRef = useRef(null);
+  const downloadRunnerActiveRef = useRef(false);
   const lightboxOpen = selectedImage !== null;
   const lightboxIndex = selectedImage ?? 0;
   const effectiveActiveClientFolderId = useMemo(() => {
@@ -1251,6 +1273,8 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
   useEffect(() => {
     const ownedMediumUrls = lightboxOwnedMediumUrlsRef.current;
     return () => {
+      if (downloadQueueRef.current) downloadQueueRef.current.stopRequested = true;
+      downloadAbortRef.current?.abort();
       for (const url of ownedMediumUrls.values()) {
         if (isBlobUrl(url)) URL.revokeObjectURL(url);
       }
@@ -1603,24 +1627,84 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
     }
   };
 
-  const handleDownload = async () => {
-    if (!allowOriginalDownloads) return;
-    const targets = doarFavorite ? poze.filter((p) => activeFavoriteKeySet.has(p.key)) : poze;
-    if (!window.confirm(`Descarci ${targets.length} fotografii?`)) return;
+  const runDownloadSession = useCallback(async (queue) => {
+    if (!queue || downloadRunnerActiveRef.current) return;
+    downloadRunnerActiveRef.current = true;
     setDownloadingAll(true);
-    for (const p of targets) {
-      try {
-        await downloadOriginalImage(p.key, p.key.split('/').pop());
-        await new Promise(r => setTimeout(r, 600));
-      } catch (e) { console.error(e); }
+    setDownloadManager((prev) => ({
+      ...prev,
+      ...downloadQueueSnapshot(queue, 'running'),
+      visible: true,
+      collapsed: false,
+    }));
+
+    try {
+      const result = await processDownloadQueue(queue, {
+        downloadItem: async (item) => {
+          const controller = new AbortController();
+          downloadAbortRef.current = controller;
+          return downloadOriginalImage(item.key, item.key.split('/').pop(), { signal: controller.signal });
+        },
+        onProgress: (snapshot) => {
+          setDownloadManager((prev) => ({ ...prev, ...snapshot, visible: true }));
+        },
+        waitBetweenItems: () => new Promise((resolve) => window.setTimeout(resolve, 350)),
+      });
+
+      setDownloadManager((prev) => ({ ...prev, ...result, visible: true }));
+      if (result.status === 'complete' && allowReviews && askReviewAfterDownload) {
+        setReviewNudge(true);
+        window.setTimeout(() => setReviewNudge(false), 1800);
+      }
+    } finally {
+      downloadAbortRef.current = null;
+      downloadRunnerActiveRef.current = false;
+      setDownloadingAll(false);
     }
-    setDownloadingAll(false);
-    if (allowReviews && askReviewAfterDownload) {
-      setReviewNudge(true);
-      setTimeout(() => setReviewNudge(false), 1800);
-      reviewSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+  }, [allowReviews, askReviewAfterDownload]);
+
+  const handleDownload = async () => {
+    if (!allowOriginalDownloads || downloadingAll) return;
+    const targets = doarFavorite ? poze.filter((p) => activeFavoriteKeySet.has(p.key)) : poze;
+    if (targets.length === 0) return;
+    const accepted = window.confirm(
+      `Descarci ${targets.length} fotografii? Browserul poate cere permisiunea pentru descărcări multiple.`
+    );
+    if (!accepted) return;
+
+    const queue = createDownloadQueue(targets);
+    downloadQueueRef.current = queue;
+    await runDownloadSession(queue);
   };
+
+  const handleStopDownload = useCallback(() => {
+    const queue = downloadQueueRef.current;
+    if (!queue) return;
+    queue.stopRequested = true;
+    downloadAbortRef.current?.abort();
+  }, []);
+
+  const handleResumeDownload = useCallback(() => {
+    const queue = downloadQueueRef.current;
+    if (!queue || downloadRunnerActiveRef.current) return;
+    queue.stopRequested = false;
+    void runDownloadSession(queue);
+  }, [runDownloadSession]);
+
+  const handleRetryFailedDownloads = useCallback(() => {
+    const previousQueue = downloadQueueRef.current;
+    const failedItems = previousQueue?.failures?.map((failure) => failure.item).filter(Boolean) || [];
+    if (!previousQueue || failedItems.length === 0 || downloadRunnerActiveRef.current) return;
+
+    const retryQueue = createDownloadQueue(failedItems, {
+      completedCount: previousQueue.completedCount,
+      completedBytes: previousQueue.completedBytes,
+      totalCount: previousQueue.totalCount,
+      totalBytes: previousQueue.totalBytes,
+    });
+    downloadQueueRef.current = retryQueue;
+    void runDownloadSession(retryQueue);
+  }, [runDownloadSession]);
 
   const handleUnlockGallery = useCallback(async () => {
     if (!galerie?.id || !isPasswordProtected) return;
@@ -2334,6 +2418,130 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
         >
           <ChevronUp size={16} strokeWidth={1.8} />
         </button>
+      )}
+
+      {downloadManager.visible && (
+        <aside
+          className={`cg-download-manager ${downloadManager.collapsed ? 'is-collapsed' : ''}`}
+          aria-live="polite"
+          aria-label="Starea descărcării galeriei"
+        >
+          {downloadManager.collapsed ? (
+            <button
+              type="button"
+              className="cg-download-manager-collapsed"
+              onClick={() => setDownloadManager((prev) => ({ ...prev, collapsed: false }))}
+            >
+              <span className="cg-download-manager-icon"><Download size={15} /></span>
+              <span className="cg-download-manager-collapsed-copy">
+                <strong>
+                  {downloadManager.status === 'complete'
+                    ? 'Descărcarea s-a încheiat'
+                    : downloadManager.status === 'warning'
+                      ? 'Descărcare incompletă'
+                      : downloadManager.status === 'stopped'
+                        ? 'Descărcare oprită'
+                        : 'Se descarcă galeria'}
+                </strong>
+                <small>{downloadManager.completedCount} din {downloadManager.totalCount} fotografii</small>
+              </span>
+              <ChevronUp size={15} />
+            </button>
+          ) : (
+            <>
+              <div className="cg-download-manager-head">
+                <div>
+                  <h3>
+                    {downloadManager.status === 'complete'
+                      ? 'Descărcarea s-a încheiat'
+                      : downloadManager.status === 'warning'
+                        ? 'Descărcare incompletă'
+                        : downloadManager.status === 'stopped'
+                          ? 'Descărcare oprită'
+                          : 'Se descarcă galeria'}
+                  </h3>
+                  <p>{galerie?.nume || 'Galerie Mina'}</p>
+                </div>
+                <button
+                  type="button"
+                  className="cg-download-manager-minimize"
+                  onClick={() => setDownloadManager((prev) => ({ ...prev, collapsed: true }))}
+                  aria-label="Restrânge progresul descărcării"
+                >
+                  −
+                </button>
+              </div>
+
+              <div className="cg-download-manager-body">
+                {(downloadManager.status === 'running' || downloadManager.status === 'stopped') && (
+                  <>
+                    <div className="cg-download-manager-progress-copy">
+                      <strong>{downloadManager.completedCount} din {downloadManager.totalCount} fotografii</strong>
+                      <span>
+                        {formatDownloadBytes(downloadManager.completedBytes)} din {formatDownloadBytes(downloadManager.totalBytes)}
+                      </span>
+                    </div>
+                    <div className="cg-download-manager-track" aria-hidden="true">
+                      <span
+                        style={{
+                          width: `${downloadManager.totalCount > 0
+                            ? Math.min(100, Math.round((downloadManager.completedCount / downloadManager.totalCount) * 100))
+                            : 0}%`,
+                        }}
+                      />
+                    </div>
+                    {downloadManager.currentName && (
+                      <div className="cg-download-manager-current">
+                        <span className="cg-download-manager-icon"><Download size={14} /></span>
+                        <span>{downloadManager.currentName}</span>
+                      </div>
+                    )}
+                    <p className="cg-download-manager-note">
+                      {downloadManager.status === 'stopped'
+                        ? 'Poți relua descărcarea de la fotografia întreruptă.'
+                        : 'Poți continua să răsfoiești galeria. Browserul poate cere permisiunea pentru descărcări multiple.'}
+                    </p>
+                    <div className="cg-download-manager-actions">
+                      {downloadManager.status === 'running' ? (
+                        <button type="button" onClick={handleStopDownload}>Oprește</button>
+                      ) : (
+                        <button type="button" className="is-primary" onClick={handleResumeDownload}>Reia descărcarea</button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {downloadManager.status === 'complete' && (
+                  <>
+                    <div className="cg-download-manager-result is-success">
+                      <CheckCircle2 size={20} />
+                      <span><strong>{downloadManager.completedCount} fotografii au fost trimise către Descărcări.</strong><small>Verifică folderul Descărcări al dispozitivului.</small></span>
+                    </div>
+                    <div className="cg-download-manager-actions">
+                      <button type="button" className="is-primary" onClick={() => setDownloadManager((prev) => ({ ...prev, visible: false }))}>Închide</button>
+                    </div>
+                  </>
+                )}
+
+                {downloadManager.status === 'warning' && (
+                  <>
+                    <div className="cg-download-manager-result is-warning">
+                      <span className="cg-download-manager-warning-mark">!</span>
+                      <span>
+                        <strong>{downloadManager.completedCount} din {downloadManager.totalCount} au fost pregătite.</strong>
+                        <small>{downloadManager.failures.length} {downloadManager.failures.length === 1 ? 'fotografie nu s-a descărcat' : 'fotografii nu s-au descărcat'}.</small>
+                      </span>
+                    </div>
+                    <div className="cg-download-manager-actions">
+                      <button type="button" onClick={() => setDownloadManager((prev) => ({ ...prev, visible: false }))}>Închide</button>
+                      <button type="button" className="is-primary" onClick={handleRetryFailedDownloads}>Reîncearcă {downloadManager.failures.length}</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </aside>
       )}
 
       {/* ── FINALIZARE SELECȚIE ── */}
@@ -3057,6 +3265,173 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
           box-shadow: 0 14px 28px rgba(0,0,0,0.16);
           background: #fff;
         }
+        .cg-download-manager {
+          position: fixed;
+          right: 24px;
+          bottom: 24px;
+          z-index: 90;
+          width: min(390px, calc(100vw - 48px));
+          overflow: hidden;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 17px;
+          background: #fff;
+          color: #202022;
+          box-shadow: 0 22px 65px rgba(24,24,26,0.2);
+          font-family: 'DM Sans', sans-serif;
+        }
+        .cg-download-manager-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+          padding: 20px 20px 12px;
+        }
+        .cg-download-manager-head h3 {
+          margin: 0;
+          font-family: 'Cormorant Garamond', Georgia, serif;
+          font-size: 22px;
+          font-weight: 500;
+          line-height: 1.1;
+        }
+        .cg-download-manager-head p {
+          margin: 6px 0 0;
+          color: #85858a;
+          font-size: 12px;
+        }
+        .cg-download-manager-minimize {
+          width: 30px;
+          height: 30px;
+          flex: 0 0 auto;
+          border: 0;
+          border-radius: 50%;
+          background: #f3f3f2;
+          color: #707075;
+          font: inherit;
+          font-size: 18px;
+          cursor: pointer;
+        }
+        .cg-download-manager-body { padding: 4px 20px 20px; }
+        .cg-download-manager-progress-copy {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 9px;
+          font-size: 12px;
+        }
+        .cg-download-manager-progress-copy strong { color: #38383b; font-weight: 600; }
+        .cg-download-manager-progress-copy span { color: #929297; white-space: nowrap; }
+        .cg-download-manager-track {
+          height: 5px;
+          overflow: hidden;
+          border-radius: 99px;
+          background: #ecebe9;
+        }
+        .cg-download-manager-track span {
+          display: block;
+          height: 100%;
+          border-radius: inherit;
+          background: #202022;
+          transition: width 220ms ease;
+        }
+        .cg-download-manager-current {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          min-width: 0;
+          margin-top: 13px;
+          color: #737378;
+          font-size: 12px;
+        }
+        .cg-download-manager-current > span:last-child {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .cg-download-manager-icon {
+          width: 25px;
+          height: 25px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          border-radius: 7px;
+          background: #f1efec;
+          color: #77716a;
+        }
+        .cg-download-manager-note {
+          margin: 13px 0 0;
+          color: #929297;
+          font-size: 11px;
+          line-height: 1.45;
+        }
+        .cg-download-manager-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 17px;
+        }
+        .cg-download-manager-actions button {
+          border: 1px solid #dededa;
+          border-radius: 999px;
+          background: #fff;
+          color: #454549;
+          font: inherit;
+          font-size: 12px;
+          padding: 9px 14px;
+          cursor: pointer;
+        }
+        .cg-download-manager-actions button.is-primary {
+          border-color: #202022;
+          background: #202022;
+          color: #fff;
+        }
+        .cg-download-manager-result {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 13px 14px;
+          border-radius: 11px;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .cg-download-manager-result > svg,
+        .cg-download-manager-warning-mark { flex: 0 0 auto; }
+        .cg-download-manager-result span { display: grid; gap: 2px; }
+        .cg-download-manager-result small { font-size: 11px; }
+        .cg-download-manager-result.is-success { background: #f0f6f1; color: #386a46; }
+        .cg-download-manager-result.is-warning { background: #fbf4e8; color: #8a642e; }
+        .cg-download-manager-warning-mark {
+          width: 25px;
+          height: 25px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          background: #f2dfbd;
+          font-weight: 700;
+        }
+        .cg-download-manager-collapsed {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          border: 0;
+          background: #fff;
+          color: #202022;
+          padding: 13px 15px;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .cg-download-manager-collapsed-copy {
+          flex: 1;
+          min-width: 0;
+          display: grid;
+          gap: 3px;
+        }
+        .cg-download-manager-collapsed-copy strong { font-size: 12px; font-weight: 600; }
+        .cg-download-manager-collapsed-copy small { color: #929297; font-size: 11px; }
 
         /* ── Gallery ── */
         .cg-gallery { padding: 48px 40px 0; }
@@ -3683,6 +4058,15 @@ const ClientGallery = ({ resolvedGalleryId = null }) => {
             width: 40px;
             height: 40px;
           }
+          .cg-download-manager {
+            right: 10px;
+            bottom: 10px;
+            width: calc(100vw - 20px);
+            border-radius: 15px;
+          }
+          .cg-download-manager-head { padding: 18px 17px 11px; }
+          .cg-download-manager-body { padding: 4px 17px 17px; }
+          .cg-download-manager-progress-copy { align-items: flex-start; flex-direction: column; gap: 3px; }
         }
 
         /* ── Lightbox mobile overrides ── */

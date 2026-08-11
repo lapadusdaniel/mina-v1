@@ -25,8 +25,8 @@ export function createMediaModule() {
       return getPozaUrlOriginal(photoKey)
     },
 
-    async getPhotoBlob(photoKey, type = 'original') {
-      return getPozaBlob(photoKey, type)
+    async getPhotoBlob(photoKey, type = 'original', options = {}) {
+      return getPozaBlob(photoKey, type, '', options)
     },
 
     async getBrandingAsset(path) {
